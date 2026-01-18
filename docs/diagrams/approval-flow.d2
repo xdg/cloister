@@ -1,0 +1,78 @@
+# AI Editing Flow with Approval
+direction: down
+
+cloister: "Cloister Container (project-a)" {
+  style.fill: "#e8f4f8"
+  style.stroke: "#68b"
+
+  agent: "AI Agent" {
+    style.fill: "#f0f8ff"
+    style.stroke: "#68b"
+
+    content: |md
+      1. Reads files in /work
+      2. Searches docs via proxy (allowed)
+      3. Calls AI API via proxy (allowed)
+      4. Edits files in /work
+      5. Installs packages via proxy (in-container)
+      6. Needs dev env -> runs: `hostexec docker compose up -d`
+    |
+  }
+}
+
+guardian: "cloister-guardian" {
+  style.fill: "#f8f4e8"
+  style.stroke: "#a84"
+
+  request_server: "Request Server (:9998)\n(cloister-net)" {
+    style.fill: "#fff8e8"
+    style.stroke: "#a84"
+  }
+
+  approval_server: "Approval Server (:9999)\n(127.0.0.1 only)" {
+    style.fill: "#fff"
+    style.stroke: "#888"
+
+    content: |md
+      project-a (claude)
+        `docker compose up -d` [Approve] [Deny]
+
+      project-b (codex)
+        `gh pr create --title 'Add auth'` [Approve] [Deny]
+    |
+  }
+
+  request_server -> approval_server: pending request {
+    style.stroke: "#888"
+  }
+  approval_server -> request_server: approval + result {
+    style.stroke: "#4a4"
+    style.stroke-dash: 3
+  }
+}
+
+host: "Host executes" {
+  style.fill: "#e8f8e8"
+  style.stroke: "#4a4"
+
+  content: |md
+    `cd ~/work/project-a && docker compose up -d`
+  |
+}
+
+cloister -> guardian.request_server: POST /request\n(blocks waiting) {
+  style.stroke: "#68b"
+}
+guardian.approval_server -> host: on approve {
+  style.stroke: "#4a4"
+}
+host -> guardian.request_server: stdout/stderr/exit_code {
+  style.stroke: "#4a4"
+  style.stroke-dash: 3
+}
+guardian.request_server -> cloister: HTTP response\n(unblocks) {
+  style.stroke: "#68b"
+  style.stroke-dash: 3
+}
+
+# vim: set ts=2 sts=2 sw=2 et tw=75:

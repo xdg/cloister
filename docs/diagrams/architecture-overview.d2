@@ -1,0 +1,128 @@
+# Cloister Architecture Overview
+host: Host {
+
+    cloister_containers: "Cloister Containers (internal network; no gateway)" {
+      style.fill: "#f0f0f0"
+
+      cloister_a: cloister-a {
+        style.fill: "#e8f8e8"
+        style.stroke: "#4a4"
+
+        content: |md
+          - Claude Code in terminal
+          - ~/.claude (copied from host)
+          - /work (rw)
+          - /ref (ro)
+        |
+      }
+
+      cloister_b: cloister-b {
+        style.fill: "#e8f8e8"
+        style.stroke: "#4a4"
+
+        content: |md
+          - Codex in terminal
+          - ~/.codex (copied from host)
+          - /work (rw)
+          - /ref (ro)
+        |
+      }
+    }
+
+  guardian: cloister-guardian (single binary host process) {
+    label.near: outside-bottom-center
+    style.fill: "#f8f8f8"
+    style.stroke: "#888"
+
+    proxy: "HTTP Proxy (portmapped)" {
+      style.fill: "#e8f4f8"
+      style.stroke: "#68b"
+
+      content: |md
+        - HTTP/HTTPS proxy
+        - Domain filtering
+        - Request logging
+      |
+    }
+
+    request: "Request Server (portmapped)" {
+      style.fill: "#fff8e8"
+      style.stroke: "#a84"
+
+      content: |md
+        - Receives hostexec requests
+        - Validates commands
+        - Blocks until approved
+        - Returns stdout/stderr
+      |
+    }
+
+    approval: "Approval Server (localhost only)" {
+      style.fill: "#f8f4e8"
+      style.stroke: "#a84"
+
+      content: |md
+        - Serves web UI for pending requests
+        - Notifies user of pending requests
+        - Records approvals/denials
+        - Executes commands; sends output back to request server
+      |
+    }
+
+    request <-> approval: Go channels {
+      style.stroke: "#888"
+      style.stroke-dash: 3
+    }
+  }
+
+  host_dev: "Host Development (unrestricted)" {
+    label.near: outside-top-center
+    grid-columns: 1
+    style.fill: "#f8f8f8"
+    style.stroke: "#888"
+
+    optional: "Optional: Human devcontainer (full privileges, same cloister mount)" {
+      style.fill: "#fff8e8"
+      style.stroke: "#a84"
+    }
+
+    local_dev: "Local Development Tools" {
+      style.fill: "#e8f4f8"
+      style.stroke: "#68b"
+      content: |md
+        - Editor (neovim, VS Code, etc.)
+        - docker compose up
+        - git status/commit/push
+        - browser -- test app at localhost
+      |
+    }
+
+    approval_ui: "Approval Web UI" {
+      style.fill: "#f8f4e8"
+      content: |md
+        - Approve pending requests
+      |
+    }
+  }
+}
+
+# Connections from containers (via cloister-net)
+host.cloister_containers.cloister_a -> host.guardian.proxy: HTTP_PROXY {
+  style.stroke-dash: 3
+}
+host.cloister_containers.cloister_a -> host.guardian.request: "hostexec binary" {
+  style.stroke-dash: 3
+}
+host.cloister_containers.cloister_b -> host.guardian.proxy: HTTP_PROXY {
+  style.stroke-dash: 3
+}
+host.cloister_containers.cloister_b -> host.guardian.request: "hostexec binary" {
+  style.stroke-dash: 3
+}
+
+# Host access to approval UI (localhost only)
+host.host_dev.approval_ui -> host.guardian.approval: localhost {
+  style.stroke: "#4a4"
+}
+
+# vim: set ts=2 sts=2 sw=2 et tw=75:

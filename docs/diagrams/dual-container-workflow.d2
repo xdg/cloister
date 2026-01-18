@@ -1,0 +1,44 @@
+# Dual-Container Workflow
+direction: down
+
+project: "~/work/my-project (bind mounted to both containers)" {
+  style.fill: "#f8f8f8"
+
+  containers: {
+    direction: right
+
+    human: "Human devcontainer" {
+      style.fill: "#e8f4e8"
+      style.stroke: "#4a4"
+
+      content: |md
+        - Full network
+        - All credentials
+        - VS Code attached
+        - Can git push
+      |
+    }
+
+    cloister: "Cloister (AI)" {
+      style.fill: "#e8e8f4"
+      style.stroke: "#66a"
+
+      content: |md
+        - Proxy only
+        - No credentials
+        - AI agent running
+        - Can git commit (not push)
+      |
+    }
+  }
+
+  shared: "Same files / Instant visibility" {
+    style.fill: "#fff8e0"
+    style.stroke: "#a84"
+  }
+}
+
+project.containers.human -> project.shared
+project.containers.cloister -> project.shared
+
+# vim: set ts=2 sts=2 sw=2 et tw=75:

@@ -1,0 +1,49 @@
+# Multi-Cloister Network Topology
+
+cloister_net: cloister-net (internal) {
+  style.fill: "#e8f4f8"
+  style.stroke: "#68b"
+
+  cloister_a: cloister-a
+  cloister_b: cloister-b
+  cloister_c: cloister-c
+}
+
+guardian: cloister-guardian (port-mapped) {
+  label.near: outside-bottom-center
+  style.fill: "#f8f4e8"
+  style.stroke: "#a84"
+
+  proxy: "Proxy\n:3128" {
+    style.fill: "#fff8e8"
+  }
+  request: "Request Server\n:9998" {
+    style.fill: "#fff8e8"
+  }
+  approval: "Approval Server\n127.0.0.1:9999" {
+    style.fill: "#fff"
+    style.stroke: "#888"
+  }
+}
+
+internet: Internet {
+  style.fill: "#f4e8f8"
+  style.stroke: "#a4a"
+}
+
+host: "localhost" {
+  style.fill: "#e8f8e8"
+  style.stroke: "#4a4"
+
+  browser: "Browser\n(approval UI)"
+}
+
+cloister_net -> guardian.proxy: HTTP CONNECT
+cloister_net -> guardian.request: POST /request
+guardian.request <-> guardian.approval: IPC {
+  style.stroke-dash: 3
+}
+guardian.proxy -> internet: allowlisted traffic
+host.browser -> guardian.approval
+
+# vim: set ts=2 sts=2 sw=2 et tw=75:

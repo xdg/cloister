@@ -24,9 +24,10 @@ Cloister breaks this trifecta by controlling all three vectors simultaneously.
 
 ## Architecture
 
-- **cloister-guardian**: Single Go binary providing an allowlist HTTP proxy (:3128) and command approval server (:9999)
+- **cloister**: Single Go binary with two modes:
+  - CLI mode (default): Container lifecycle, project/worktree management
+  - Guardian mode (`cloister guardian`): Allowlist HTTP proxy (:3128) and command approval server (:9999)
 - **Cloister containers**: Docker containers on an internal network (`--internal`) with no direct egress
-- **Launcher CLI**: `cloister <project>` to manage container lifecycle
 - **hostexec**: In-container wrapper that requests host command execution through the approval server
 
 Key security properties:
@@ -39,9 +40,8 @@ Key security properties:
 
 This is a greenfield Go project. Primary components:
 
-1. `cloister-guardian` — HTTP CONNECT proxy + approval web UI
-2. `cloister` CLI — Container lifecycle management
-3. Default container image — Ubuntu 24.04 with Go/Node/Python/AI CLIs
+1. `cloister` binary — CLI + guardian mode (HTTP CONNECT proxy + approval web UI)
+2. Default container image — Ubuntu 24.04 with Go/Node/Python/AI CLIs
 
 ## Further Reading
 

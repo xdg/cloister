@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(d2-diagram)",
+      "Bash(d2:*)"
+    ]
+  }
+}

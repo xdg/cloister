@@ -1,0 +1,36 @@
+# cloister-guardian Internal Architecture
+direction: right
+
+cloister-guardian: {
+  style.fill: "#f8f8f8"
+  style.stroke: "#888"
+
+  request_server: "Request Server\n:9998 (cloister-net)" {
+    style.fill: "#fff8e8"
+    style.stroke: "#a84"
+  }
+
+  approval_server: "Approval Server\n127.0.0.1:9999" {
+    style.fill: "#f8f4e8"
+    style.stroke: "#a84"
+  }
+
+  executor: "Host Executor" {
+    style.fill: "#e8f8e8"
+    style.stroke: "#4a4"
+  }
+
+  request_server -> approval_server: requestChan {
+    style.stroke: "#888"
+  }
+
+  approval_server <-> executor: execute command {
+    style.stroke: "#4a4"
+  }
+
+  approval_server -> request_server: responseChan\n(command results or denial) {
+    style.stroke: "#888"
+  }
+}
+
+# vim: set ts=2 sts=2 sw=2 et tw=75:
