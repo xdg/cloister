@@ -116,9 +116,34 @@ CMD ["/bin/bash"]
 
 ---
 
+## Agent Configuration at Launch
+
+When a cloister starts, the launcher configures agent-specific settings by writing to the container's home directory. This happens after container creation but before the user's shell starts.
+
+**For Claude Code:**
+
+1. Creates `~/.claude.json` with `{"hasCompletedOnboarding": true}`
+2. Appends alias to `~/.bashrc`:
+   ```bash
+   alias claude='claude --dangerously-skip-permissions'
+   ```
+
+The alias is necessary because Claude Code's permission system is redundant inside a cloister — the cloister enforces the security boundary, so Claude's internal prompts just add friction. There is no config file option to disable permissions, so we use a shell alias.
+
+See [agent-configuration.md](agent-configuration.md) for full details on each supported agent.
+
+---
+
 ## hostexec Wrapper
 
 The `hostexec` binary allows commands to be executed on the host with human approval. It sends requests to the guardian's request server and blocks until approval/denial.
+
+**Execution flow:**
+1. `hostexec` in cloister sends request to guardian container (port 9998)
+2. Guardian presents request in approval UI
+3. If approved, guardian forwards command to host process via Unix socket
+4. Host process executes command and returns stdout/stderr/exit code
+5. Guardian returns result to `hostexec`
 
 ```bash
 #!/bin/bash

@@ -1,36 +1,78 @@
-# cloister-guardian Internal Architecture
-direction: right
+# Guardian Architecture: Container + Host Process
+direction: down
 
-cloister-guardian: {
-  style.fill: "#f8f8f8"
-  style.stroke: "#888"
+container: cloister-guardian container {
+  style.fill: "#f8f4e8"
+  style.stroke: "#a84"
 
-  request_server: "Request Server\n:9998 (cloister-net)" {
+  proxy: "Proxy Server\n:3128" {
     style.fill: "#fff8e8"
     style.stroke: "#a84"
   }
 
-  approval_server: "Approval Server\n127.0.0.1:9999" {
+  request_server: "Request Server\n:9998" {
+    style.fill: "#fff8e8"
+    style.stroke: "#a84"
+  }
+
+  approval_server: "Approval Server\n:9999" {
     style.fill: "#f8f4e8"
     style.stroke: "#a84"
   }
 
-  executor: "Host Executor" {
+  socket_client: "Socket Client" {
     style.fill: "#e8f8e8"
     style.stroke: "#4a4"
   }
 
-  request_server -> approval_server: requestChan {
-    style.stroke: "#888"
-  }
+  request_server -> approval_server: pending request
+  approval_server -> request_server: approval/denial
 
-  approval_server <-> executor: execute command {
-    style.stroke: "#4a4"
-  }
-
-  approval_server -> request_server: responseChan\n(command results or denial) {
-    style.stroke: "#888"
-  }
+  approval_server -> socket_client: approved hostexec
+  socket_client -> approval_server: command result
 }
+
+host: Host Process (cloister binary) {
+  style.fill: "#e8f8e8"
+  style.stroke: "#4a4"
+
+  socket_listener: "Unix Socket Listener\nhostexec.sock" {
+    style.fill: "#d8f0d8"
+  }
+
+  executor: "Command Executor" {
+    style.fill: "#d8f0d8"
+  }
+
+  socket_listener -> executor: execute
+  executor -> socket_listener: stdout/stderr/exit
+}
+
+# Unix socket IPC
+container.socket_client <-> host.socket_listener: Unix socket\n(bind-mounted) {
+  style.stroke: "#4a4"
+  style.stroke-dash: 3
+}
+
+# External connections
+cloisters: "Cloisters\n(cloister-net)" {
+  style.fill: "#e8f4f8"
+  style.stroke: "#68b"
+}
+
+internet: "Internet\n(via bridge)" {
+  style.fill: "#f4e8f8"
+  style.stroke: "#a4a"
+}
+
+browser: "Browser" {
+  style.fill: "#fff"
+  style.stroke: "#888"
+}
+
+cloisters -> container.proxy: HTTP CONNECT
+cloisters -> container.request_server: POST /request
+container.proxy -> internet: allowlisted
+browser -> container.approval_server: localhost:9999
 
 # vim: set ts=2 sts=2 sw=2 et tw=75:

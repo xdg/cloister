@@ -66,6 +66,7 @@ This is a greenfield Go project. Primary components:
 |----------|----------|
 | [cloister-spec.md](docs/cloister-spec.md) | Main specification: threat model, architecture, security analysis |
 | [cli-workflows.md](docs/cli-workflows.md) | CLI commands and workflow examples |
+| [agent-configuration.md](docs/agent-configuration.md) | AI agent auth setup (Claude, Codex, etc.) |
 | [guardian-api.md](docs/guardian-api.md) | Guardian endpoint reference |
 | [container-image.md](docs/container-image.md) | Default Dockerfile and hostexec |
 | [devcontainer-integration.md](docs/devcontainer-integration.md) | Devcontainer security and configuration |

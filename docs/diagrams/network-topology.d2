@@ -1,16 +1,36 @@
 # Multi-Cloister Network Topology
 
-cloister_net: cloister-net (internal) {
+host: Host {
+  label.near: bottom-center
+  style.fill: "#e8f8e8"
+  style.stroke: "#4a4"
+
+  cloister_cli: "cloister binary" {
+    style.fill: "#d8f0d8"
+  }
+
+  socket: "hostexec.sock" {
+    style.fill: "#fff"
+    style.stroke: "#888"
+    style.stroke-dash: 3
+  }
+
+  browser: "Browser\n(approval UI)"
+
+  cloister_cli -> socket: listens
+}
+
+cloister_net: cloister-net (--internal) {
   style.fill: "#e8f4f8"
   style.stroke: "#68b"
 
-  cloister_a: cloister-a
-  cloister_b: cloister-b
-  cloister_c: cloister-c
+  cloister_a: my-api-main
+  cloister_b: frontend-main
+  cloister_c: shared-lib-feature
 }
 
-guardian: cloister-guardian (port-mapped) {
-  label.near: outside-bottom-center
+guardian: cloister-guardian {
+  label.near: bottom-center
   style.fill: "#f8f4e8"
   style.stroke: "#a84"
 
@@ -20,30 +40,42 @@ guardian: cloister-guardian (port-mapped) {
   request: "Request Server\n:9998" {
     style.fill: "#fff8e8"
   }
-  approval: "Approval Server\n127.0.0.1:9999" {
+  approval: "Approval UI\n:9999" {
     style.fill: "#fff"
     style.stroke: "#888"
   }
 }
 
-internet: Internet {
+bridge: bridge network {
   style.fill: "#f4e8f8"
   style.stroke: "#a4a"
 }
 
-host: "localhost" {
-  style.fill: "#e8f8e8"
+internet: Internet {
+  style.fill: "#f0e0f0"
+  style.stroke: "#a4a"
+}
+
+# Cloister containers -> Guardian (on cloister-net)
+cloister_net -> guardian.proxy: HTTP CONNECT {
+  style.stroke: "#68b"
+}
+cloister_net -> guardian.request: hostexec requests {
+  style.stroke: "#68b"
+}
+
+# Guardian -> Internet (via bridge)
+guardian.proxy -> bridge
+bridge -> internet: allowlisted traffic
+
+# Host command execution via Unix socket
+guardian.request -> host.socket {
   style.stroke: "#4a4"
-
-  browser: "Browser\n(approval UI)"
 }
 
-cloister_net -> guardian.proxy: HTTP CONNECT
-cloister_net -> guardian.request: POST /request
-guardian.request <-> guardian.approval: IPC {
-  style.stroke-dash: 3
+# Approval UI exposed to host
+host.browser -> guardian.approval {
+  style.stroke: "#888"
 }
-guardian.proxy -> internet: allowlisted traffic
-host.browser -> guardian.approval
 
 # vim: set ts=2 sts=2 sw=2 et tw=75:

@@ -127,31 +127,34 @@ The cloister container and host share the project directory via bind mount. Chan
 
 ## Supported AI Agents
 
-Cloister is agent-agnostic. Any CLI tool that operates on local files can run inside a cloister.  Examples might include:
+Cloister is agent-agnostic. Any CLI tool that operates on local files can run inside a cloister.  Not all agents are supported yet. Future examples might include:
 
-| Agent | Command | Config Directory | API Key Env Var (if needed) |
+| Agent | Command | Config | Env Vars (if needed) |
 |-------|---------|------------------|-----------------|
-| Claude Code | `claude` | `~/.claude/` | `ANTHROPIC_API_KEY` |
+| Claude Code | `claude` | `~/.claude/`, `~/.claude.json` | `ANTHROPIC_*`, `CLAUDE_*` |
 | OpenAI Codex | `codex` | `~/.codex/` | `OPENAI_API_KEY` |
 | Google Gemini | `gemini` | `~/.config/gemini/` | `GOOGLE_API_KEY` |
 | GitHub Copilot CLI | `github-copilot-cli` | `~/.config/gh/` | (via gh auth) |
 
-The launcher accepts `--agent` to auto-configure the appropriate environment, or agents can be run directly via shell if correct directories/environments are set up.
+The launcher configures the appropriate environment for the selected agent. For agents with their own permission systems (like Claude Code's `--dangerously-skip-permissions`), cloister disables restrictions — the cloister *is* the sandbox, making agent-level permission prompts redundant.
+
+See [agent-configuration.md](agent-configuration.md) for detailed setup instructions for each agent.
 
 ---
 
 ## Components
 
-Cloister consists of two components:
+Cloister consists of three components:
 
-* **Cloister container image**: the runtime for limiting agent scope
-* **Cloister binary**: a single Go binary (`cloister`) with multiple operating modes:
-    - **CLI mode** (default): Container lifecycle, project management, worktree operations
-    - **Guardian mode** (`cloister guardian`): Proxy, request handling, and approval services
+* **Cloister container images**: Runtime environments for AI agents (default image or devcontainer-based)
+* **Guardian container**: Network gateway that handles proxy and approval services
+* **Cloister binary**: A single Go binary (`cloister`) that manages everything. It runs in two modes:
+    - Guardian host executor
+    - CLI for user commands
 
-### Cloister Container Image
+### Cloister Container Images
 
-Configurable container with development tools, built from devcontainer.json or default image. See [container-image.md](container-image.md) for the full Dockerfile and filesystem layout.
+Configurable containers with development tools, built from devcontainer.json or a default image. See [container-image.md](container-image.md) for the full Dockerfile and filesystem layout.
 
 **Security Hardening:**
 
@@ -163,15 +166,31 @@ Configurable container with development tools, built from devcontainer.json or d
 
 No access to Docker socket, host SSH keys (`~/.ssh`), cloud credentials (`~/.aws`, `~/.config/gcloud`), host config (`~/.config`, `~/.local`), or GPG keys (`~/.gnupg`).
 
-### Cloister Guardian Mode
+### Guardian
 
-Invoked via `cloister guardian`, this mode provides proxy, request, and approval services for all cloisters. A single guardian instance serves multiple cloisters. The guardian runs as a container named `cloister-guardian` on `cloister-net`, providing DNS-resolvable access from cloister containers.
+The guardian is a hybrid of a container and a host process, working together:
+
+**Guardian Container (`cloister-guardian`):**
+- Runs on two networks: `cloister-net` (internal) and `bridge` (internet access)
+- Cloisters reach it via Docker DNS on `cloister-net`
+- Forwards approved proxy requests to the internet via `bridge`
+
+**Host Process (`cloister` binary):**
+- Listens on a Unix socket (`~/.local/share/cloister/hostexec.sock`)
+- Executes approved host commands
+- Socket is bind-mounted into the guardian container
+
+This separation is necessary because:
+1. Cloisters are on an `--internal` network with no route to the host
+2. The guardian must be reachable from cloisters (requires being on `cloister-net`)
+3. Host command execution requires running on the host (not possible from a container without Docker socket access)
 
 | Service | Port | Binding | Purpose |
 |---------|------|---------|---------|
 | Proxy Server | 3128 | `cloister-net` | HTTP CONNECT proxy with domain allowlist |
 | Request Server | 9998 | `cloister-net` | Command execution requests from hostexec |
 | Approval Server | 9999 | `127.0.0.1` | Web UI for human review and approval |
+| Host Executor | Unix socket | Host | Executes approved commands on host |
 
 See [guardian-api.md](guardian-api.md) for full endpoint documentation.
 
@@ -198,11 +217,13 @@ The default mode provides commands for container lifecycle, projects, and worktr
 
 ```bash
 # Quick reference
-cloister new [--path <dir>] [--worktree <branch>]  # Start new cloister
-cloister list                                       # Show running cloisters
-cloister stop <cloister-name>                       # Stop cloister
-cloister guardian start                             # Start guardian (background)
-cloister guardian                                   # Run guardian (foreground)
+cloister start                    # Start/enter cloister for current repo + branch
+cloister start -d                 # Start detached (enter from another terminal)
+cloister list                     # Show running cloisters
+cloister stop                     # Stop cloister for current repo + branch
+cloister stop <name>              # Stop specific cloister
+cloister guardian start           # Start guardian (background)
+cloister guardian stop            # Stop guardian
 ```
 
 ---
@@ -221,6 +242,7 @@ cloister guardian                                   # Run guardian (foreground)
     └── b7e4f8a2...yaml
 
 ~/.local/share/cloister/
+├── hostexec.sock              # Unix socket for host command execution
 ├── audit.log                  # Unified audit log
 ├── logs/                      # Per-cloister logs (named by cloister)
 │   ├── my-api-main.log
@@ -263,17 +285,25 @@ See [config-reference.md](config-reference.md) for full schema documentation.
 ### Docker Network Setup
 
 ```bash
-# Create internal network (no external access)
+# Create internal network (no external access for cloisters)
 docker network create --internal cloister-net
+
+# Guardian is attached to both networks:
+# - cloister-net: receives requests from cloisters
+# - bridge: forwards proxy traffic to internet
+docker network connect cloister-net cloister-guardian
+docker network connect bridge cloister-guardian
 ```
 
-The `--internal` flag prevents containers from reaching external networks directly. All external communication must go through the guardian proxy.
+The `--internal` flag on `cloister-net` prevents cloister containers from reaching external networks or the host directly. The guardian container bridges the gap: it receives requests on `cloister-net` and forwards approved traffic via `bridge`.
 
 ### Multi-Cloister Network Topology
 
 ![Network Topology](diagrams/network-topology.svg) ([diagram source](diagrams/network-topology.d2))
 
-All cloisters share the network and guardian. The guardian authenticates requests using a per-cloister token (`CLOISTER_TOKEN`). This prevents one cloister from spoofing requests as another.
+All cloisters share `cloister-net` and communicate through the guardian. The guardian authenticates requests using a per-cloister token (`CLOISTER_TOKEN`). This prevents one cloister from spoofing requests as another.
+
+For host command execution, approved requests flow from the guardian container to the host process via a Unix socket (`hostexec.sock`), which is bind-mounted into the container.
 
 **Token lifecycle:**
 1. CLI generates a cryptographically random token (32 bytes, hex-encoded) when creating a cloister
