@@ -47,7 +47,7 @@ $ cloister start
 **What happens:**
 
 1. Guardian starts (if not already running)
-2. Project auto-detected from git remote, registered as `my-project`
+2. Project auto-detected from directory, registered as `my-project`
 3. Container created on internal network
 4. User dropped into shell at `/work` (bind-mounted project directory)
 5. Proxy environment variables set so network goes through guardian
@@ -55,11 +55,11 @@ $ cloister start
 
 ```
 Starting guardian: use http://localhost:9999/ to monitor activity
-Detected project: my-project (from git@github.com:user/my-project.git)
-Creating cloister: my-project-main (from main branch)
+Detected project: my-project (from ~/repos/my-project)
+Creating cloister: my-project
 
-Entering cloister my-project-main. Type 'exit' to leave.
-cloister:my-project-main:/work$
+Entering cloister my-project. Type 'exit' to leave.
+cloister:my-project:/work$
 ```
 
 Open `http://localhost:9999` to monitor agent requests for exceptional domains
@@ -68,10 +68,10 @@ or to run commands on the host.
 **Inside the cloister:**
 
 ```bash
-cloister:my-project-main:/work$ claude
+cloister:my-project:/work$ claude
 # Claude Code starts, can edit files in /work, network proxied through guardian
 # When done:
-cloister:my-project-main:/work$ exit
+cloister:my-project:/work$ exit
 ```
 
 After exiting, the cloister container is still running. You can get a new shell inside the cloister or you can stop and clean it up.
@@ -80,15 +80,15 @@ After exiting, the cloister container is still running. You can get a new shell 
 
 ```
 $ cloister start
-Entering cloister my-project-main. Type 'exit' to leave.
-cloister:my-project-main:/work$
+Entering cloister my-project. Type 'exit' to leave.
+cloister:my-project:/work$
 ```
 
 **Stop and remove the cloister:**
 
 ```
 $ cloister stop
-Cloister my-project-main stopped.
+Cloister my-project stopped.
 ```
 
 **Start detached (to enter from another terminal):**
@@ -97,13 +97,13 @@ Cloister my-project-main stopped.
 # Terminal 1: start without entering
 $ cloister start -d
 Starting guardian: use http://localhost:9999/ to monitor activity
-Cloister my-project-main running (detached).
+Cloister my-project running (detached).
 Run 'cloister start' to open a shell.
 
 # Terminal 2: enter the running cloister
 $ cloister start
-Entering cloister my-project-main.
-cloister:my-project-main:/work$
+Entering cloister my-project.
+cloister:my-project:/work$
 ```
 
 **Reducing output verbosity:**
@@ -160,15 +160,16 @@ shared-lib     git@github.com:user/shared-lib.git      0
 # Show project details
 $ cloister project show my-api
 Project: my-api
+Path: ~/repos/my-api
 Remote: git@github.com:user/my-api.git
 Config: ~/.config/cloister/projects/my-api.yaml
 
 Worktrees:
-  main         ~/repos/my-api (main checkout)
+  (main)       ~/repos/my-api
   feature-auth ~/.local/share/cloister/worktrees/my-api/feature-auth
 
 Running cloisters:
-  my-api-main
+  my-api
 
 # Edit project config (opens in $EDITOR)
 $ cloister project edit my-api
@@ -176,7 +177,7 @@ $ cloister project edit my-api
 # Remove project registration (keeps files, stops any running cloisters)
 $ cloister project remove my-api
 Stop 1 running cloister? [y/N] y
-Cloister my-api-main stopped.
+Cloister my-api stopped.
 Project my-api removed.
 ```
 
@@ -184,14 +185,15 @@ Project my-api removed.
 
 ## Managing Cloisters
 
-Top-level commands operate on cloisters. When run from a git repo, they target the cloister for that project/branch.
+Top-level commands operate on cloisters. When run from a project directory, they target the cloister for that project.
 
 ```bash
 # List all running cloisters
 $ cloister list
-CLOISTER              PROJECT      BRANCH    STATUS    UPTIME
-my-api-main           my-api       main      running   2h 15m
-frontend-main         frontend     main      running   45m
+CLOISTER              PROJECT      STATUS    UPTIME
+my-api                my-api       running   2h 15m
+my-api-feature-auth   my-api       running   30m
+frontend              frontend     running   45m
 
 # Start/enter cloister (from repo directory)
 $ cd ~/repos/my-api
@@ -200,14 +202,69 @@ $ cloister start
 # Start detached
 $ cloister start -d
 
-# Stop cloister for current repo
+# Stop cloister for current directory
 $ cloister stop
 
 # Stop specific cloister by name (from anywhere)
-$ cloister stop my-api-main
+$ cloister stop my-api
 
 # Stop all cloisters
 $ cloister stop --all
+```
+
+---
+
+## Scenario: Working on Multiple Branches (Worktrees)
+
+**Goal:** Work on a feature branch in isolation while keeping the main checkout undisturbed.
+
+**Starting point:** Project `my-api` from `~/repos/my-api`.
+
+### Create worktree and start cloister
+
+```bash
+$ cd ~/repos/my-api
+$ cloister start -b feature-auth
+Creating worktree: ~/.local/share/cloister/worktrees/my-api/feature-auth
+Starting cloister: my-api-feature-auth
+
+Entering cloister my-api-feature-auth. Type 'exit' to leave.
+cloister:my-api-feature-auth:/work$
+```
+
+**What happens:**
+
+1. Branch `feature-auth` created if it doesn't exist (from HEAD or tracking remote)
+2. Git worktree created at `~/.local/share/cloister/worktrees/my-api/feature-auth`
+3. Cloister `my-api-feature-auth` started with worktree mounted at `/work`
+4. Project config (allowlists, refs) inherited from `my-api`
+
+### List worktrees
+
+```bash
+$ cloister worktree list
+BRANCH         PATH                                                      CLOISTER
+(main)         ~/repos/my-api                                            my-api (running)
+feature-auth   ~/.local/share/cloister/worktrees/my-api/feature-auth     my-api-feature-auth (running)
+```
+
+### Work in worktree from another terminal
+
+```bash
+$ cd ~/.local/share/cloister/worktrees/my-api/feature-auth
+$ git log --oneline -3
+# See agent's commits
+```
+
+### Cleanup
+
+```bash
+$ cloister worktree remove feature-auth
+Error: Worktree has uncommitted changes. Commit, stash, or use -f to force.
+
+$ cloister worktree remove feature-auth -f
+Stopping cloister my-api-feature-auth...
+Removing worktree: feature-auth
 ```
 
 ---
@@ -220,7 +277,17 @@ $ cloister stop --all
 
 3. **Detached start:** `start -d` creates/starts without entering. Useful for entering from a different terminal.
 
-4. **Command structure:** Top-level commands (`start`, `stop`, `list`) operate on cloisters. Namespaced commands (`guardian *`, `project *`) operate on those resources. The binary is `cloister`, so the default noun is implicit.
+4. **Command structure:** Top-level commands (`start`, `stop`, `list`) operate on cloisters. Namespaced commands (`guardian *`, `project *`, `worktree *`) operate on those resources. The binary is `cloister`, so the default noun is implicit.
+
+5. **Project naming:** Directory basename by default. If basename collides with existing project, error and require explicit name via `-p`. No auto-disambiguation.
+
+6. **Cloister naming:** `<project>` for main checkout, `<project>-<branch>` for worktrees. Explicit name as positional arg overrides.
+
+7. **Worktree storage:** `~/.local/share/cloister/worktrees/<project>/<branch>/`. Cloister manages these directories.
+
+8. **Manual worktrees:** Git worktrees created via `git worktree add` are treated as independent projects (named by their directory basename). Only worktrees created via `-b` are managed by cloister and inherit project config.
+
+9. **Cleanup safety:** `worktree remove` refuses if uncommitted changes exist (matching `git worktree remove` behavior). Use `-f` to force.
 
 ## Open Questions
 
@@ -232,10 +299,7 @@ $ cloister stop --all
 
 - [x] Quick start
 - [x] Managing guardian, projects, cloisters
-- [ ] Working on multiple branches (worktrees)
+- [x] Working on multiple branches (worktrees)
 - [ ] Multiple projects simultaneously
-- [ ] Using devcontainer.json
-- [ ] Team shared config (.cloister.yaml)
-- [ ] Troubleshooting / debugging
 
 ---

@@ -70,27 +70,35 @@ Cloister also provides a hook for an AI to request exceptional actions that can 
 
 ### Project
 
-A **project** is a git repository as a logical entity, identified by its remote URL. A project:
+A **project** is a local git repository directory. A project:
 
-- May be checked out in multiple locations (main checkout + worktrees)
+- Is uniquely named and associated with a filesystem path containing a git repository
+- Named by directory basename (e.g., `~/repos/my-api` → `my-api`)
+- Custom name via `start -p` flag if basename would collide with existing project
 - Owns permission configuration (proxy allowlists, command patterns)
-- Is auto-registered on first use, named by deriving from the remote URL
+- May have cloister-managed worktrees under `~/.local/share/cloister/worktrees/<project>/`
 
-Example: `git@github.com:xdg/my-api.git` becomes project `my-api`.
+Example: `~/repos/my-api` becomes project `my-api`. If `~/work/my-api` also exists, use `cloister start -p work-my-api` to create a distinct project.
 
 ### Worktree
 
-A **worktree** is a directory containing a working copy of a project branch:
+A **worktree** is a directory containing a copy of the working tree of a repository:
 
-- The **main checkout** (e.g., `~/repos/my-api`) is the original clone
-- **Git worktrees** share the git store but have independent working directories
+- The **main checkout** (e.g., `~/repos/my-api`) is the original
+- **Git worktrees** share the original's git store but have independent working directories
 - Cloister-managed git worktrees live in `~/.local/share/cloister/worktrees/<project>/<branch>/`
+- Worktrees are uniquely named within a project
+
+Cloister-managed worktrees (via `start -b`) inherit project configuration.
+
+Manually-created git worktrees (via `git worktree add` then `cloister start`) are treated as independent projects, named by their directory basename.
 
 ### Cloister
 
-A **cloister** is a container session with a worktree mounted at `/work`. Each cloister:
+A **cloister** is a container session with a directory mounted at `/work`. Each cloister:
 
-- Is named `<project>-<branch>` by default (e.g., `my-api-main`, `my-api-feature-auth`)
+- Is associated with a single directory on the host
+- Has a default name of `<project>` for main checkout or `<project>-<branch>` for worktrees (e.g., `my-api`, `my-api-feature-auth`)
 - Inherits all permissions from its project
 - Has its own audit log at `~/.local/share/cloister/logs/<cloister-name>.log`
 
@@ -217,10 +225,12 @@ The default mode provides commands for container lifecycle, projects, and worktr
 
 ```bash
 # Quick reference
-cloister start                    # Start/enter cloister for current repo + branch
+cloister start                    # Start/enter cloister for current directory
+cloister start -p <name>          # Use custom project name
+cloister start -b <branch>        # Create worktree + cloister for branch
 cloister start -d                 # Start detached (enter from another terminal)
 cloister list                     # Show running cloisters
-cloister stop                     # Stop cloister for current repo + branch
+cloister stop                     # Stop cloister for current directory
 cloister stop <name>              # Stop specific cloister
 cloister guardian start           # Start guardian (background)
 cloister guardian stop            # Stop guardian
