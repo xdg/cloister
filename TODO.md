@@ -80,10 +80,10 @@ Set up Go module structure and build infrastructure.
 Create and manage the `cloister-net` internal network.
 
 ### 1.2.1 Docker CLI integration
-- [ ] Create `internal/docker/docker.go` with CLI wrapper functions
-- [ ] Use `docker` CLI with `--format '{{json .}}'` for parseable output
-- [ ] Handle Docker daemon not running (check via `docker info`)
-- [ ] Works with Docker Desktop, OrbStack, Colima, Podman, etc.
+- [x] Create `internal/docker/docker.go` with CLI wrapper functions
+- [x] Use `docker` CLI with `--format '{{json .}}'` for parseable output
+- [x] Handle Docker daemon not running (check via `docker info`)
+- [x] Works with Docker Desktop, OrbStack, Colima, Podman, etc.
 
 ### 1.2.2 Network management
 - [ ] Implement `EnsureNetwork(name string, internal bool)` function

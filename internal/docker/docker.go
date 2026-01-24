@@ -1,0 +1,234 @@
+// Package docker provides CLI wrapper functions for Docker operations.
+//
+// This package is runtime-agnostic and works with any Docker-compatible CLI
+// implementation including Docker Desktop, OrbStack, Colima, Podman (with
+// docker CLI compatibility), and others. It relies solely on the `docker`
+// binary in PATH and does not reference specific socket paths or runtime
+// internals. The docker CLI handles runtime-specific configuration through
+// standard mechanisms (DOCKER_HOST environment variable, context settings,
+// ~/.docker/config.json, etc.).
+package docker
+
+import (
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os/exec"
+	"strings"
+)
+
+// ErrDockerNotRunning indicates the Docker daemon is not running or accessible.
+var ErrDockerNotRunning = errors.New("docker daemon is not running")
+
+// CommandError represents a failed Docker command with stderr output.
+type CommandError struct {
+	Command string
+	Args    []string
+	Stderr  string
+	Err     error
+}
+
+func (e *CommandError) Error() string {
+	if e.Stderr != "" {
+		return fmt.Sprintf("docker %s failed: %v\nstderr: %s", e.Command, e.Err, e.Stderr)
+	}
+	return fmt.Sprintf("docker %s failed: %v", e.Command, e.Err)
+}
+
+func (e *CommandError) Unwrap() error {
+	return e.Err
+}
+
+// Run executes a docker CLI command and returns stdout.
+// On error, returns a CommandError containing stderr for debugging.
+func Run(args ...string) (string, error) {
+	cmd := exec.Command("docker", args...)
+
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	if err != nil {
+		cmdName := ""
+		if len(args) > 0 {
+			cmdName = args[0]
+		}
+		return "", &CommandError{
+			Command: cmdName,
+			Args:    args,
+			Stderr:  stderr.String(),
+			Err:     err,
+		}
+	}
+
+	return stdout.String(), nil
+}
+
+// ErrNoResults indicates the docker command returned no results.
+// This is not necessarily an error - it may just mean no matching objects were found.
+var ErrNoResults = errors.New("no results from docker command")
+
+// RunJSONLines executes a docker CLI command with JSON output format and
+// unmarshals newline-separated JSON objects (JSONL) into the provided slice.
+// The --format '{{json .}}' flag is automatically appended.
+//
+// This is designed for commands that output one JSON object per line:
+// docker network ls, docker container ls, docker image ls, etc.
+//
+// If the command returns empty output (no matching objects), the result slice
+// is left unchanged and nil is returned.
+//
+// Example:
+//
+//	var networks []NetworkInfo
+//	err := RunJSONLines(&networks, "network", "ls")
+func RunJSONLines[T any](result *[]T, args ...string) error {
+	args = append(args, "--format", "{{json .}}")
+	out, err := Run(args...)
+	if err != nil {
+		return err
+	}
+
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return nil
+	}
+
+	return parseJSONLines(result, out, args)
+}
+
+// RunJSONLinesStrict is like RunJSONLines but returns ErrNoResults when the
+// command produces no output.
+func RunJSONLinesStrict[T any](result *[]T, args ...string) error {
+	args = append(args, "--format", "{{json .}}")
+	out, err := Run(args...)
+	if err != nil {
+		return err
+	}
+
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return ErrNoResults
+	}
+
+	return parseJSONLines(result, out, args)
+}
+
+// parseJSONLines parses newline-separated JSON objects into a slice.
+func parseJSONLines[T any](result *[]T, out string, args []string) error {
+	cmdName := ""
+	if len(args) > 0 {
+		cmdName = args[0]
+	}
+
+	lines := strings.Split(out, "\n")
+	items := make([]T, 0, len(lines))
+
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var item T
+		if err := json.Unmarshal([]byte(line), &item); err != nil {
+			return fmt.Errorf("docker %s: failed to parse JSON on line %d: %w", cmdName, i+1, err)
+		}
+		items = append(items, item)
+	}
+
+	*result = items
+	return nil
+}
+
+// RunJSON executes a docker CLI command with JSON output format and unmarshals
+// the result into the provided value. The --format '{{json .}}' flag is
+// automatically appended to the command arguments.
+//
+// This works with commands that output a single JSON value (object or array):
+// docker inspect, docker info, etc.
+//
+// For commands that output newline-separated JSON (docker network ls, container ls),
+// use RunJSONLines instead.
+//
+// If the command returns empty output (no matching objects), result is left
+// unchanged and nil is returned.
+//
+// Example:
+//
+//	var info DockerInfo
+//	err := RunJSON(&info, "info")
+//
+//	// For inspect, docker returns an array even for single items
+//	var containers []ContainerInfo
+//	err := RunJSON(&containers, "inspect", containerID)
+func RunJSON(result any, args ...string) error {
+	args = append(args, "--format", "{{json .}}")
+	out, err := Run(args...)
+	if err != nil {
+		return err
+	}
+
+	// Handle empty output (no results)
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return nil
+	}
+
+	if err := json.Unmarshal([]byte(out), result); err != nil {
+		cmdName := ""
+		if len(args) > 0 {
+			cmdName = args[0]
+		}
+		return fmt.Errorf("docker %s: failed to parse JSON output: %w", cmdName, err)
+	}
+
+	return nil
+}
+
+// RunJSONStrict is like RunJSON but returns ErrNoResults when the command
+// produces no output. This is useful when you need to distinguish between
+// "no matching objects" and actual errors.
+func RunJSONStrict(result any, args ...string) error {
+	args = append(args, "--format", "{{json .}}")
+	out, err := Run(args...)
+	if err != nil {
+		return err
+	}
+
+	// Handle empty output (no results)
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return ErrNoResults
+	}
+
+	if err := json.Unmarshal([]byte(out), result); err != nil {
+		cmdName := ""
+		if len(args) > 0 {
+			cmdName = args[0]
+		}
+		return fmt.Errorf("docker %s: failed to parse JSON output: %w", cmdName, err)
+	}
+
+	return nil
+}
+
+// CheckDaemon verifies the Docker daemon is running and accessible.
+// Returns ErrDockerNotRunning if the daemon cannot be reached.
+func CheckDaemon() error {
+	_, err := Run("info", "--format", "{{.ServerVersion}}")
+	if err != nil {
+		var cmdErr *CommandError
+		if errors.As(err, &cmdErr) {
+			// Check if docker binary not found
+			var execErr *exec.Error
+			if errors.As(cmdErr.Err, &execErr) {
+				return fmt.Errorf("docker CLI not found: %w", err)
+			}
+		}
+		return fmt.Errorf("%w: %v", ErrDockerNotRunning, err)
+	}
+	return nil
+}
