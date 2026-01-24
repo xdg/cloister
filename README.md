@@ -36,7 +36,7 @@ Cloister provides a third option: **secure-by-default sandboxing that doesn't ki
 
 ```bash
 # Install cloister
-go install github.com/anthropics/cloister/cmd/cloister@latest
+go install github.com/xdg/cloister/cmd/cloister@latest
 
 # Start a sandboxed session for your project
 cloister ./my-project
@@ -115,7 +115,7 @@ Before submitting a PR:
 
 ## Security
 
-If you discover a security vulnerability, please report it via [GitHub Security Advisories](https://github.com/anthropics/cloister/security/advisories/new) rather than opening a public issue.
+If you discover a security vulnerability, please report it via [GitHub Security Advisories](https://github.com/xdg/cloister/security/advisories/new) rather than opening a public issue.
 
 ## License
 
