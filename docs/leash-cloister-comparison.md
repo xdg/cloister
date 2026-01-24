@@ -11,7 +11,7 @@ Both are AI coding agent sandboxing systems written in Go that use containers an
 | **macOS support** | Native mode via system extensions | Container-only (no native) |
 | **MCP awareness** | Yes (intercepts, logs, enforces) | No |
 | **Command approval model** | Cedar policies (no human-in-loop by default) | Human approval web UI with auto-approve patterns |
-| **Project/worktree model** | Per-directory config | Git-remote-based project identity, first-class worktree support |
+| **Project/worktree model** | Per-directory config | Local-path-based project identity, first-class worktree support |
 | **Secret handling** | Header injection at proxy boundary | Not specified (blocks credential mounts) |
 
 ---
@@ -27,7 +27,7 @@ Both are AI coding agent sandboxing systems written in Go that use containers an
 ### Cloister
 - **Defense-in-depth via isolation**: Relies on Docker's `--internal` network (no gateway) plus an allowlist proxy. No kernel-level enforcement.
 - **Human-in-the-loop**: Explicit approval workflow for commands that need host execution. The `hostexec` pattern assumes humans will review non-trivial operations.
-- **Project-centric model**: Configuration is organized around git repositories (identified by remote URL), with worktrees as first-class citizens. Permissions apply uniformly across all worktrees of a project.
+- **Project-centric model**: Configuration is organized around git repositories (identified by local filesystem path), with worktrees as first-class citizens. Permissions apply uniformly across all worktrees of a project.
 - **Multi-cloister architecture**: Single `cloister-guardian` daemon serves multiple concurrent cloisters, with per-project permissions.
 
 ---
@@ -65,7 +65,7 @@ Both are AI coding agent sandboxing systems written in Go that use containers an
 ┌─────────────────────────────────────────────────────────────┐
 │                        Host                                 │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │           cloister-guardian (host process)            │  │
+│  │     cloister-guardian container + host executor       │  │
 │  │  ┌─────────────┐  ┌─────────────┐  ┌──────────────┐   │  │
 │  │  │ HTTP Proxy  │  │ Request Srv │  │ Approval Srv │   │  │
 │  │  │ :3128       │  │ :9998       │  │ :9999 (local)│   │  │
@@ -82,7 +82,7 @@ Both are AI coding agent sandboxing systems written in Go that use containers an
 ```
 
 **Key components:**
-- **Guardian**: Single host process with three servers (proxy, request, approval)
+- **Guardian**: Hybrid architecture—container on two networks (cloister-net + bridge) plus host process for command execution via Unix socket
 - **Internal network**: Docker `--internal` flag prevents direct egress
 - **hostexec**: In-container binary that sends commands to guardian for approval/execution
 - **Per-cloister logs**: Audit trails organized by project/branch
@@ -235,11 +235,11 @@ approval:
 - **Policy file**: Separate Cedar file, path specified via `--policy` or env var
 
 ### Cloister
-- **Git-remote-based identity**: Projects identified by remote URL
+- **Path-based identity**: Projects identified by local directory path
 - **Auto-registration**: First use of a repo creates project config
-- **Worktree-native**: `cloister new --worktree feature-auth` creates managed worktrees
+- **Worktree-native**: `cloister start -b feature-auth` creates managed worktrees
 - **Config hierarchy**:
-  - `~/.config/cloister/guardian.yaml` (global)
+  - `~/.config/cloister/config.yaml` (global)
   - `~/.config/cloister/projects/<name>.yaml` (per-project)
   - `.cloister.yaml` in repo (bootstrap template, never read at runtime)
 
@@ -329,7 +329,7 @@ approval:
 
 | Aspect | Leash | Cloister |
 |--------|-------|----------|
-| **Startup** | Single command: `leash claude` | Start guardian, then `cloister new` |
+| **Startup** | Single command: `leash claude` | `cloister start` (auto-starts guardian) |
 | **Multi-agent** | Separate invocations | Single guardian serves all |
 | **Policy changes** | Hot-reload | Config file edit + guardian restart (assumed) |
 | **Approval flow** | Policy-based auto | Human-in-loop with patterns |
