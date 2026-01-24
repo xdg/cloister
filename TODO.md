@@ -58,9 +58,9 @@ Before marking Phase 1 complete:
 Set up Go module structure and build infrastructure.
 
 ### 1.1.1 Go module initialization
-- [ ] Initialize Go module (`go mod init github.com/xdg/cloister`)
-- [ ] Create `cmd/cloister/main.go` with stub main
-- [ ] Add `.gitignore` for Go binaries, test artifacts
+- [x] Initialize Go module (`go mod init github.com/xdg/cloister`)
+- [x] Create `cmd/cloister/main.go` with stub main
+- [x] Add `.gitignore` for Go binaries, test artifacts
 
 ### 1.1.2 CLI framework setup
 - [ ] Add cobra dependency for CLI

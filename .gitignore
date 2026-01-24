@@ -6,10 +6,18 @@
 *.dylib
 *.test
 *.out
+*.prof
 go.work
 go.work.sum
 bin/
 vendor/
+
+# Go project binary
+/cloister
+
+# Go coverage
+coverage.txt
+coverage.html
 
 # JavaScript/Node
 node_modules/
