@@ -1,8 +1,8 @@
-# Cloister Brand Guidelines
+# Cloister brand guidelines
 
 This document outlines the visual identity direction for Cloister, an AI agent sandboxing system.
 
-## Brand Essence
+## Brand essence
 
 **Cloister** evokes the protected inner courtyards of medieval monasteries—enclosed, tranquil spaces where focused work happens safely, shielded from the chaos outside. The name suggests:
 
@@ -11,7 +11,7 @@ This document outlines the visual identity direction for Cloister, an AI agent s
 - **Architectural strength** — Stone walls, arched passages, enduring structure
 - **Curated access** — Selective openings to the outside world
 
-### Tagline Options
+### Tagline options
 
 - "Secure sandboxing for AI agents"
 - "Let AI agents work. Safely."
@@ -20,9 +20,9 @@ This document outlines the visual identity direction for Cloister, an AI agent s
 
 ---
 
-## Color Palette
+## Color palette
 
-### Primary Colors
+### Primary colors
 
 | Name | Hex | RGB | Usage |
 |------|-----|-----|-------|
@@ -30,7 +30,7 @@ This document outlines the visual identity direction for Cloister, an AI agent s
 | **Archway Blue** | `#4A6FA5` | 74, 111, 165 | Links, interactive elements, proxy status |
 | **Courtyard White** | `#F7FAFC` | 247, 250, 252 | Backgrounds, safe/allowed states |
 
-### Accent Colors
+### Accent colors
 
 | Name | Hex | RGB | Usage |
 |------|-----|-----|-------|
@@ -38,7 +38,7 @@ This document outlines the visual identity direction for Cloister, an AI agent s
 | **Pending Amber** | `#ECC94B` | 236, 201, 75 | Awaiting approval, warnings, caution |
 | **Blocked Rust** | `#C53030` | 197, 48, 48 | Denied requests, blocked domains, errors |
 
-### Extended Palette
+### Extended palette
 
 | Name | Hex | Usage |
 |------|-----|-------|
@@ -46,7 +46,7 @@ This document outlines the visual identity direction for Cloister, an AI agent s
 | **Cloister Shadow** | `#718096` | Secondary text, borders |
 | **Parchment** | `#FFFAF0` | Documentation, light accents |
 
-### Color Philosophy
+### Color philosophy
 
 The palette draws from medieval stone architecture:
 - **Cool, grounded blues and grays** convey stability and trustworthiness
@@ -55,19 +55,9 @@ The palette draws from medieval stone architecture:
 
 ---
 
-## Logo Concepts
+## Logo concepts
 
-### Concept 1: The Arched Passage
-
-```
-    ╭─────────╮
-   ╱           ╲
-  │             │
-  │      ◇      │
-  │             │
-  ├─────────────┤
-  │░░░░░░░░░░░░░│
-```
+### Concept 1: The arched passage
 
 A romanesque arch (the defining architectural feature of cloisters) framing a container/diamond shape. The arch represents the controlled gateway; the inner shape represents the sandboxed environment.
 
@@ -78,18 +68,7 @@ A romanesque arch (the defining architectural feature of cloisters) framing a co
 
 ---
 
-### Concept 2: The Walled Courtyard (Top-Down)
-
-```
-  ┌───────────────┐
-  │ ┌───────────┐ │
-  │ │           │ │
-  │ │     ◆     │ │
-  │ │           │ │
-  │ └─────┬─────┘ │
-  │       │       │
-  └───────┴───────┘
-```
+### Concept 2: The walled courtyard (top-down)
 
 A bird's-eye view of a cloister: outer wall, inner courtyard, single controlled entrance. The inner diamond represents the protected workspace.
 
@@ -100,15 +79,7 @@ A bird's-eye view of a cloister: outer wall, inner courtyard, single controlled 
 
 ---
 
-### Concept 3: Interlocking Arches
-
-```
-   ╭───╮   ╭───╮
-  ╱     ╲ ╱     ╲
- │       ╳       │
- │      ╱ ╲      │
- ├─────╱   ╲─────┤
-```
+### Concept 3: Interlocking arches
 
 Multiple arches interlocking, representing the repeating arcade structure of cloister walkways. Also suggests interconnected but separate containers.
 
@@ -119,14 +90,7 @@ Multiple arches interlocking, representing the repeating arcade structure of clo
 
 ---
 
-### Concept 4: The Keystone
-
-```
-      ╱╲
-     ╱  ╲
-    ╱ ▣  ╲
-   ╱──────╲
-```
+### Concept 4: The keystone
 
 A keystone (the central stone of an arch) containing a container symbol. The keystone is what holds the arch together—appropriate for security infrastructure.
 
@@ -137,17 +101,7 @@ A keystone (the central stone of an arch) containing a container symbol. The key
 
 ---
 
-### Concept 5: The Garden Gate
-
-```
-  ╔═══════════╗
-  ║ │ │ │ │ │ ║
-  ║ │ │ │ │ │ ║
-  ╠═╧═╧═╧═╧═╧═╣
-  ║           ║
-  ╚═════╤═════╝
-        │
-```
+### Concept 5: The garden gate
 
 An iron gate (common in cloister gardens) suggesting controlled access. The vertical bars echo both security and the columns of cloister arcades.
 
@@ -160,7 +114,7 @@ An iron gate (common in cloister gardens) suggesting controlled access. The vert
 
 ## Typography
 
-### Primary Typeface
+### Primary typeface
 
 **Inter** — Clean, modern, excellent for both UI and documentation. Open source.
 
@@ -168,7 +122,7 @@ An iron gate (common in cloister gardens) suggesting controlled access. The vert
 - Body: Inter Regular (400)
 - Code: JetBrains Mono or Fira Code
 
-### Alternative Stacks
+### Alternative stacks
 
 For contexts where Inter isn't available:
 - System: `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`
@@ -176,15 +130,15 @@ For contexts where Inter isn't available:
 
 ---
 
-## Voice and Tone
+## Voice and tone
 
-### In Documentation
+### In documentation
 
 - **Direct and clear** — Security tools shouldn't be confusing
 - **Confident but not arrogant** — "Cloister prevents X" not "Cloister is the only way to prevent X"
 - **Educational** — Help users understand *why*, not just *how*
 
-### In CLI Output
+### In CLI output
 
 - **Concise** — Respect terminal real estate
 - **Actionable** — Clear next steps when something is blocked
@@ -202,19 +156,19 @@ SECURITY ALERT: Unauthorized network access attempt detected!
 
 ---
 
-## Usage Notes
+## Usage notes
 
-### Logo Clear Space
+### Logo clear space
 
 Maintain padding equal to the height of the arch/keystone element on all sides.
 
-### Minimum Sizes
+### Minimum sizes
 
 - Print: 0.5 inches / 12mm
 - Digital: 24px height
 - Favicon: Simplified arch or keystone only
 
-### Color Usage
+### Color usage
 
 - **Light backgrounds:** Use Cloister Stone or Archway Blue
 - **Dark backgrounds:** Use Courtyard White or Archway Blue
@@ -222,7 +176,7 @@ Maintain padding equal to the height of the arch/keystone element on all sides.
 
 ---
 
-## File Naming Convention
+## File naming convention
 
 ```
 cloister-logo-color.svg       # Full color version
