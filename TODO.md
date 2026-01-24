@@ -69,9 +69,9 @@ Set up Go module structure and build infrastructure.
 - [x] **Test**: Root command prints help without error
 
 ### 1.1.3 Build infrastructure
-- [ ] Create Makefile with `build`, `test`, `lint` targets
-- [ ] Add `golangci-lint` configuration (`.golangci.yml`)
-- [ ] Verify `make build` produces binary
+- [x] Create Makefile with `build`, `test`, `lint` targets
+- [x] Add `golangci-lint` configuration (`.golangci.yml`)
+- [x] Verify `make build` produces binary
 
 ---
 
