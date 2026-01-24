@@ -63,10 +63,10 @@ Set up Go module structure and build infrastructure.
 - [x] Add `.gitignore` for Go binaries, test artifacts
 
 ### 1.1.2 CLI framework setup
-- [ ] Add cobra dependency for CLI
-- [ ] Create root command with version flag
-- [ ] Set up subcommand structure: `start`, `stop`, `list`, `guardian`
-- [ ] **Test**: Root command prints help without error
+- [x] Add cobra dependency for CLI
+- [x] Create root command with version flag
+- [x] Set up subcommand structure: `start`, `stop`, `list`, `guardian`
+- [x] **Test**: Root command prints help without error
 
 ### 1.1.3 Build infrastructure
 - [ ] Create Makefile with `build`, `test`, `lint` targets

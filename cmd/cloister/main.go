@@ -1,7 +1,13 @@
 package main
 
-import "fmt"
+import (
+	"os"
+
+	"github.com/xdg/cloister/internal/cmd"
+)
 
 func main() {
-	fmt.Println("cloister")
+	if err := cmd.Execute(); err != nil {
+		os.Exit(1)
+	}
 }
