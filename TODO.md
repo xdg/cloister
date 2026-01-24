@@ -86,10 +86,10 @@ Create and manage the `cloister-net` internal network.
 - [x] Works with Docker Desktop, OrbStack, Colima, Podman, etc.
 
 ### 1.2.2 Network management
-- [ ] Implement `EnsureNetwork(name string, internal bool)` function
-- [ ] Create `cloister-net` as internal network (no external access)
-- [ ] Implement `NetworkExists(name string)` check
-- [ ] **Test**: Create network, verify internal flag, cleanup
+- [x] Implement `EnsureNetwork(name string, internal bool)` function
+- [x] Create `cloister-net` as internal network (no external access)
+- [x] Implement `NetworkExists(name string)` check
+- [x] **Test**: Create network, verify internal flag, cleanup
 
 ### 1.2.3 Network cleanup
 - [ ] Implement `RemoveNetworkIfEmpty(name string)` function
