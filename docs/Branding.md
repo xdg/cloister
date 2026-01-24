@@ -55,60 +55,14 @@ The palette draws from medieval stone architecture:
 
 ---
 
-## Logo concepts
+## Logo
 
-### Concept 1: The arched passage
-
-A romanesque arch (the defining architectural feature of cloisters) framing a container/diamond shape. The arch represents the controlled gateway; the inner shape represents the sandboxed environment.
+A romanesque arch—the defining architectural feature of cloisters—with AI sparkles nestled within. The arch represents the controlled gateway and protective structure; the sparkles represent the AI agent working safely inside the sandboxed environment. The combination conveys that AI creativity and capability are preserved, not stifled, by thoughtful containment.
 
 **Variations:**
-- Simple arch outline only (monochrome, works at small sizes)
-- Arch with subtle stonework texture
-- Arch with a stylized container/box inside
-
----
-
-### Concept 2: The walled courtyard (top-down)
-
-A bird's-eye view of a cloister: outer wall, inner courtyard, single controlled entrance. The inner diamond represents the protected workspace.
-
-**Variations:**
-- Minimal geometric version (squares and lines)
-- Softened with rounded corners
-- Inner shape as a subtle "C" for Cloister
-
----
-
-### Concept 3: Interlocking arches
-
-Multiple arches interlocking, representing the repeating arcade structure of cloister walkways. Also suggests interconnected but separate containers.
-
-**Variations:**
-- Three arches in a row (simple, iconic)
-- Two overlapping arches forming a protective shape
-- Abstract version using just the curves
-
----
-
-### Concept 4: The keystone
-
-A keystone (the central stone of an arch) containing a container symbol. The keystone is what holds the arch together—appropriate for security infrastructure.
-
-**Variations:**
-- Keystone outline with subtle container icon inside
-- Keystone shape forming a stylized "C"
-- Shield-like interpretation of the keystone
-
----
-
-### Concept 5: The garden gate
-
-An iron gate (common in cloister gardens) suggesting controlled access. The vertical bars echo both security and the columns of cloister arcades.
-
-**Variations:**
-- Simplified to essential lines
-- Organic/botanical version with vine elements
-- Combined with arch top
+- Full color with Archway Blue arch and Pending Amber sparkles
+- Monochrome outline (works at small sizes)
+- Simplified icon version for favicons (arch silhouette with single sparkle)
 
 ---
 
@@ -160,13 +114,13 @@ SECURITY ALERT: Unauthorized network access attempt detected!
 
 ### Logo clear space
 
-Maintain padding equal to the height of the arch/keystone element on all sides.
+Maintain padding equal to the height of the arch element on all sides.
 
 ### Minimum sizes
 
 - Print: 0.5 inches / 12mm
 - Digital: 24px height
-- Favicon: Simplified arch or keystone only
+- Favicon: Simplified arch with single sparkle
 
 ### Color usage
 
