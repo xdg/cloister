@@ -152,10 +152,10 @@ Projects are auto-registered on first use. You can view and edit their configura
 ```bash
 # List registered projects
 $ cloister project list
-PROJECT        REMOTE                                  CLOISTERS
-my-api         git@github.com:user/my-api.git          1 running
-frontend       git@github.com:user/frontend.git        0
-shared-lib     git@github.com:user/shared-lib.git      0
+PROJECT        PATH                    CLOISTERS
+my-api         ~/repos/my-api          1 running
+frontend       ~/repos/frontend        0
+shared-lib     ~/repos/shared-lib      0
 
 # Show project details
 $ cloister project show my-api
@@ -241,9 +241,11 @@ cloister:my-api-feature-auth:/work$
 
 ### List worktrees
 
+Worktree commands operate on the project detected from the current directory. Use `-p <project>` to specify a project explicitly.
+
 ```bash
 $ cloister worktree list
-BRANCH         PATH                                                      CLOISTER
+WORKTREE       PATH                                                      CLOISTER
 (main)         ~/repos/my-api                                            my-api (running)
 feature-auth   ~/.local/share/cloister/worktrees/my-api/feature-auth     my-api-feature-auth (running)
 ```
@@ -258,13 +260,20 @@ $ git log --oneline -3
 
 ### Cleanup
 
+Worktree commands require project context (from current directory or `-p`):
+
 ```bash
+# From project directory
+$ cd ~/repos/my-api
 $ cloister worktree remove feature-auth
 Error: Worktree has uncommitted changes. Commit, stash, or use -f to force.
 
 $ cloister worktree remove feature-auth -f
 Stopping cloister my-api-feature-auth...
 Removing worktree: feature-auth
+
+# Or with explicit project
+$ cloister worktree remove -p my-api feature-auth -f
 ```
 
 ---

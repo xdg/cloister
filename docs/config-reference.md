@@ -193,26 +193,26 @@ Unified log for proxy and approval events, tagged by project, branch, and cloist
 
 ```
 # Proxy events (include project and branch context)
-2024-01-15T14:32:01Z PROXY ALLOW pkg.go.dev/fmt project=my-api branch=main cloister=my-api-main
+2024-01-15T14:32:01Z PROXY ALLOW pkg.go.dev/fmt project=my-api branch=main cloister=my-api
 2024-01-15T14:32:02Z PROXY ALLOW api.anthropic.com/v1/messages project=my-api branch=feature-auth cloister=my-api-feature-auth
-2024-01-15T14:32:03Z PROXY DENY github.com/api/repos project=my-api branch=main cloister=my-api-main reason="domain not in allowlist"
+2024-01-15T14:32:03Z PROXY DENY github.com/api/repos project=my-api branch=main cloister=my-api reason="domain not in allowlist"
 
 # Domain approval events
-2024-01-15T14:33:00Z PROXY REQUEST project=my-api branch=main cloister=my-api-main domain="docs.example.com"
-2024-01-15T14:33:15Z PROXY APPROVE project=my-api branch=main cloister=my-api-main domain="docs.example.com" scope=project user="david"
-2024-01-15T14:34:00Z PROXY TIMEOUT project=my-api branch=main cloister=my-api-main domain="sketchy.io"
+2024-01-15T14:33:00Z PROXY REQUEST project=my-api branch=main cloister=my-api domain="docs.example.com"
+2024-01-15T14:33:15Z PROXY APPROVE project=my-api branch=main cloister=my-api domain="docs.example.com" scope=project user="david"
+2024-01-15T14:34:00Z PROXY TIMEOUT project=my-api branch=main cloister=my-api domain="sketchy.io"
 
 # Hostexec approval events
-2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api branch=main cloister=my-api-main cmd="docker compose up -d"
+2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api branch=main cloister=my-api cmd="docker compose up -d"
 2024-01-15T14:32:06Z HOSTEXEC AUTO_APPROVE project=my-api branch=feature-auth cloister=my-api-feature-auth cmd="docker compose ps" pattern="^docker compose ps$"
-2024-01-15T14:32:12Z HOSTEXEC APPROVE project=my-api branch=main cloister=my-api-main cmd="docker compose up -d" user="david"
-2024-01-15T14:32:15Z HOSTEXEC COMPLETE project=my-api branch=main cloister=my-api-main cmd="docker compose up -d" exit=0 duration=2.3s
-2024-01-15T14:35:00Z HOSTEXEC DENY project=my-api branch=main cloister=my-api-main cmd="docker run --privileged alpine" reason="pattern denied"
+2024-01-15T14:32:12Z HOSTEXEC APPROVE project=my-api branch=main cloister=my-api cmd="docker compose up -d" user="david"
+2024-01-15T14:32:15Z HOSTEXEC COMPLETE project=my-api branch=main cloister=my-api cmd="docker compose up -d" exit=0 duration=2.3s
+2024-01-15T14:35:00Z HOSTEXEC DENY project=my-api branch=main cloister=my-api cmd="docker run --privileged alpine" reason="pattern denied"
 
 # Lifecycle events
-2024-01-15T14:30:00Z CLOISTER START project=my-api branch=main cloister=my-api-main agent=claude devcontainer=true
-2024-01-15T14:30:05Z CLOISTER LIFECYCLE project=my-api branch=main cloister=my-api-main hook=postCreateCommand cmd="npm install"
-2024-01-15T18:45:00Z CLOISTER STOP project=my-api branch=main cloister=my-api-main duration=4h15m
+2024-01-15T14:30:00Z CLOISTER START project=my-api branch=main cloister=my-api agent=claude devcontainer=true
+2024-01-15T14:30:05Z CLOISTER LIFECYCLE project=my-api branch=main cloister=my-api hook=postCreateCommand cmd="npm install"
+2024-01-15T18:45:00Z CLOISTER STOP project=my-api branch=main cloister=my-api duration=4h15m
 
 # Non-git mode (branch marked as "-", git=false flag)
 2024-01-15T14:32:01Z PROXY ALLOW pkg.go.dev project=scratch-dir branch=- cloister=scratch-dir git=false
