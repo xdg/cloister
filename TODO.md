@@ -103,10 +103,10 @@ Create and manage the `cloister-net` internal network.
 Implement the allowlist-enforcing HTTP CONNECT proxy.
 
 ### 1.3.1 Proxy server skeleton
-- [ ] Create `internal/guardian/proxy.go`
-- [ ] Implement basic HTTP server on :3128
-- [ ] Handle CONNECT method requests
-- [ ] Return 405 for non-CONNECT methods
+- [x] Create `internal/guardian/proxy.go`
+- [x] Implement basic HTTP server on :3128
+- [x] Handle CONNECT method requests
+- [x] Return 405 for non-CONNECT methods
 
 ### 1.3.2 Allowlist enforcement
 - [ ] Create `internal/guardian/allowlist.go`
