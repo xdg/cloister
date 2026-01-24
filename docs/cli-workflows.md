@@ -116,7 +116,7 @@ $ cloister config default.verbose false
 
 ---
 
-## Managing the Guardian
+## Scenario: Managing the Guardian
 
 The guardian is a background service that handles proxy requests and the approval UI. It auto-starts on first `cloister start`, but you can manage it explicitly.
 
@@ -145,7 +145,7 @@ The guardian runs as a Docker container (`cloister-guardian`) on the `cloister-n
 
 ---
 
-## Managing Projects
+## Scenario: Managing Projects
 
 Projects are auto-registered on first use. You can view and edit their configuration.
 
@@ -183,7 +183,7 @@ Project my-api removed.
 
 ---
 
-## Managing Cloisters
+## Scenario: Managing Cloisters
 
 Top-level commands operate on cloisters. When run from a project directory, they target the cloister for that project.
 
@@ -210,6 +210,16 @@ $ cloister stop my-api
 
 # Stop all cloisters
 $ cloister stop --all
+
+# Navigate to a cloister's directory
+$ cd $(cloister path my-api)
+```
+
+Use `-p <project>` to specify a project explicitly:
+
+```
+# List cloisters for a specific project
+$ cloister list -p another-proj
 ```
 
 ---
@@ -218,7 +228,7 @@ $ cloister stop --all
 
 **Goal:** Work on a feature branch in isolation while keeping the main checkout undisturbed.
 
-**Starting point:** Project `my-api` from `~/repos/my-api`.
+**Starting point:** Project `my-api` from `~/repos/my-api` already exists.
 
 ### Create worktree and start cloister
 
@@ -241,7 +251,7 @@ cloister:my-api-feature-auth:/work$
 
 ### List worktrees
 
-Worktree commands operate on the project detected from the current directory. Use `-p <project>` to specify a project explicitly.
+Worktree commands operate on the project detected from the current directory. (Use `-p <project>` to specify a project explicitly.)
 
 ```bash
 $ cloister worktree list
@@ -252,11 +262,15 @@ feature-auth   ~/.local/share/cloister/worktrees/my-api/feature-auth     my-api-
 
 ### Work in worktree from another terminal
 
+Use `cloister path` to get the host directory for any cloister:
+
 ```bash
-$ cd ~/.local/share/cloister/worktrees/my-api/feature-auth
+$ cd $(cloister path my-api-feature-auth)
 $ git log --oneline -3
 # See agent's commits
 ```
+
+This works whether the cloister is running or not, making it easy to explore worktree directories.
 
 ### Cleanup
 
@@ -275,6 +289,56 @@ Removing worktree: feature-auth
 # Or with explicit project
 $ cloister worktree remove -p my-api feature-auth -f
 ```
+
+---
+
+## Shell Completion
+
+Cloister provides shell completion for commands, flags, and dynamic values (cloister names, project names, worktree names).
+
+### Setup
+
+Generate and install a completion script for your shell:
+
+```bash
+# Bash (Linux)
+cloister completion bash > ~/.local/share/bash-completion/completions/cloister
+
+# Bash (macOS with Homebrew)
+cloister completion bash > $(brew --prefix)/etc/bash_completion.d/cloister
+
+# Zsh (add to ~/.zshrc)
+eval "$(cloister completion zsh)"
+
+# Fish
+cloister completion fish > ~/.config/fish/completions/cloister.fish
+```
+
+### What Gets Completed
+
+| Context | Completions |
+|---------|-------------|
+| `cloister <TAB>` | Subcommands: start, stop, list, path, guardian, project, worktree, ... |
+| `cloister stop <TAB>` | Running cloister names |
+| `cloister path <TAB>` | All cloister names (running + registered) |
+| `cloister project show <TAB>` | Project names |
+| `cloister worktree list -p <TAB>` | Project names |
+| `cloister start -<TAB>` | Flags: -b, -d, -p, ... |
+
+### Implementation Notes
+
+Static completions (subcommands, flags) are embedded in the generated script. Dynamic completions call back into the CLI:
+
+```bash
+# Internal command used by completion scripts
+cloister __complete path my-a
+# Returns: my-api, my-api-feature-auth
+```
+
+Dynamic completion sources:
+- **Cloister names**: Project/worktree registry + running containers
+- **Project names**: `~/.config/cloister/projects/*.yaml`
+- **Worktree names**: Per-project worktree registry (requires project context)
 
 ---
 
@@ -298,17 +362,8 @@ $ cloister worktree remove -p my-api feature-auth -f
 
 9. **Cleanup safety:** `worktree remove` refuses if uncommitted changes exist (matching `git worktree remove` behavior). Use `-f` to force.
 
+---
+
 ## Open Questions
 
 (None currently — add questions here as scenarios reveal them.)
-
----
-
-## Scenarios To Define
-
-- [x] Quick start
-- [x] Managing guardian, projects, cloisters
-- [x] Working on multiple branches (worktrees)
-- [ ] Multiple projects simultaneously
-
----

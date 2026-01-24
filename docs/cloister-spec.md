@@ -230,6 +230,7 @@ cloister start -p <name>          # Use custom project name
 cloister start -b <branch>        # Create worktree + cloister for branch
 cloister start -d                 # Start detached (enter from another terminal)
 cloister list                     # Show running cloisters
+cloister path <name>              # Get host path for cloister directory
 cloister stop                     # Stop cloister for current directory
 cloister stop <name>              # Stop specific cloister
 cloister guardian start           # Start guardian (background)
