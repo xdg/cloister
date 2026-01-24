@@ -92,9 +92,9 @@ Create and manage the `cloister-net` internal network.
 - [x] **Test**: Create network, verify internal flag, cleanup
 
 ### 1.2.3 Network cleanup
-- [ ] Implement `RemoveNetworkIfEmpty(name string)` function
-- [ ] Handle "network in use" errors appropriately
-- [ ] **Test**: Removal blocked when container attached
+- [x] Implement `RemoveNetworkIfEmpty(name string)` function
+- [x] Handle "network in use" errors appropriately
+- [x] **Test**: Removal blocked when container attached
 
 ---
 

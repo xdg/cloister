@@ -12,6 +12,9 @@ const CloisterNetworkName = "cloister-net"
 // ErrNetworkConfigMismatch indicates the network exists but has different settings than requested.
 var ErrNetworkConfigMismatch = errors.New("network exists with different configuration")
 
+// ErrNetworkInUse indicates the network cannot be removed because containers are attached to it.
+var ErrNetworkInUse = errors.New("network has active containers")
+
 // NetworkInspectInfo contains network details from docker network inspect.
 type NetworkInspectInfo struct {
 	Name     string `json:"Name"`
@@ -122,4 +125,35 @@ func EnsureNetwork(name string, internal bool) error {
 // This is a convenience wrapper around EnsureNetwork(CloisterNetworkName, true).
 func EnsureCloisterNetwork() error {
 	return EnsureNetwork(CloisterNetworkName, true)
+}
+
+// RemoveNetworkIfEmpty removes a Docker network if it exists and has no attached containers.
+// Returns nil if the network doesn't exist (idempotent).
+// Returns ErrNetworkInUse if containers are still attached to the network.
+func RemoveNetworkIfEmpty(name string) error {
+	exists, err := NetworkExists(name)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		// Network doesn't exist, nothing to do
+		return nil
+	}
+
+	// Try to remove the network
+	_, err = Run("network", "rm", name)
+	if err != nil {
+		var cmdErr *CommandError
+		if errors.As(err, &cmdErr) {
+			// Check for "has active endpoints" error which indicates containers are attached
+			if strings.Contains(cmdErr.Stderr, "has active endpoints") ||
+				strings.Contains(cmdErr.Stderr, "network is in use") {
+				return ErrNetworkInUse
+			}
+		}
+		return err
+	}
+
+	return nil
 }
