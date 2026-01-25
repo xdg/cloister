@@ -3,6 +3,8 @@ package container
 
 import (
 	"errors"
+	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/xdg/cloister/internal/docker"
@@ -129,6 +131,52 @@ func (m *Manager) List() ([]ContainerInfo, error) {
 	}
 
 	return result, nil
+}
+
+// Attach attaches an interactive shell to a running container.
+// It connects stdin/stdout/stderr to the container and allocates a TTY.
+//
+// The function returns the exit code from the shell session:
+//   - 0: Shell exited successfully
+//   - Non-zero: Shell exited with an error or was terminated
+//
+// Ctrl+C inside the container is handled by the shell; it does not terminate
+// the attach process or the container itself.
+//
+// Returns ErrContainerNotFound if the container does not exist.
+func (m *Manager) Attach(containerName string) (int, error) {
+	// Check if container exists
+	exists, err := m.containerExists(containerName)
+	if err != nil {
+		return 0, err
+	}
+	if !exists {
+		return 0, ErrContainerNotFound
+	}
+
+	// Build docker exec command with interactive TTY
+	// -i: Keep STDIN open even if not attached
+	// -t: Allocate a pseudo-TTY
+	cmd := exec.Command("docker", "exec", "-it", containerName, "/bin/bash")
+
+	// Connect to current process's stdin/stdout/stderr
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	// Run the command and wait for it to complete
+	err = cmd.Run()
+	if err != nil {
+		// Extract exit code from ExitError
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return exitErr.ExitCode(), nil
+		}
+		// Other errors (e.g., docker not found, command failed to start)
+		return 0, err
+	}
+
+	return 0, nil
 }
 
 // containerExists checks if a container with the given name exists (running or stopped).

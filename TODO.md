@@ -181,10 +181,10 @@ Launch cloister containers with proper security settings.
 - [x] **Test**: Start container, verify settings, stop, verify removal
 
 ### 1.5.4 Interactive shell attachment
-- [ ] Attach stdin/stdout/stderr to container
-- [ ] Allocate TTY for interactive use
-- [ ] Handle Ctrl+C gracefully (detach, don't kill)
-- [ ] Return exit code from shell session
+- [x] Attach stdin/stdout/stderr to container
+- [x] Allocate TTY for interactive use
+- [x] Handle Ctrl+C gracefully (detach, don't kill)
+- [x] Return exit code from shell session
 
 ---
 
