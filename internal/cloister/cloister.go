@@ -65,14 +65,20 @@ func Start(opts StartOptions) (containerID string, tok string, err error) {
 		}
 	}()
 
-	// Step 5: Create container config with token and proxy env vars
+	// Step 5: Create container config with token, proxy env vars, and credentials
+	// Combine proxy env vars with any credential env vars from the host.
+	// TEMPORARY: Credential passthrough is a Phase 1 workaround. In Phase 3,
+	// credentials will be managed via `cloister setup claude` instead.
+	envVars := token.ProxyEnvVars(tok, "")
+	envVars = append(envVars, token.CredentialEnvVars()...)
+
 	cfg := &container.Config{
 		Project:     opts.ProjectName,
 		Branch:      opts.BranchName,
 		ProjectPath: opts.ProjectPath,
 		Image:       opts.Image,
 		Network:     docker.CloisterNetworkName,
-		EnvVars:     token.ProxyEnvVars(tok, ""),
+		EnvVars:     envVars,
 	}
 
 	// Step 6: Create the container (without starting)

@@ -240,9 +240,9 @@ Configure containers for Claude Code operation.
 - [x] Handle missing `~/.claude/` gracefully (fresh install)
 
 ### 1.7.3 Credential injection
-- [ ] Pass `ANTHROPIC_API_KEY` from host if set
-- [ ] Pass `CLAUDE_CODE_OAUTH_TOKEN` from host if set
-- [ ] Document this is temporary (replaced in Phase 3)
+- [x] Pass `ANTHROPIC_API_KEY` from host if set
+- [x] Pass `CLAUDE_CODE_OAUTH_TOKEN` from host if set
+- [x] Document this is temporary (replaced in Phase 3)
 
 ### 1.7.4 Claude Code configuration
 - [ ] Create `~/.claude.json` in container with onboarding skipped
