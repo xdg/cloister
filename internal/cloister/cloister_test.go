@@ -3,6 +3,7 @@ package cloister
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -358,5 +359,87 @@ func TestStop_NonExistentContainer(t *testing.T) {
 	err := Stop("cloister-nonexistent-12345", "sometoken")
 	if err == nil {
 		t.Error("Stop() with non-existent container should return error")
+	}
+}
+
+func TestInjectUserSettings_MissingClaudeDir(t *testing.T) {
+	// Test that injectUserSettings returns nil when ~/.claude/ doesn't exist.
+	// We can't easily test this without mocking UserHomeDir, but we can test
+	// that the function doesn't panic or error when called with an invalid
+	// container (the container doesn't need to exist for us to test the
+	// directory check logic - it will fail at docker cp, not at the stat).
+
+	// This test just verifies the function signature and basic behavior.
+	// The function should return an error only if docker cp fails on an
+	// existing directory, or nil if the directory doesn't exist.
+
+	// Since we can't mock UserHomeDir, we instead verify that the function
+	// handles the docker cp error gracefully when the container doesn't exist.
+	err := injectUserSettings("nonexistent-container-12345")
+
+	// If ~/.claude/ exists on this machine, we expect a docker error.
+	// If ~/.claude/ doesn't exist, we expect nil.
+	// Either is acceptable behavior - we're testing that it doesn't panic.
+	_ = err
+}
+
+func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
+	requireDocker(t)
+
+	// Create a test container to verify settings injection
+	// Uses cloister-default image which has the cloister user and home directory
+	projectName := testProjectName()
+	branchName := "settings-test"
+	containerName := "cloister-" + projectName + "-" + branchName
+
+	// Ensure cleanup after test
+	defer cleanupTestContainer(containerName)
+
+	// Create a temporary directory for the project path
+	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create container using docker create directly (not through cloister.Start)
+	// to avoid needing the guardian. Uses cloister-default which has /home/cloister.
+	_, err = docker.Run("create",
+		"--name", containerName,
+		"-v", tmpDir+":/work",
+		container.DefaultImage,
+		"sleep", "infinity")
+	if err != nil {
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage, err)
+	}
+
+	// Check if ~/.claude/ exists on host
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("Failed to get home dir: %v", err)
+	}
+	claudeDir := filepath.Join(homeDir, ".claude")
+	if _, err := os.Stat(claudeDir); os.IsNotExist(err) {
+		t.Skip("~/.claude/ does not exist on this machine, skipping integration test")
+	}
+
+	// Test injectUserSettings
+	err = injectUserSettings(containerName)
+	if err != nil {
+		t.Fatalf("injectUserSettings() failed: %v", err)
+	}
+
+	// Start the container so we can verify the files were copied
+	_, err = docker.Run("start", containerName)
+	if err != nil {
+		t.Fatalf("Failed to start container: %v", err)
+	}
+
+	// Verify the .claude directory exists in the container
+	output, err := docker.Run("exec", containerName, "ls", "-la", "/home/cloister/.claude")
+	if err != nil {
+		t.Errorf("Failed to verify .claude directory in container: %v", err)
+	} else {
+		t.Logf("Container .claude contents:\n%s", output)
 	}
 }

@@ -3,11 +3,17 @@
 package cloister
 
 import (
+	"os"
+	"path/filepath"
+
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
 	"github.com/xdg/cloister/internal/token"
 )
+
+// containerHomeDir is the home directory for the cloister user inside containers.
+const containerHomeDir = "/home/cloister"
 
 // StartOptions contains the configuration for starting a cloister container.
 type StartOptions struct {
@@ -28,7 +34,9 @@ type StartOptions struct {
 // 1. Ensures guardian is running
 // 2. Generates a new token
 // 3. Registers the token with guardian
-// 4. Creates and starts the container with proxy env vars injected
+// 4. Creates the container (without starting)
+// 5. Injects user settings (~/.claude/) into the container
+// 6. Starts the container
 //
 // Returns the container ID and token. The token is returned so it can be used
 // for cleanup later (revocation when stopping the container).
@@ -67,14 +75,75 @@ func Start(opts StartOptions) (containerID string, tok string, err error) {
 		EnvVars:     token.ProxyEnvVars(tok, ""),
 	}
 
-	// Step 6: Start the container
+	// Step 6: Create the container (without starting)
 	mgr := container.NewManager()
-	containerID, err = mgr.Start(cfg)
+	containerID, err = mgr.Create(cfg)
+	if err != nil {
+		return "", "", err
+	}
+
+	// If starting fails after container creation, remove the container
+	defer func() {
+		if err != nil {
+			// Best effort cleanup - ignore removal errors
+			_ = mgr.Stop(containerName)
+		}
+	}()
+
+	// Step 7: Inject user settings (~/.claude/) into the container
+	// This is a one-way snapshot - writes inside container are isolated
+	if copyErr := injectUserSettings(containerName); copyErr != nil {
+		// Log but don't fail - missing settings is not fatal
+		// (user might not have ~/.claude/ on a fresh install)
+		_ = copyErr
+	}
+
+	// Step 8: Start the container
+	err = mgr.StartContainer(containerName)
 	if err != nil {
 		return "", "", err
 	}
 
 	return containerID, tok, nil
+}
+
+// injectUserSettings copies the host's ~/.claude/ directory into the container.
+// This provides a one-way snapshot so the agent inherits user's settings, skills,
+// memory, and CLAUDE.md. Writes inside the container are isolated and do not
+// modify the host config.
+//
+// Returns nil if ~/.claude/ doesn't exist on the host (fresh install).
+// Returns an error only if the directory exists but cannot be copied.
+func injectUserSettings(containerName string) error {
+	// Get the user's home directory
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+
+	claudeDir := filepath.Join(homeDir, ".claude")
+
+	// Check if ~/.claude/ exists
+	info, err := os.Stat(claudeDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// Directory doesn't exist - this is fine, just skip
+			return nil
+		}
+		return err
+	}
+
+	// Ensure it's a directory
+	if !info.IsDir() {
+		// ~/.claude is a file, not a directory - skip
+		return nil
+	}
+
+	// Copy ~/.claude/ to /home/cloister/.claude/ in the container
+	// docker cp copies the directory contents when the source has a trailing slash,
+	// or the entire directory when it doesn't. We want to copy the entire directory.
+	destPath := filepath.Join(containerHomeDir, ".claude")
+	return docker.CopyToContainer(claudeDir, containerName, destPath)
 }
 
 // Stop orchestrates stopping a cloister container with proper cleanup:

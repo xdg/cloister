@@ -38,6 +38,10 @@ func NewManager() *Manager {
 // Start creates and starts a new cloister container using the provided configuration.
 // Returns the container ID on success.
 // Returns ErrContainerExists if a container with the same name already exists.
+//
+// Note: This method creates and immediately starts the container. If you need to
+// perform operations between creation and start (e.g., copying files), use
+// Create() followed by StartContainer() instead.
 func (m *Manager) Start(cfg *Config) (string, error) {
 	containerName := cfg.ContainerName()
 
@@ -71,6 +75,62 @@ func (m *Manager) Start(cfg *Config) (string, error) {
 	// Return container ID (docker run -d outputs the container ID)
 	containerID := strings.TrimSpace(output)
 	return containerID, nil
+}
+
+// Create creates a new cloister container without starting it.
+// Returns the container ID on success.
+// Returns ErrContainerExists if a container with the same name already exists.
+//
+// Use this with StartContainer() when you need to perform operations
+// (like copying files) between creation and start.
+func (m *Manager) Create(cfg *Config) (string, error) {
+	containerName := cfg.ContainerName()
+
+	// Check if container already exists
+	exists, err := m.containerExists(containerName)
+	if err != nil {
+		return "", err
+	}
+	if exists {
+		return "", ErrContainerExists
+	}
+
+	// Build docker create arguments
+	args := []string{"create"}
+	args = append(args, cfg.BuildRunArgs()...)
+
+	// Add a command that keeps the container running (sleep infinity)
+	args = append(args, "sleep", "infinity")
+
+	// Create the container
+	output, err := docker.Run(args...)
+	if err != nil {
+		// Check if the error is due to container already existing (race condition)
+		var cmdErr *docker.CommandError
+		if errors.As(err, &cmdErr) && strings.Contains(cmdErr.Stderr, "already in use") {
+			return "", ErrContainerExists
+		}
+		return "", err
+	}
+
+	// Return container ID (docker create outputs the container ID)
+	containerID := strings.TrimSpace(output)
+	return containerID, nil
+}
+
+// StartContainer starts a previously created container by name.
+// Returns ErrContainerNotFound if the container does not exist.
+func (m *Manager) StartContainer(containerName string) error {
+	// Check if container exists
+	exists, err := m.containerExists(containerName)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrContainerNotFound
+	}
+
+	return docker.StartContainer(containerName)
 }
 
 // Stop stops and removes a cloister container by name.

@@ -234,10 +234,10 @@ Configure containers for Claude Code operation.
 - [x] Build and tag as `cloister-default:latest`
 
 ### 1.7.2 User settings injection
-- [ ] Copy host `~/.claude/` into container at creation time (one-way snapshot)
-- [ ] Agent inherits user's settings, skills, memory, CLAUDE.md
-- [ ] Writes inside container are isolated (no modification of host config)
-- [ ] Handle missing `~/.claude/` gracefully (fresh install)
+- [x] Copy host `~/.claude/` into container at creation time (one-way snapshot)
+- [x] Agent inherits user's settings, skills, memory, CLAUDE.md
+- [x] Writes inside container are isolated (no modification of host config)
+- [x] Handle missing `~/.claude/` gracefully (fresh install)
 
 ### 1.7.3 Credential injection
 - [ ] Pass `ANTHROPIC_API_KEY` from host if set

@@ -232,3 +232,23 @@ func CheckDaemon() error {
 	}
 	return nil
 }
+
+// CopyToContainer copies a file or directory from the host to a container.
+// The container can be created but not running.
+//
+// srcPath is the path on the host (file or directory).
+// containerName is the name or ID of the container.
+// destPath is the path inside the container.
+//
+// This wraps `docker cp srcPath containerName:destPath`.
+func CopyToContainer(srcPath, containerName, destPath string) error {
+	_, err := Run("cp", srcPath, containerName+":"+destPath)
+	return err
+}
+
+// StartContainer starts a created container.
+// This wraps `docker start containerName`.
+func StartContainer(containerName string) error {
+	_, err := Run("start", containerName)
+	return err
+}
