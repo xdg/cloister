@@ -193,13 +193,13 @@ Launch cloister containers with proper security settings.
 Wire up the CLI commands to the container and guardian systems.
 
 ### 1.6.1 `cloister start` command
-- [ ] Detect project from current directory (git root)
-- [ ] Detect branch from git HEAD
-- [ ] Ensure guardian is running (auto-start if not)
-- [ ] Generate token and register with guardian
-- [ ] Start container with token injected
-- [ ] Attach interactive shell
-- [ ] On shell exit, leave container running (user runs `cloister stop` explicitly)
+- [x] Detect project from current directory (git root)
+- [x] Detect branch from git HEAD
+- [x] Ensure guardian is running (auto-start if not)
+- [x] Generate token and register with guardian
+- [x] Start container with token injected
+- [x] Attach interactive shell
+- [x] On shell exit, leave container running (user runs `cloister stop` explicitly)
 
 ### 1.6.2 `cloister stop` command
 - [ ] Accept container name argument (or default to current project)

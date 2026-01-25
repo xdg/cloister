@@ -234,3 +234,50 @@ func TestRegistry_EmptyToken(t *testing.T) {
 		t.Error("empty token should not be valid after revoke")
 	}
 }
+
+func TestRegistry_List(t *testing.T) {
+	r := NewRegistry()
+
+	// Empty registry should return empty map
+	tokens := r.List()
+	if len(tokens) != 0 {
+		t.Errorf("expected empty map for new registry, got %d entries", len(tokens))
+	}
+
+	// Register some tokens
+	r.Register("token-a", "cloister-a")
+	r.Register("token-b", "cloister-b")
+	r.Register("token-c", "cloister-c")
+
+	// List should return all tokens
+	tokens = r.List()
+	if len(tokens) != 3 {
+		t.Errorf("expected 3 tokens, got %d", len(tokens))
+	}
+
+	if tokens["token-a"] != "cloister-a" {
+		t.Errorf("expected token-a -> cloister-a, got %s", tokens["token-a"])
+	}
+	if tokens["token-b"] != "cloister-b" {
+		t.Errorf("expected token-b -> cloister-b, got %s", tokens["token-b"])
+	}
+	if tokens["token-c"] != "cloister-c" {
+		t.Errorf("expected token-c -> cloister-c, got %s", tokens["token-c"])
+	}
+
+	// Modifying the returned map should not affect the registry
+	tokens["token-d"] = "cloister-d"
+	if r.Count() != 3 {
+		t.Errorf("modifying returned map should not affect registry, count is %d", r.Count())
+	}
+
+	// Revoke a token and verify List is updated
+	r.Revoke("token-b")
+	tokens = r.List()
+	if len(tokens) != 2 {
+		t.Errorf("expected 2 tokens after revoke, got %d", len(tokens))
+	}
+	if _, ok := tokens["token-b"]; ok {
+		t.Error("revoked token should not appear in List")
+	}
+}

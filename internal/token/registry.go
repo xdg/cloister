@@ -66,3 +66,15 @@ func (r *Registry) Count() int {
 	defer r.mu.RUnlock()
 	return len(r.tokens)
 }
+
+// List returns a map of all registered tokens to their cloister names.
+// The returned map is a copy and can be safely modified.
+func (r *Registry) List() map[string]string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	result := make(map[string]string, len(r.tokens))
+	for k, v := range r.tokens {
+		result[k] = v
+	}
+	return result
+}
