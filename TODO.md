@@ -173,12 +173,12 @@ Launch cloister containers with proper security settings.
 - [x] Run as non-root user (UID 1000)
 
 ### 1.5.3 Container lifecycle
-- [ ] Create `internal/container/manager.go`
-- [ ] Implement `Start(projectPath, branchName string) (containerID, error)`
-- [ ] Implement `Stop(containerName string) error`
-- [ ] Implement `List() ([]ContainerInfo, error)`
-- [ ] Handle container already exists (return error or attach)
-- [ ] **Test**: Start container, verify settings, stop, verify removal
+- [x] Create `internal/container/manager.go`
+- [x] Implement `Start(projectPath, branchName string) (containerID, error)`
+- [x] Implement `Stop(containerName string) error`
+- [x] Implement `List() ([]ContainerInfo, error)`
+- [x] Handle container already exists (return error or attach)
+- [x] **Test**: Start container, verify settings, stop, verify removal
 
 ### 1.5.4 Interactive shell attachment
 - [ ] Attach stdin/stdout/stderr to container
