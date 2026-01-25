@@ -15,6 +15,14 @@ import (
 // DefaultProxyPort is the standard port for HTTP CONNECT proxies.
 const DefaultProxyPort = 3128
 
+// Timeout constants for tunnel connections.
+const (
+	// dialTimeout is the maximum time to establish a connection to the upstream server.
+	dialTimeout = 10 * time.Second
+	// idleTimeout is the maximum time a tunnel connection can be idle before being closed.
+	idleTimeout = 5 * time.Minute
+)
+
 // ProxyServer is an HTTP CONNECT proxy that enforces domain allowlists
 // for cloister containers.
 type ProxyServer struct {
@@ -115,9 +123,8 @@ func (p *ProxyServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleConnect processes CONNECT requests.
-// It checks the allowlist and returns 403 Forbidden for non-allowed domains.
-// This is a stub implementation that accepts the connection but does not
-// perform actual tunneling - that will be implemented in phase 1.3.3.
+// It checks the allowlist and establishes a bidirectional tunnel to the upstream server.
+// Returns 403 Forbidden for non-allowed domains, 502 Bad Gateway for connection failures.
 func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// r.Host contains the target host:port for CONNECT requests
 	host := r.Host
@@ -128,7 +135,90 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stub implementation: accept the request and close
-	// Actual tunneling will be implemented in phase 1.3.3
-	w.WriteHeader(http.StatusOK)
+	// Establish connection to upstream server.
+	// We use net.Dial (not TLS) because the client will perform TLS handshake
+	// through the tunnel - this is how HTTP CONNECT proxies work.
+	dialer := &net.Dialer{
+		Timeout: dialTimeout,
+	}
+	upstreamConn, err := dialer.DialContext(r.Context(), "tcp", host)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Bad Gateway - failed to connect to upstream: %v", err), http.StatusBadGateway)
+		return
+	}
+	defer upstreamConn.Close()
+
+	// Hijack the client connection to get raw TCP access.
+	hijacker, ok := w.(http.Hijacker)
+	if !ok {
+		http.Error(w, "Internal Server Error - connection hijacking not supported", http.StatusInternalServerError)
+		return
+	}
+
+	clientConn, _, err := hijacker.Hijack()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Internal Server Error - failed to hijack connection: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer clientConn.Close()
+
+	// Send 200 Connection Established to the client.
+	// This tells the client the tunnel is ready and it can begin TLS handshake.
+	_, err = clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+	if err != nil {
+		// Client connection failed, nothing more we can do
+		return
+	}
+
+	// Set up bidirectional copy with idle timeout.
+	// We use a WaitGroup to ensure both directions complete before returning.
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Copy from client to upstream
+	go func() {
+		defer wg.Done()
+		copyWithIdleTimeout(upstreamConn, clientConn, idleTimeout)
+		// When client closes or times out, close upstream write side
+		if tcpConn, ok := upstreamConn.(*net.TCPConn); ok {
+			_ = tcpConn.CloseWrite()
+		}
+	}()
+
+	// Copy from upstream to client
+	go func() {
+		defer wg.Done()
+		copyWithIdleTimeout(clientConn, upstreamConn, idleTimeout)
+		// When upstream closes or times out, close client write side
+		if tcpConn, ok := clientConn.(*net.TCPConn); ok {
+			_ = tcpConn.CloseWrite()
+		}
+	}()
+
+	wg.Wait()
+}
+
+// copyWithIdleTimeout copies from src to dst, resetting the deadline on each read.
+// This implements an idle timeout - the connection is closed if no data is transferred
+// for the specified duration.
+func copyWithIdleTimeout(dst net.Conn, src net.Conn, idleTimeout time.Duration) {
+	buf := make([]byte, 32*1024) // 32KB buffer, same as io.Copy default
+	for {
+		// Set read deadline for idle timeout
+		_ = src.SetReadDeadline(time.Now().Add(idleTimeout))
+
+		n, err := src.Read(buf)
+		if n > 0 {
+			// Reset write deadline and write data
+			_ = dst.SetWriteDeadline(time.Now().Add(idleTimeout))
+			_, writeErr := dst.Write(buf[:n])
+			if writeErr != nil {
+				return
+			}
+		}
+		if err != nil {
+			// EOF or timeout or other error - stop copying
+			return
+		}
+	}
 }

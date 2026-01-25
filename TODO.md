@@ -116,11 +116,11 @@ Implement the allowlist-enforcing HTTP CONNECT proxy.
 - [x] **Test**: Table-driven tests for allowed/denied domains
 
 ### 1.3.3 CONNECT tunneling
-- [ ] Establish upstream TLS connection on allowed requests
-- [ ] Respond with `200 Connection Established`
-- [ ] Bidirectional copy between client and upstream
-- [ ] Handle connection timeouts and errors
-- [ ] **Test**: Mock upstream, verify tunnel establishment
+- [x] Establish upstream TLS connection on allowed requests
+- [x] Respond with `200 Connection Established`
+- [x] Bidirectional copy between client and upstream
+- [x] Handle connection timeouts and errors
+- [x] **Test**: Mock upstream, verify tunnel establishment
 
 ### 1.3.4 Proxy authentication
 - [ ] Parse `Proxy-Authorization` header
