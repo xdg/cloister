@@ -40,7 +40,11 @@ RUN apt-get update && apt-get install -y \
 RUN if id -u 1000 >/dev/null 2>&1; then userdel -r $(getent passwd 1000 | cut -d: -f1); fi \
     && useradd -m -s /bin/bash -u 1000 cloister
 
-# hostexec wrapper (placeholder - will be copied by cloister binary)
+# Cloister binary (for guardian mode inside the container)
+COPY cloister /usr/local/bin/cloister
+RUN chmod +x /usr/local/bin/cloister
+
+# hostexec wrapper for host command execution
 COPY hostexec /usr/local/bin/hostexec
 RUN chmod +x /usr/local/bin/hostexec
 

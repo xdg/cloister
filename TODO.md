@@ -256,10 +256,10 @@ Configure containers for Claude Code operation.
 End-to-end testing and cleanup.
 
 ### 1.8.1 Guardian container setup
-- [ ] Create guardian Dockerfile (or use same binary in guardian mode)
-- [ ] `cloister guardian` runs binary with `guardian` subcommand
-- [ ] Guardian container exposes :3128 to `cloister-net`
-- [ ] Guardian container name: `cloister-guardian`
+- [x] Create guardian Dockerfile (or use same binary in guardian mode)
+- [x] `cloister guardian` runs binary with `guardian` subcommand
+- [x] Guardian container exposes :3128 to `cloister-net`
+- [x] Guardian container name: `cloister-guardian`
 
 ### 1.8.2 End-to-end integration
 - [ ] **Test**: Full `cloister start` → shell → `curl` test → `exit` → `cloister stop`
