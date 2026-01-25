@@ -202,10 +202,10 @@ Wire up the CLI commands to the container and guardian systems.
 - [x] On shell exit, leave container running (user runs `cloister stop` explicitly)
 
 ### 1.6.2 `cloister stop` command
-- [ ] Accept container name argument (or default to current project)
-- [ ] Revoke token from guardian
-- [ ] Stop and remove container
-- [ ] Print confirmation message
+- [x] Accept container name argument (or default to current project)
+- [x] Revoke token from guardian
+- [x] Stop and remove container
+- [x] Print confirmation message
 
 ### 1.6.3 `cloister list` command
 - [ ] List all running cloister containers

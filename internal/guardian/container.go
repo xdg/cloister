@@ -213,3 +213,19 @@ func RevokeToken(token string) error {
 	client := NewClient(DefaultAPIAddr)
 	return client.RevokeToken(token)
 }
+
+// ListTokens returns a map of all registered tokens to their cloister names.
+// Returns an empty map if the guardian is not running.
+func ListTokens() (map[string]string, error) {
+	running, err := IsRunning()
+	if err != nil {
+		return nil, fmt.Errorf("failed to check guardian status: %w", err)
+	}
+	if !running {
+		// Guardian not running, return empty map
+		return make(map[string]string), nil
+	}
+
+	client := NewClient(DefaultAPIAddr)
+	return client.ListTokens()
+}
