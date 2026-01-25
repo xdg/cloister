@@ -1,0 +1,57 @@
+#!/bin/bash
+# /usr/local/bin/hostexec
+# Sends command to cloister-guardian for approval and execution
+
+set -e
+
+if [ -z "$CLOISTER_GUARDIAN_HOST" ]; then
+    echo "Error: CLOISTER_GUARDIAN_HOST not set" >&2
+    exit 1
+fi
+
+if [ -z "$CLOISTER_TOKEN" ]; then
+    echo "Error: CLOISTER_TOKEN not set" >&2
+    exit 1
+fi
+
+if [ $# -eq 0 ]; then
+    echo "Usage: hostexec <command> [args...]" >&2
+    exit 1
+fi
+
+COMMAND="$*"
+
+# Send request to request server and wait for response
+# Token header is authoritative; body fields are informational for logging
+response=$(curl -s -X POST "http://${CLOISTER_GUARDIAN_HOST}:9998/request" \
+    -H "Content-Type: application/json" \
+    -H "X-Cloister-Token: ${CLOISTER_TOKEN}" \
+    -d "{\"cmd\": \"${COMMAND}\"}" \
+    --max-time 300)
+
+status=$(echo "$response" | jq -r '.status // "error"')
+
+case "$status" in
+    "approved"|"auto_approved")
+        exit_code=$(echo "$response" | jq -r '.exit_code // 1')
+        stdout=$(echo "$response" | jq -r '.stdout // ""')
+        stderr=$(echo "$response" | jq -r '.stderr // ""')
+
+        [ -n "$stdout" ] && echo "$stdout"
+        [ -n "$stderr" ] && echo "$stderr" >&2
+        exit "$exit_code"
+        ;;
+    "denied")
+        reason=$(echo "$response" | jq -r '.reason // "No reason given"')
+        echo "Command denied: $reason" >&2
+        exit 1
+        ;;
+    "timeout")
+        echo "Command timed out waiting for approval" >&2
+        exit 1
+        ;;
+    *)
+        echo "Unexpected response: $response" >&2
+        exit 1
+        ;;
+esac

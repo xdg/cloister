@@ -225,13 +225,13 @@ Wire up the CLI commands to the container and guardian systems.
 Configure containers for Claude Code operation.
 
 ### 1.7.1 Default container image
-- [ ] Create `Dockerfile` for default image
-- [ ] Base: Ubuntu 24.04
-- [ ] Install: Go, Node.js, Python, curl, git
-- [ ] Install: Claude Code via native installer (`curl -fsSL https://claude.ai/install.sh | bash`)
-- [ ] Verify `claude` is in PATH (likely `~/.claude/bin`)
-- [ ] Create non-root user (UID 1000)
-- [ ] Build and tag as `cloister-default:latest`
+- [x] Create `Dockerfile` for default image
+- [x] Base: Ubuntu 24.04
+- [x] Install: Go, Node.js, Python, curl, git
+- [x] Install: Claude Code via native installer (`curl -fsSL https://claude.ai/install.sh | bash`)
+- [x] Verify `claude` is in PATH (likely `~/.claude/bin`)
+- [x] Create non-root user (UID 1000)
+- [x] Build and tag as `cloister-default:latest`
 
 ### 1.7.2 User settings injection
 - [ ] Copy host `~/.claude/` into container at creation time (one-way snapshot)

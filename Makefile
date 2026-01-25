@@ -6,11 +6,14 @@ CMD_PATH := ./cmd/cloister
 D2_SOURCES := $(wildcard docs/diagrams/*.d2)
 D2_SVGS := $(D2_SOURCES:.d2=.svg)
 
-.PHONY: build test lint clean diagrams clean-diagrams
+.PHONY: build install test lint clean diagrams clean-diagrams
 
 # Go targets
 build:
 	go build -o $(BINARY) $(CMD_PATH)
+
+install:
+	go install $(CMD_PATH)
 
 test:
 	go test ./...
