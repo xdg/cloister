@@ -71,13 +71,13 @@ func TestProxyServer_ConnectMethod(t *testing.T) {
 
 	addr := p.ListenAddr()
 
-	// CONNECT request should succeed (200 OK)
-	t.Run("CONNECT returns 200", func(t *testing.T) {
+	// CONNECT request should succeed (200 OK) for allowed domain
+	t.Run("CONNECT returns 200 for allowed domain", func(t *testing.T) {
 		req, err := http.NewRequest(http.MethodConnect, fmt.Sprintf("http://%s", addr), nil)
 		if err != nil {
 			t.Fatalf("failed to create request: %v", err)
 		}
-		req.Host = "example.com:443"
+		req.Host = "api.anthropic.com:443"
 
 		client := &http.Client{
 			// Don't follow redirects

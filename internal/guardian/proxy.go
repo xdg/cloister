@@ -21,6 +21,9 @@ type ProxyServer struct {
 	// Addr is the address to listen on (e.g., ":3128").
 	Addr string
 
+	// Allowlist controls which domains are permitted. If nil, all domains are blocked.
+	Allowlist *Allowlist
+
 	server   *http.Server
 	listener net.Listener
 	mu       sync.Mutex
@@ -29,11 +32,15 @@ type ProxyServer struct {
 
 // NewProxyServer creates a new proxy server listening on the specified address.
 // If addr is empty, it defaults to ":3128".
+// The server is created with the default allowlist.
 func NewProxyServer(addr string) *ProxyServer {
 	if addr == "" {
 		addr = fmt.Sprintf(":%d", DefaultProxyPort)
 	}
-	return &ProxyServer{Addr: addr}
+	return &ProxyServer{
+		Addr:      addr,
+		Allowlist: NewDefaultAllowlist(),
+	}
 }
 
 // Start begins accepting connections on the proxy server.
@@ -108,9 +115,19 @@ func (p *ProxyServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleConnect processes CONNECT requests.
+// It checks the allowlist and returns 403 Forbidden for non-allowed domains.
 // This is a stub implementation that accepts the connection but does not
 // perform actual tunneling - that will be implemented in phase 1.3.3.
-func (p *ProxyServer) handleConnect(w http.ResponseWriter, _ *http.Request) {
+func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
+	// r.Host contains the target host:port for CONNECT requests
+	host := r.Host
+
+	// Check allowlist
+	if p.Allowlist == nil || !p.Allowlist.IsAllowed(host) {
+		http.Error(w, "Forbidden - domain not in allowlist", http.StatusForbidden)
+		return
+	}
+
 	// Stub implementation: accept the request and close
 	// Actual tunneling will be implemented in phase 1.3.3
 	w.WriteHeader(http.StatusOK)

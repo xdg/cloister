@@ -109,11 +109,11 @@ Implement the allowlist-enforcing HTTP CONNECT proxy.
 - [x] Return 405 for non-CONNECT methods
 
 ### 1.3.2 Allowlist enforcement
-- [ ] Create `internal/guardian/allowlist.go`
-- [ ] Hardcode initial allowlist: `api.anthropic.com`, `api.openai.com`, `generativelanguage.googleapis.com`
-- [ ] Implement domain matching (exact match, no wildcards yet)
-- [ ] Return 403 Forbidden for non-allowed domains
-- [ ] **Test**: Table-driven tests for allowed/denied domains
+- [x] Create `internal/guardian/allowlist.go`
+- [x] Hardcode initial allowlist: `api.anthropic.com`, `api.openai.com`, `generativelanguage.googleapis.com`
+- [x] Implement domain matching (exact match, no wildcards yet)
+- [x] Return 403 Forbidden for non-allowed domains
+- [x] **Test**: Table-driven tests for allowed/denied domains
 
 ### 1.3.3 CONNECT tunneling
 - [ ] Establish upstream TLS connection on allowed requests
