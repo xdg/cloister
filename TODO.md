@@ -141,12 +141,12 @@ Generate and validate per-cloister authentication tokens.
 - [x] **Test**: Generated tokens are 64 hex characters, unique
 
 ### 1.4.2 Token registry
-- [ ] Create `internal/token/registry.go`
-- [ ] Implement in-memory token→cloister-name map
-- [ ] `Register(token, cloisterName)` and `Validate(token) (cloisterName, bool)`
-- [ ] `Revoke(token)` for cleanup on container stop
-- [ ] Thread-safe with mutex
-- [ ] **Test**: Register, validate, revoke lifecycle
+- [x] Create `internal/token/registry.go`
+- [x] Implement in-memory token→cloister-name map
+- [x] `Register(token, cloisterName)` and `Validate(token) (cloisterName, bool)`
+- [x] `Revoke(token)` for cleanup on container stop
+- [x] Thread-safe with mutex
+- [x] **Test**: Register, validate, revoke lifecycle
 
 ### 1.4.3 Token injection
 - [ ] Pass token to container via `CLOISTER_TOKEN` env var
