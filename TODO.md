@@ -123,11 +123,11 @@ Implement the allowlist-enforcing HTTP CONNECT proxy.
 - [x] **Test**: Mock upstream, verify tunnel establishment
 
 ### 1.3.4 Proxy authentication
-- [ ] Parse `Proxy-Authorization` header
-- [ ] Validate token against registered tokens (from 1.4)
-- [ ] Return 407 Proxy Authentication Required on missing/invalid token
-- [ ] Log authentication failures with source IP
-- [ ] **Test**: Request with valid token succeeds, invalid fails
+- [x] Parse `Proxy-Authorization` header
+- [x] Validate token against registered tokens (from 1.4)
+- [x] Return 407 Proxy Authentication Required on missing/invalid token
+- [x] Log authentication failures with source IP
+- [x] **Test**: Request with valid token succeeds, invalid fails
 
 ---
 

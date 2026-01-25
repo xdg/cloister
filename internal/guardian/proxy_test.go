@@ -2,9 +2,12 @@ package guardian
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strings"
@@ -12,6 +15,23 @@ import (
 	"testing"
 	"time"
 )
+
+// mockTokenValidator is a simple TokenValidator for testing.
+type mockTokenValidator struct {
+	validTokens map[string]bool
+}
+
+func newMockTokenValidator(tokens ...string) *mockTokenValidator {
+	v := &mockTokenValidator{validTokens: make(map[string]bool)}
+	for _, t := range tokens {
+		v.validTokens[t] = true
+	}
+	return v
+}
+
+func (v *mockTokenValidator) Validate(token string) bool {
+	return v.validTokens[token]
+}
 
 func TestNewProxyServer(t *testing.T) {
 	t.Run("default address", func(t *testing.T) {
@@ -501,5 +521,313 @@ func TestProxyServer_TunnelCleanShutdown(t *testing.T) {
 	_, err = reader.ReadByte()
 	if err == nil {
 		t.Error("expected read to fail after upstream close")
+	}
+}
+
+func TestProxyServer_Authentication(t *testing.T) {
+	// Start a mock upstream for successful auth tests
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanupUpstream := startMockUpstream(t, echoHandler)
+	defer cleanupUpstream()
+
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	tests := []struct {
+		name           string
+		authHeader     string
+		validTokens    []string
+		expectedStatus int
+	}{
+		{
+			name:           "valid token succeeds",
+			authHeader:     "Basic " + base64.StdEncoding.EncodeToString([]byte("user:valid-token-123")),
+			validTokens:    []string{"valid-token-123"},
+			expectedStatus: 200,
+		},
+		{
+			name:           "missing auth header returns 407",
+			authHeader:     "",
+			validTokens:    []string{"some-token"},
+			expectedStatus: 407,
+		},
+		{
+			name:           "invalid token returns 407",
+			authHeader:     "Basic " + base64.StdEncoding.EncodeToString([]byte("user:wrong-token")),
+			validTokens:    []string{"valid-token"},
+			expectedStatus: 407,
+		},
+		{
+			name:           "malformed auth header returns 407",
+			authHeader:     "Bearer some-token",
+			validTokens:    []string{"some-token"},
+			expectedStatus: 407,
+		},
+		{
+			name:           "invalid base64 returns 407",
+			authHeader:     "Basic not-valid-base64!!!",
+			validTokens:    []string{"some-token"},
+			expectedStatus: 407,
+		},
+		{
+			name:           "missing colon in credentials returns 407",
+			authHeader:     "Basic " + base64.StdEncoding.EncodeToString([]byte("no-colon-here")),
+			validTokens:    []string{"no-colon-here"},
+			expectedStatus: 407,
+		},
+		{
+			name:           "empty password returns 407 when token required",
+			authHeader:     "Basic " + base64.StdEncoding.EncodeToString([]byte("user:")),
+			validTokens:    []string{"valid-token"},
+			expectedStatus: 407,
+		},
+		{
+			name:           "empty username with valid token succeeds",
+			authHeader:     "Basic " + base64.StdEncoding.EncodeToString([]byte(":valid-token")),
+			validTokens:    []string{"valid-token"},
+			expectedStatus: 200,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Create proxy with token validator
+			p := NewProxyServer(":0")
+			p.Allowlist = NewAllowlist([]string{upstreamHost})
+			p.TokenValidator = newMockTokenValidator(tc.validTokens...)
+
+			// Use a buffer to capture log output
+			var logBuf bytes.Buffer
+			p.Logger = log.New(&logBuf, "", 0)
+
+			if err := p.Start(); err != nil {
+				t.Fatalf("failed to start proxy server: %v", err)
+			}
+			defer func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = p.Stop(ctx)
+			}()
+
+			proxyAddr := p.ListenAddr()
+
+			// Connect to proxy
+			conn, err := net.Dial("tcp", proxyAddr)
+			if err != nil {
+				t.Fatalf("failed to connect to proxy: %v", err)
+			}
+			defer conn.Close()
+
+			// Build CONNECT request with optional auth header
+			var reqBuilder strings.Builder
+			reqBuilder.WriteString(fmt.Sprintf("CONNECT %s HTTP/1.1\r\n", upstreamAddr))
+			reqBuilder.WriteString(fmt.Sprintf("Host: %s\r\n", upstreamAddr))
+			if tc.authHeader != "" {
+				reqBuilder.WriteString(fmt.Sprintf("Proxy-Authorization: %s\r\n", tc.authHeader))
+			}
+			reqBuilder.WriteString("\r\n")
+
+			_, err = conn.Write([]byte(reqBuilder.String()))
+			if err != nil {
+				t.Fatalf("failed to send CONNECT request: %v", err)
+			}
+
+			// Read response
+			reader := bufio.NewReader(conn)
+			statusLine, err := reader.ReadString('\n')
+			if err != nil {
+				t.Fatalf("failed to read status line: %v", err)
+			}
+
+			// Extract status code from response
+			var statusCode int
+			_, err = fmt.Sscanf(statusLine, "HTTP/1.1 %d", &statusCode)
+			if err != nil {
+				t.Fatalf("failed to parse status line: %v (line: %q)", err, statusLine)
+			}
+
+			if statusCode != tc.expectedStatus {
+				t.Errorf("expected status %d, got %d", tc.expectedStatus, statusCode)
+			}
+
+			// For 407 responses, verify Proxy-Authenticate header
+			if tc.expectedStatus == 407 {
+				// Read headers to find Proxy-Authenticate
+				foundProxyAuth := false
+				for {
+					line, err := reader.ReadString('\n')
+					if err != nil {
+						break
+					}
+					if line == "\r\n" {
+						break
+					}
+					if strings.HasPrefix(line, "Proxy-Authenticate:") {
+						foundProxyAuth = true
+						if !strings.Contains(line, `Basic realm="cloister"`) {
+							t.Errorf("expected Proxy-Authenticate header with realm, got: %s", line)
+						}
+					}
+				}
+				if !foundProxyAuth {
+					t.Error("expected Proxy-Authenticate header in 407 response")
+				}
+
+				// Verify logging occurred
+				logOutput := logBuf.String()
+				if !strings.Contains(logOutput, "proxy auth failure") {
+					t.Errorf("expected auth failure to be logged, got: %s", logOutput)
+				}
+			}
+		})
+	}
+}
+
+func TestProxyServer_NoTokenValidatorAllowsAll(t *testing.T) {
+	// When TokenValidator is nil, all requests should be allowed (no auth required)
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanupUpstream := startMockUpstream(t, echoHandler)
+	defer cleanupUpstream()
+
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{upstreamHost})
+	// Explicitly no TokenValidator set
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	// Connect without any auth header
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer conn.Close()
+
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamAddr, upstreamAddr)
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+
+	if !strings.Contains(statusLine, "200") {
+		t.Errorf("expected 200 OK without TokenValidator, got: %s", statusLine)
+	}
+}
+
+func TestProxyServer_AuthWithTunnelData(t *testing.T) {
+	// Verify that after successful auth, the tunnel works correctly
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanupUpstream := startMockUpstream(t, echoHandler)
+	defer cleanupUpstream()
+
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{upstreamHost})
+	p.TokenValidator = newMockTokenValidator("my-secret-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// Send authenticated CONNECT request
+	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:my-secret-token"))
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: %s\r\n\r\n",
+		upstreamAddr, upstreamAddr, authHeader)
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+
+	// Read and verify 200 response
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+	if !strings.Contains(statusLine, "200") {
+		t.Fatalf("expected 200 OK, got: %s", statusLine)
+	}
+
+	// Skip headers
+	for {
+		line, _ := reader.ReadString('\n')
+		if line == "\r\n" {
+			break
+		}
+	}
+
+	// Send data through tunnel
+	testData := "Hello authenticated tunnel!"
+	_, err = conn.Write([]byte(testData))
+	if err != nil {
+		t.Fatalf("failed to send data: %v", err)
+	}
+
+	// Read echo
+	response := make([]byte, len(testData))
+	_, err = io.ReadFull(reader, response)
+	if err != nil {
+		t.Fatalf("failed to read response: %v", err)
+	}
+
+	if string(response) != testData {
+		t.Errorf("expected %q, got %q", testData, string(response))
 	}
 }

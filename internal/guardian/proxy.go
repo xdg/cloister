@@ -4,10 +4,13 @@ package guardian
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -23,6 +26,13 @@ const (
 	idleTimeout = 5 * time.Minute
 )
 
+// TokenValidator validates authentication tokens for proxy requests.
+// Implementations should be thread-safe.
+type TokenValidator interface {
+	// Validate checks if a token is valid and returns true if so.
+	Validate(token string) bool
+}
+
 // ProxyServer is an HTTP CONNECT proxy that enforces domain allowlists
 // for cloister containers.
 type ProxyServer struct {
@@ -31,6 +41,14 @@ type ProxyServer struct {
 
 	// Allowlist controls which domains are permitted. If nil, all domains are blocked.
 	Allowlist *Allowlist
+
+	// TokenValidator validates authentication tokens. If nil, all requests are allowed
+	// (useful for testing). When set, requests must include a valid Proxy-Authorization
+	// header with Basic auth where the password is the token.
+	TokenValidator TokenValidator
+
+	// Logger is used to log authentication failures. If nil, the default log package is used.
+	Logger *log.Logger
 
 	server   *http.Server
 	listener net.Listener
@@ -113,13 +131,93 @@ func (p *ProxyServer) ListenAddr() string {
 
 // handleRequest processes incoming HTTP requests.
 // Only CONNECT method is allowed; all other methods return 405.
+// Authentication is checked before processing if TokenValidator is set.
 func (p *ProxyServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodConnect {
 		http.Error(w, "Method Not Allowed - only CONNECT is supported", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// Check authentication if TokenValidator is set
+	if p.TokenValidator != nil {
+		if !p.authenticate(w, r) {
+			return
+		}
+	}
+
 	p.handleConnect(w, r)
+}
+
+// authenticate checks the Proxy-Authorization header and validates the token.
+// Returns true if authentication succeeds, false otherwise.
+// On failure, it writes the appropriate 407 response.
+func (p *ProxyServer) authenticate(w http.ResponseWriter, r *http.Request) bool {
+	authHeader := r.Header.Get("Proxy-Authorization")
+	if authHeader == "" {
+		p.logAuthFailure(r, "missing Proxy-Authorization header")
+		p.writeAuthRequired(w)
+		return false
+	}
+
+	// Parse Basic auth: "Basic base64(username:password)"
+	token, ok := p.parseBasicAuth(authHeader)
+	if !ok {
+		p.logAuthFailure(r, "invalid Proxy-Authorization header format")
+		p.writeAuthRequired(w)
+		return false
+	}
+
+	if !p.TokenValidator.Validate(token) {
+		p.logAuthFailure(r, "invalid token")
+		p.writeAuthRequired(w)
+		return false
+	}
+
+	return true
+}
+
+// parseBasicAuth extracts the token (password) from a Basic auth header.
+// The username is ignored as the token is passed as the password.
+// Returns the token and true if parsing succeeded, empty string and false otherwise.
+func (p *ProxyServer) parseBasicAuth(authHeader string) (string, bool) {
+	const prefix = "Basic "
+	if !strings.HasPrefix(authHeader, prefix) {
+		return "", false
+	}
+
+	encoded := authHeader[len(prefix):]
+	decoded, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		return "", false
+	}
+
+	// Format is "username:password", we only care about password (token)
+	credentials := string(decoded)
+	colonIdx := strings.Index(credentials, ":")
+	if colonIdx < 0 {
+		return "", false
+	}
+
+	// Password (token) is everything after the first colon
+	token := credentials[colonIdx+1:]
+	return token, true
+}
+
+// writeAuthRequired writes a 407 Proxy Authentication Required response.
+func (p *ProxyServer) writeAuthRequired(w http.ResponseWriter) {
+	w.Header().Set("Proxy-Authenticate", `Basic realm="cloister"`)
+	http.Error(w, "Proxy Authentication Required", http.StatusProxyAuthRequired)
+}
+
+// logAuthFailure logs an authentication failure with the source IP.
+func (p *ProxyServer) logAuthFailure(r *http.Request, reason string) {
+	sourceIP := r.RemoteAddr
+	msg := fmt.Sprintf("proxy auth failure from %s: %s", sourceIP, reason)
+	if p.Logger != nil {
+		p.Logger.Println(msg)
+	} else {
+		log.Println(msg)
+	}
 }
 
 // handleConnect processes CONNECT requests.
