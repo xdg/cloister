@@ -149,9 +149,9 @@ Generate and validate per-cloister authentication tokens.
 - [x] **Test**: Register, validate, revoke lifecycle
 
 ### 1.4.3 Token injection
-- [ ] Pass token to container via `CLOISTER_TOKEN` env var
-- [ ] Pass proxy address via `HTTP_PROXY` and `HTTPS_PROXY` env vars
-- [ ] Format: `http://token:$CLOISTER_TOKEN@guardian:3128`
+- [x] Pass token to container via `CLOISTER_TOKEN` env var
+- [x] Pass proxy address via `HTTP_PROXY` and `HTTPS_PROXY` env vars
+- [x] Format: `http://token:$CLOISTER_TOKEN@guardian:3128`
 
 ---
 
