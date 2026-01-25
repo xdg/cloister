@@ -160,11 +160,11 @@ Generate and validate per-cloister authentication tokens.
 Launch cloister containers with proper security settings.
 
 ### 1.5.1 Container configuration
-- [ ] Create `internal/container/config.go`
-- [ ] Define container create options struct
-- [ ] Set container name format: `cloister-<project>-<branch>`
-- [ ] Mount project directory at `/work` (read-write)
-- [ ] Set working directory to `/work`
+- [x] Create `internal/container/config.go`
+- [x] Define container create options struct
+- [x] Set container name format: `cloister-<project>-<branch>`
+- [x] Mount project directory at `/work` (read-write)
+- [x] Set working directory to `/work`
 
 ### 1.5.2 Security hardening
 - [ ] Add `--cap-drop=ALL`
