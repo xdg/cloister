@@ -213,10 +213,10 @@ Wire up the CLI commands to the container and guardian systems.
 - [x] Format as table
 
 ### 1.6.4 `cloister guardian` subcommands
-- [ ] `guardian start`: Start guardian container if not running
-- [ ] `guardian stop`: Stop guardian (warn if cloisters running)
-- [ ] `guardian status`: Show guardian status, uptime, active token count
-- [ ] Guardian container connected to both `cloister-net` and bridge
+- [x] `guardian start`: Start guardian container if not running
+- [x] `guardian stop`: Stop guardian (warn if cloisters running)
+- [x] `guardian status`: Show guardian status, uptime, active token count
+- [x] Guardian container connected to both `cloister-net` and bridge
 
 ---
 

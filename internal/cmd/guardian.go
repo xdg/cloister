@@ -2,15 +2,20 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/container"
+	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
 	"github.com/xdg/cloister/internal/token"
 )
@@ -32,7 +37,32 @@ var guardianStartCmd = &cobra.Command{
 	Short: "Start the guardian service",
 	Long:  `Start the guardian container if not already running.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("cloister guardian start: not implemented")
+		// Check if Docker is running
+		if err := docker.CheckDaemon(); err != nil {
+			return fmt.Errorf("docker is not available: %w", err)
+		}
+
+		// Check if already running
+		running, err := guardian.IsRunning()
+		if err != nil {
+			return fmt.Errorf("failed to check guardian status: %w", err)
+		}
+		if running {
+			fmt.Println("Guardian is already running")
+			return nil
+		}
+
+		// Start the guardian
+		fmt.Println("Starting guardian...")
+		if err := guardian.Start(); err != nil {
+			if errors.Is(err, guardian.ErrGuardianAlreadyRunning) {
+				fmt.Println("Guardian is already running")
+				return nil
+			}
+			return fmt.Errorf("failed to start guardian: %w", err)
+		}
+
+		fmt.Println("Guardian started successfully")
 		return nil
 	},
 }
@@ -44,7 +74,51 @@ var guardianStopCmd = &cobra.Command{
 
 Warns if there are running cloister containers that depend on the guardian.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("cloister guardian stop: not implemented")
+		// Check if Docker is running
+		if err := docker.CheckDaemon(); err != nil {
+			return fmt.Errorf("docker is not available: %w", err)
+		}
+
+		// Check if guardian is running
+		running, err := guardian.IsRunning()
+		if err != nil {
+			return fmt.Errorf("failed to check guardian status: %w", err)
+		}
+		if !running {
+			fmt.Println("Guardian is not running")
+			return nil
+		}
+
+		// Check for running cloister containers and warn
+		mgr := container.NewManager()
+		containers, err := mgr.List()
+		if err != nil {
+			return fmt.Errorf("failed to list containers: %w", err)
+		}
+
+		// Filter for running cloisters (exclude guardian itself)
+		var runningCloisters []string
+		for _, c := range containers {
+			if c.Name != guardian.ContainerName && c.State == "running" {
+				runningCloisters = append(runningCloisters, c.Name)
+			}
+		}
+
+		if len(runningCloisters) > 0 {
+			fmt.Fprintf(os.Stderr, "Warning: %d cloister container(s) are still running and will lose network access:\n", len(runningCloisters))
+			for _, name := range runningCloisters {
+				fmt.Fprintf(os.Stderr, "  - %s\n", name)
+			}
+			fmt.Fprintln(os.Stderr)
+		}
+
+		// Stop the guardian
+		fmt.Println("Stopping guardian...")
+		if err := guardian.Stop(); err != nil {
+			return fmt.Errorf("failed to stop guardian: %w", err)
+		}
+
+		fmt.Println("Guardian stopped successfully")
 		return nil
 	},
 }
@@ -54,7 +128,38 @@ var guardianStatusCmd = &cobra.Command{
 	Short: "Show guardian service status",
 	Long:  `Show guardian status including uptime and active token count.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		fmt.Println("cloister guardian status: not implemented")
+		// Check if Docker is running
+		if err := docker.CheckDaemon(); err != nil {
+			return fmt.Errorf("docker is not available: %w", err)
+		}
+
+		// Check if guardian is running
+		running, err := guardian.IsRunning()
+		if err != nil {
+			return fmt.Errorf("failed to check guardian status: %w", err)
+		}
+
+		if !running {
+			fmt.Println("Status: not running")
+			return nil
+		}
+
+		fmt.Println("Status: running")
+
+		// Get container details for uptime
+		uptime, err := getGuardianUptime()
+		if err == nil && uptime != "" {
+			fmt.Printf("Uptime: %s\n", uptime)
+		}
+
+		// Get active token count
+		tokens, err := guardian.ListTokens()
+		if err != nil {
+			fmt.Printf("Active tokens: (unable to retrieve: %v)\n", err)
+		} else {
+			fmt.Printf("Active tokens: %d\n", len(tokens))
+		}
+
 		return nil
 	},
 }
@@ -148,4 +253,80 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	log.Println("Guardian servers stopped")
 	return nil
+}
+
+// getGuardianUptime returns the human-readable uptime of the guardian container.
+// It uses docker inspect to get the StartedAt time and calculates the duration.
+func getGuardianUptime() (string, error) {
+	// Use docker inspect to get the container state
+	output, err := docker.Run("inspect", guardian.ContainerName)
+	if err != nil {
+		return "", err
+	}
+
+	// Parse the JSON output (docker inspect returns an array)
+	var containers []struct {
+		State struct {
+			StartedAt string `json:"StartedAt"`
+		} `json:"State"`
+	}
+
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return "", fmt.Errorf("empty inspect output")
+	}
+
+	if err := json.Unmarshal([]byte(output), &containers); err != nil {
+		return "", fmt.Errorf("failed to parse inspect output: %w", err)
+	}
+
+	if len(containers) == 0 {
+		return "", fmt.Errorf("no container found")
+	}
+
+	startedAt := containers[0].State.StartedAt
+	if startedAt == "" {
+		return "", fmt.Errorf("no StartedAt time found")
+	}
+
+	// Parse the time
+	startTime, err := time.Parse(time.RFC3339Nano, startedAt)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse StartedAt time: %w", err)
+	}
+
+	// Calculate uptime
+	uptime := time.Since(startTime)
+
+	// Format as human-readable duration
+	return formatDuration(uptime), nil
+}
+
+// formatDuration formats a duration in a human-readable way.
+func formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%d seconds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		mins := int(d.Minutes())
+		secs := int(d.Seconds()) % 60
+		if secs > 0 {
+			return fmt.Sprintf("%d minutes, %d seconds", mins, secs)
+		}
+		return fmt.Sprintf("%d minutes", mins)
+	}
+	if d < 24*time.Hour {
+		hours := int(d.Hours())
+		mins := int(d.Minutes()) % 60
+		if mins > 0 {
+			return fmt.Sprintf("%d hours, %d minutes", hours, mins)
+		}
+		return fmt.Sprintf("%d hours", hours)
+	}
+	days := int(d.Hours()) / 24
+	hours := int(d.Hours()) % 24
+	if hours > 0 {
+		return fmt.Sprintf("%d days, %d hours", days, hours)
+	}
+	return fmt.Sprintf("%d days", days)
 }
