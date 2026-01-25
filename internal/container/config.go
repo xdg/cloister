@@ -2,6 +2,7 @@
 package container
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -75,10 +76,8 @@ func (c *Config) UserID() int {
 //   - Working directory set to /work
 //   - Environment variables
 //   - Network connection
+//   - Security hardening (cap-drop=ALL, no-new-privileges, non-root user)
 //   - Image name
-//
-// Security settings (cap-drop, no-new-privileges, etc.) are handled
-// separately by the container manager.
 func (c *Config) BuildRunArgs() []string {
 	args := []string{
 		"--name", c.ContainerName(),
@@ -95,6 +94,15 @@ func (c *Config) BuildRunArgs() []string {
 	if c.Network != "" {
 		args = append(args, "--network", c.Network)
 	}
+
+	// Security hardening: drop all capabilities
+	args = append(args, "--cap-drop=ALL")
+
+	// Security hardening: prevent privilege escalation
+	args = append(args, "--security-opt=no-new-privileges")
+
+	// Security hardening: run as non-root user
+	args = append(args, "--user", fmt.Sprintf("%d", c.UserID()))
 
 	// Add image name last
 	args = append(args, c.ImageName())

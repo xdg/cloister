@@ -343,6 +343,7 @@ func TestConfig_BuildRunArgs(t *testing.T) {
 		"-v":        "/home/user/projects/myproject:/work",
 		"-w":        "/work",
 		"--network": "cloister-net",
+		"--user":    "1000",
 	}
 
 	for flag, value := range expectedPairs {
@@ -355,6 +356,24 @@ func TestConfig_BuildRunArgs(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("BuildRunArgs() missing %s %s, got %v", flag, value, args)
+		}
+	}
+
+	// Check security flags (combined flag=value format)
+	expectedFlags := []string{
+		"--cap-drop=ALL",
+		"--security-opt=no-new-privileges",
+	}
+	for _, flag := range expectedFlags {
+		found := false
+		for _, arg := range args {
+			if arg == flag {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("BuildRunArgs() missing %s, got %v", flag, args)
 		}
 	}
 
@@ -388,9 +407,10 @@ func TestConfig_BuildRunArgs_MinimalConfig(t *testing.T) {
 
 	args := cfg.BuildRunArgs()
 
-	// Should have: --name, container-name, -v, mount, -w, /work, image
-	if len(args) != 7 {
-		t.Errorf("expected 7 args for minimal config, got %d: %v", len(args), args)
+	// Should have: --name, container-name, -v, mount, -w, /work,
+	//              --cap-drop=ALL, --security-opt=no-new-privileges, --user, 1000, image
+	if len(args) != 11 {
+		t.Errorf("expected 11 args for minimal config, got %d: %v", len(args), args)
 	}
 
 	// Should use default image
@@ -403,6 +423,83 @@ func TestConfig_BuildRunArgs_MinimalConfig(t *testing.T) {
 		if arg == "--network" {
 			t.Error("--network should not be present when Network is empty")
 		}
+	}
+}
+
+func TestConfig_BuildRunArgs_SecurityHardening(t *testing.T) {
+	cfg := &Config{
+		Project:     "myproject",
+		Branch:      "main",
+		ProjectPath: "/home/user/projects/myproject",
+		Network:     "cloister-net",
+	}
+
+	args := cfg.BuildRunArgs()
+
+	// Helper to check if a flag exists in args
+	containsFlag := func(flag string) bool {
+		for _, arg := range args {
+			if arg == flag {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Helper to check if a flag-value pair exists in args
+	containsFlagValue := func(flag, value string) bool {
+		for i, arg := range args {
+			if arg == flag && i+1 < len(args) && args[i+1] == value {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Test: --cap-drop=ALL is present
+	if !containsFlag("--cap-drop=ALL") {
+		t.Errorf("BuildRunArgs() missing --cap-drop=ALL, got %v", args)
+	}
+
+	// Test: --security-opt=no-new-privileges is present
+	if !containsFlag("--security-opt=no-new-privileges") {
+		t.Errorf("BuildRunArgs() missing --security-opt=no-new-privileges, got %v", args)
+	}
+
+	// Test: --user with default UID 1000 is present
+	if !containsFlagValue("--user", "1000") {
+		t.Errorf("BuildRunArgs() missing --user 1000, got %v", args)
+	}
+
+	// Test: --network=cloister-net is present (only network, no bridge)
+	if !containsFlagValue("--network", "cloister-net") {
+		t.Errorf("BuildRunArgs() missing --network cloister-net, got %v", args)
+	}
+}
+
+func TestConfig_BuildRunArgs_CustomUID(t *testing.T) {
+	cfg := &Config{
+		Project:     "myproject",
+		Branch:      "main",
+		ProjectPath: "/home/user/projects/myproject",
+		UID:         1001,
+	}
+
+	args := cfg.BuildRunArgs()
+
+	// Helper to check if a flag-value pair exists in args
+	containsFlagValue := func(flag, value string) bool {
+		for i, arg := range args {
+			if arg == flag && i+1 < len(args) && args[i+1] == value {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Test: --user with custom UID is present
+	if !containsFlagValue("--user", "1001") {
+		t.Errorf("BuildRunArgs() should use custom UID 1001, got %v", args)
 	}
 }
 

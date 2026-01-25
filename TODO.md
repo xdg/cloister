@@ -167,10 +167,10 @@ Launch cloister containers with proper security settings.
 - [x] Set working directory to `/work`
 
 ### 1.5.2 Security hardening
-- [ ] Add `--cap-drop=ALL`
-- [ ] Add `--security-opt=no-new-privileges`
-- [ ] Connect only to `cloister-net` (no bridge network)
-- [ ] Run as non-root user (UID 1000)
+- [x] Add `--cap-drop=ALL`
+- [x] Add `--security-opt=no-new-privileges`
+- [x] Connect only to `cloister-net` (no bridge network)
+- [x] Run as non-root user (UID 1000)
 
 ### 1.5.3 Container lifecycle
 - [ ] Create `internal/container/manager.go`
