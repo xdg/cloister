@@ -136,9 +136,9 @@ Implement the allowlist-enforcing HTTP CONNECT proxy.
 Generate and validate per-cloister authentication tokens.
 
 ### 1.4.1 Token generation
-- [ ] Create `internal/token/token.go`
-- [ ] Implement `Generate() string` using crypto/rand (32 bytes, hex encoded)
-- [ ] **Test**: Generated tokens are 64 hex characters, unique
+- [x] Create `internal/token/token.go`
+- [x] Implement `Generate() string` using crypto/rand (32 bytes, hex encoded)
+- [x] **Test**: Generated tokens are 64 hex characters, unique
 
 ### 1.4.2 Token registry
 - [ ] Create `internal/token/registry.go`
