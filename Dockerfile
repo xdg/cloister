@@ -56,6 +56,13 @@ RUN mkdir -p /home/cloister/.local/bin \
 # Add Claude binary to PATH
 ENV PATH="/home/cloister/.local/bin:${PATH}"
 
+# Configure Claude Code for cloister operation
+# 1. Skip onboarding prompts
+RUN echo '{"hasCompletedOnboarding": true}' > /home/cloister/.claude.json
+
+# 2. Add alias to skip permission prompts (cloister is the sandbox, not Claude)
+RUN echo "alias claude='claude --dangerously-skip-permissions'" >> /home/cloister/.bashrc
+
 # Working directory for projects
 WORKDIR /work
 

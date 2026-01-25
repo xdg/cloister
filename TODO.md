@@ -245,9 +245,9 @@ Configure containers for Claude Code operation.
 - [x] Document this is temporary (replaced in Phase 3)
 
 ### 1.7.4 Claude Code configuration
-- [ ] Create `~/.claude.json` in container with onboarding skipped
-- [ ] Set up `claude --dangerously-skip-permissions` alias in bashrc
-- [ ] Ensure proxy env vars visible to Claude process
+- [x] Create `~/.claude.json` in container with onboarding skipped
+- [x] Set up `claude --dangerously-skip-permissions` alias in bashrc
+- [x] Ensure proxy env vars visible to Claude process
 
 ---
 
