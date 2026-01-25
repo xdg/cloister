@@ -208,9 +208,9 @@ Wire up the CLI commands to the container and guardian systems.
 - [x] Print confirmation message
 
 ### 1.6.3 `cloister list` command
-- [ ] List all running cloister containers
-- [ ] Show: name, project, branch, uptime, status
-- [ ] Format as table
+- [x] List all running cloister containers
+- [x] Show: name, project, branch, uptime, status
+- [x] Format as table
 
 ### 1.6.4 `cloister guardian` subcommands
 - [ ] `guardian start`: Start guardian container if not running
