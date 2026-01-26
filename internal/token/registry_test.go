@@ -281,3 +281,176 @@ func TestRegistry_List(t *testing.T) {
 		t.Error("revoked token should not appear in List")
 	}
 }
+
+func TestRegistry_RegisterWithProject(t *testing.T) {
+	r := NewRegistry()
+
+	token := "proj-token"
+	cloisterName := "project-main"
+	projectName := "my-project"
+
+	// Register with project
+	r.RegisterWithProject(token, cloisterName, projectName)
+
+	// Should be valid
+	if !r.Validate(token) {
+		t.Error("token should be valid after registration")
+	}
+
+	// Lookup should return cloister name (backward compat)
+	name, valid := r.Lookup(token)
+	if !valid {
+		t.Error("Lookup should return valid=true")
+	}
+	if name != cloisterName {
+		t.Errorf("Lookup returned %q, expected %q", name, cloisterName)
+	}
+
+	// LookupProject should return project name
+	proj, valid := r.LookupProject(token)
+	if !valid {
+		t.Error("LookupProject should return valid=true")
+	}
+	if proj != projectName {
+		t.Errorf("LookupProject returned %q, expected %q", proj, projectName)
+	}
+
+	// LookupInfo should return full info
+	info, valid := r.LookupInfo(token)
+	if !valid {
+		t.Error("LookupInfo should return valid=true")
+	}
+	if info.CloisterName != cloisterName {
+		t.Errorf("LookupInfo CloisterName = %q, expected %q", info.CloisterName, cloisterName)
+	}
+	if info.ProjectName != projectName {
+		t.Errorf("LookupInfo ProjectName = %q, expected %q", info.ProjectName, projectName)
+	}
+}
+
+func TestRegistry_LookupWithProject(t *testing.T) {
+	r := NewRegistry()
+
+	// Test LookupProject for non-existent token
+	proj, valid := r.LookupProject("nonexistent")
+	if valid {
+		t.Error("LookupProject should return valid=false for non-existent token")
+	}
+	if proj != "" {
+		t.Errorf("LookupProject should return empty string for non-existent, got %q", proj)
+	}
+
+	// Test LookupInfo for non-existent token
+	info, valid := r.LookupInfo("nonexistent")
+	if valid {
+		t.Error("LookupInfo should return valid=false for non-existent token")
+	}
+	if info.CloisterName != "" || info.ProjectName != "" {
+		t.Error("LookupInfo should return zero value for non-existent token")
+	}
+
+	// Register token without project (using Register for backward compat)
+	r.Register("simple-token", "simple-cloister")
+
+	// LookupProject should return empty project but valid=true
+	proj, valid = r.LookupProject("simple-token")
+	if !valid {
+		t.Error("LookupProject should return valid=true for registered token")
+	}
+	if proj != "" {
+		t.Errorf("LookupProject should return empty project for token without project, got %q", proj)
+	}
+
+	// LookupInfo should show empty project
+	info, valid = r.LookupInfo("simple-token")
+	if !valid {
+		t.Error("LookupInfo should return valid=true")
+	}
+	if info.CloisterName != "simple-cloister" {
+		t.Errorf("LookupInfo CloisterName = %q, expected simple-cloister", info.CloisterName)
+	}
+	if info.ProjectName != "" {
+		t.Errorf("LookupInfo ProjectName should be empty, got %q", info.ProjectName)
+	}
+}
+
+func TestRegistry_ListInfo(t *testing.T) {
+	r := NewRegistry()
+
+	// Empty registry
+	infos := r.ListInfo()
+	if len(infos) != 0 {
+		t.Errorf("expected empty map for new registry, got %d", len(infos))
+	}
+
+	// Register tokens with and without projects
+	r.Register("token-a", "cloister-a")
+	r.RegisterWithProject("token-b", "cloister-b", "project-b")
+	r.RegisterWithProject("token-c", "cloister-c", "project-c")
+
+	infos = r.ListInfo()
+	if len(infos) != 3 {
+		t.Errorf("expected 3 entries, got %d", len(infos))
+	}
+
+	// Check token-a (no project)
+	if infos["token-a"].CloisterName != "cloister-a" {
+		t.Errorf("token-a CloisterName = %q, expected cloister-a", infos["token-a"].CloisterName)
+	}
+	if infos["token-a"].ProjectName != "" {
+		t.Errorf("token-a ProjectName = %q, expected empty", infos["token-a"].ProjectName)
+	}
+
+	// Check token-b (with project)
+	if infos["token-b"].CloisterName != "cloister-b" {
+		t.Errorf("token-b CloisterName = %q, expected cloister-b", infos["token-b"].CloisterName)
+	}
+	if infos["token-b"].ProjectName != "project-b" {
+		t.Errorf("token-b ProjectName = %q, expected project-b", infos["token-b"].ProjectName)
+	}
+
+	// Check token-c (with project)
+	if infos["token-c"].CloisterName != "cloister-c" {
+		t.Errorf("token-c CloisterName = %q, expected cloister-c", infos["token-c"].CloisterName)
+	}
+	if infos["token-c"].ProjectName != "project-c" {
+		t.Errorf("token-c ProjectName = %q, expected project-c", infos["token-c"].ProjectName)
+	}
+
+	// Modifying returned map should not affect registry
+	infos["token-d"] = TokenInfo{CloisterName: "cloister-d", ProjectName: "project-d"}
+	if r.Count() != 3 {
+		t.Errorf("modifying returned map should not affect registry, count is %d", r.Count())
+	}
+}
+
+func TestRegistry_UpdateWithProject(t *testing.T) {
+	r := NewRegistry()
+
+	// Register without project
+	r.Register("token", "original-cloister")
+
+	info, _ := r.LookupInfo("token")
+	if info.CloisterName != "original-cloister" || info.ProjectName != "" {
+		t.Errorf("unexpected initial state: %+v", info)
+	}
+
+	// Update with project
+	r.RegisterWithProject("token", "updated-cloister", "new-project")
+
+	info, valid := r.LookupInfo("token")
+	if !valid {
+		t.Error("token should still be valid after update")
+	}
+	if info.CloisterName != "updated-cloister" {
+		t.Errorf("CloisterName = %q, expected updated-cloister", info.CloisterName)
+	}
+	if info.ProjectName != "new-project" {
+		t.Errorf("ProjectName = %q, expected new-project", info.ProjectName)
+	}
+
+	// Count should still be 1
+	if r.Count() != 1 {
+		t.Errorf("count should be 1 after update, got %d", r.Count())
+	}
+}

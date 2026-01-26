@@ -10,8 +10,11 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -33,6 +36,9 @@ type TokenValidator interface {
 	Validate(token string) bool
 }
 
+// ConfigReloader is a function that returns a new Allowlist based on reloaded configuration.
+type ConfigReloader func() (*Allowlist, error)
+
 // ProxyServer is an HTTP CONNECT proxy that enforces domain allowlists
 // for cloister containers.
 type ProxyServer struct {
@@ -50,10 +56,21 @@ type ProxyServer struct {
 	// Logger is used to log authentication failures. If nil, the default log package is used.
 	Logger *log.Logger
 
-	server   *http.Server
-	listener net.Listener
-	mu       sync.Mutex
-	running  bool
+	// AllowlistCache provides per-project allowlist lookups. If nil, the global
+	// Allowlist is used for all requests.
+	AllowlistCache *AllowlistCache
+
+	// TokenLookup provides token-to-project mapping for per-project allowlists.
+	// If nil, the global Allowlist is used for all requests.
+	TokenLookup TokenLookupFunc
+
+	server         *http.Server
+	listener       net.Listener
+	mu             sync.Mutex
+	running        bool
+	configReloader ConfigReloader
+	sighupChan     chan os.Signal
+	stopSighup     chan struct{}
 }
 
 // NewProxyServer creates a new proxy server listening on the specified address.
@@ -67,6 +84,37 @@ func NewProxyServer(addr string) *ProxyServer {
 		Addr:      addr,
 		Allowlist: NewDefaultAllowlist(),
 	}
+}
+
+// NewProxyServerWithConfig creates a new proxy server with the specified allowlist.
+// If addr is empty, it defaults to ":3128".
+// If allowlist is nil, the default allowlist is used.
+func NewProxyServerWithConfig(addr string, allowlist *Allowlist) *ProxyServer {
+	if addr == "" {
+		addr = fmt.Sprintf(":%d", DefaultProxyPort)
+	}
+	if allowlist == nil {
+		allowlist = NewDefaultAllowlist()
+	}
+	return &ProxyServer{
+		Addr:      addr,
+		Allowlist: allowlist,
+	}
+}
+
+// SetAllowlist replaces the proxy's allowlist.
+func (p *ProxyServer) SetAllowlist(a *Allowlist) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.Allowlist = a
+}
+
+// SetConfigReloader sets a function that will be called on SIGHUP to reload config.
+// The reloader should return a new Allowlist based on the reloaded configuration.
+func (p *ProxyServer) SetConfigReloader(reload ConfigReloader) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.configReloader = reload
 }
 
 // Start begins accepting connections on the proxy server.
@@ -100,7 +148,53 @@ func (p *ProxyServer) Start() error {
 		_ = p.server.Serve(listener)
 	}()
 
+	// Start SIGHUP handler if configReloader is set
+	if p.configReloader != nil {
+		p.startSighupHandler()
+	}
+
 	return nil
+}
+
+// startSighupHandler sets up signal handling for SIGHUP to reload configuration.
+func (p *ProxyServer) startSighupHandler() {
+	p.sighupChan = make(chan os.Signal, 1)
+	p.stopSighup = make(chan struct{})
+	signal.Notify(p.sighupChan, syscall.SIGHUP)
+
+	go func() {
+		for {
+			select {
+			case <-p.sighupChan:
+				p.handleSighup()
+			case <-p.stopSighup:
+				signal.Stop(p.sighupChan)
+				return
+			}
+		}
+	}()
+}
+
+// handleSighup is called when SIGHUP is received to reload configuration.
+func (p *ProxyServer) handleSighup() {
+	p.mu.Lock()
+	reloader := p.configReloader
+	p.mu.Unlock()
+
+	if reloader == nil {
+		return
+	}
+
+	newAllowlist, err := reloader()
+	if err != nil {
+		p.log("SIGHUP config reload failed: %v", err)
+		return
+	}
+
+	p.mu.Lock()
+	p.Allowlist = newAllowlist
+	p.mu.Unlock()
+	p.log("SIGHUP config reloaded successfully")
 }
 
 // Stop gracefully shuts down the proxy server.
@@ -113,6 +207,13 @@ func (p *ProxyServer) Stop(ctx context.Context) error {
 	}
 
 	p.running = false
+
+	// Stop SIGHUP handler if running
+	if p.stopSighup != nil {
+		close(p.stopSighup)
+		p.stopSighup = nil
+	}
+
 	return p.server.Shutdown(ctx)
 }
 
@@ -250,8 +351,11 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// r.Host contains the target host:port for CONNECT requests
 	host := r.Host
 
+	// Get the allowlist to use for this request
+	allowlist := p.getAllowlistForRequest(r)
+
 	// Check allowlist
-	if p.Allowlist == nil || !p.Allowlist.IsAllowed(host) {
+	if allowlist == nil || !allowlist.IsAllowed(host) {
 		http.Error(w, "Forbidden - domain not in allowlist", http.StatusForbidden)
 		return
 	}
@@ -349,4 +453,91 @@ func copyWithIdleTimeout(dst net.Conn, src net.Conn, idleTimeout time.Duration) 
 			return
 		}
 	}
+}
+
+// TokenLookupFunc looks up token info and returns the project name.
+// It returns the project name and true if the token is valid, empty string and false otherwise.
+type TokenLookupFunc func(token string) (projectName string, valid bool)
+
+// AllowlistCache provides per-project allowlist lookups with caching.
+type AllowlistCache struct {
+	mu         sync.RWMutex
+	global     *Allowlist
+	perProject map[string]*Allowlist // project name -> merged allowlist
+}
+
+// NewAllowlistCache creates a new AllowlistCache with the given global allowlist.
+func NewAllowlistCache(global *Allowlist) *AllowlistCache {
+	return &AllowlistCache{
+		global:     global,
+		perProject: make(map[string]*Allowlist),
+	}
+}
+
+// SetGlobal replaces the global allowlist.
+func (c *AllowlistCache) SetGlobal(global *Allowlist) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.global = global
+}
+
+// GetGlobal returns the global allowlist.
+func (c *AllowlistCache) GetGlobal() *Allowlist {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.global
+}
+
+// SetProject sets or replaces the allowlist for a specific project.
+func (c *AllowlistCache) SetProject(projectName string, allowlist *Allowlist) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.perProject[projectName] = allowlist
+}
+
+// GetProject returns the allowlist for a specific project.
+// If the project has no specific allowlist, returns the global allowlist.
+func (c *AllowlistCache) GetProject(projectName string) *Allowlist {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if allowlist, ok := c.perProject[projectName]; ok {
+		return allowlist
+	}
+	return c.global
+}
+
+// Clear removes all project-specific allowlists.
+func (c *AllowlistCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.perProject = make(map[string]*Allowlist)
+}
+
+// getAllowlistForRequest determines the correct allowlist to use for a request.
+// It first tries to use per-project allowlists if configured, falling back to the global allowlist.
+func (p *ProxyServer) getAllowlistForRequest(r *http.Request) *Allowlist {
+	// If no per-project support is configured, use global allowlist
+	if p.AllowlistCache == nil || p.TokenLookup == nil {
+		return p.Allowlist
+	}
+
+	// Extract token from request
+	authHeader := r.Header.Get("Proxy-Authorization")
+	if authHeader == "" {
+		return p.Allowlist
+	}
+
+	token, ok := p.parseBasicAuth(authHeader)
+	if !ok {
+		return p.Allowlist
+	}
+
+	// Look up project for token
+	projectName, valid := p.TokenLookup(token)
+	if !valid || projectName == "" {
+		return p.Allowlist
+	}
+
+	// Get project-specific allowlist
+	return p.AllowlistCache.GetProject(projectName)
 }

@@ -992,3 +992,372 @@ func TestProxyServer_AuthWithTunnelData(t *testing.T) {
 		t.Errorf("expected %q, got %q", testData, string(response))
 	}
 }
+
+func TestNewProxyServerWithConfig(t *testing.T) {
+	t.Run("with custom allowlist", func(t *testing.T) {
+		customAllowlist := NewAllowlist([]string{"custom.example.com"})
+		p := NewProxyServerWithConfig(":0", customAllowlist)
+
+		if p.Addr != ":0" {
+			t.Errorf("expected address :0, got %s", p.Addr)
+		}
+		if p.Allowlist != customAllowlist {
+			t.Error("expected custom allowlist to be set")
+		}
+	})
+
+	t.Run("with nil allowlist uses default", func(t *testing.T) {
+		p := NewProxyServerWithConfig(":0", nil)
+
+		if p.Allowlist == nil {
+			t.Error("expected default allowlist when nil is provided")
+		}
+		// Should have default domains
+		if !p.Allowlist.IsAllowed("api.anthropic.com") {
+			t.Error("default allowlist should allow api.anthropic.com")
+		}
+	})
+
+	t.Run("with empty address uses default port", func(t *testing.T) {
+		p := NewProxyServerWithConfig("", NewAllowlist(nil))
+
+		if p.Addr != ":3128" {
+			t.Errorf("expected default address :3128, got %s", p.Addr)
+		}
+	})
+}
+
+func TestProxyServer_SetAllowlist(t *testing.T) {
+	p := NewProxyServer(":0")
+
+	// Verify initial default allowlist
+	if !p.Allowlist.IsAllowed("api.anthropic.com") {
+		t.Error("initial allowlist should allow api.anthropic.com")
+	}
+
+	// Set new allowlist
+	newAllowlist := NewAllowlist([]string{"new.example.com"})
+	p.SetAllowlist(newAllowlist)
+
+	// Verify new allowlist is in effect
+	if p.Allowlist.IsAllowed("api.anthropic.com") {
+		t.Error("new allowlist should not allow api.anthropic.com")
+	}
+	if !p.Allowlist.IsAllowed("new.example.com") {
+		t.Error("new allowlist should allow new.example.com")
+	}
+}
+
+func TestProxyServer_ConfigDerivedAllowlist(t *testing.T) {
+	// Start a mock upstream
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanupUpstream := startMockUpstream(t, echoHandler)
+	defer cleanupUpstream()
+
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	// Create proxy with config-derived allowlist
+	customAllowlist := NewAllowlist([]string{upstreamHost})
+	p := NewProxyServerWithConfig(":0", customAllowlist)
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	// Test that config-derived allowlist works
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// CONNECT to allowed host
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamAddr, upstreamAddr)
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+
+	if !strings.Contains(statusLine, "200") {
+		t.Errorf("expected 200 OK for allowed host, got: %s", statusLine)
+	}
+}
+
+func TestAllowlistCache(t *testing.T) {
+	t.Run("basic operations", func(t *testing.T) {
+		globalAllowlist := NewAllowlist([]string{"global.example.com"})
+		cache := NewAllowlistCache(globalAllowlist)
+
+		// GetGlobal returns global allowlist
+		if cache.GetGlobal() != globalAllowlist {
+			t.Error("GetGlobal should return the global allowlist")
+		}
+
+		// GetProject for unknown project returns global
+		if cache.GetProject("unknown") != globalAllowlist {
+			t.Error("GetProject for unknown should return global")
+		}
+
+		// Set project-specific allowlist
+		projectAllowlist := NewAllowlist([]string{"project.example.com"})
+		cache.SetProject("my-project", projectAllowlist)
+
+		// GetProject returns project allowlist
+		if cache.GetProject("my-project") != projectAllowlist {
+			t.Error("GetProject should return project allowlist")
+		}
+
+		// Other projects still get global
+		if cache.GetProject("other-project") != globalAllowlist {
+			t.Error("GetProject for other project should return global")
+		}
+	})
+
+	t.Run("SetGlobal", func(t *testing.T) {
+		oldGlobal := NewAllowlist([]string{"old.example.com"})
+		cache := NewAllowlistCache(oldGlobal)
+
+		newGlobal := NewAllowlist([]string{"new.example.com"})
+		cache.SetGlobal(newGlobal)
+
+		if cache.GetGlobal() != newGlobal {
+			t.Error("SetGlobal should update the global allowlist")
+		}
+	})
+
+	t.Run("Clear", func(t *testing.T) {
+		globalAllowlist := NewAllowlist([]string{"global.example.com"})
+		cache := NewAllowlistCache(globalAllowlist)
+
+		// Add some project allowlists
+		cache.SetProject("project1", NewAllowlist([]string{"p1.example.com"}))
+		cache.SetProject("project2", NewAllowlist([]string{"p2.example.com"}))
+
+		// Clear should remove all project allowlists
+		cache.Clear()
+
+		// Projects should now return global
+		if cache.GetProject("project1") != globalAllowlist {
+			t.Error("after Clear, projects should return global")
+		}
+		if cache.GetProject("project2") != globalAllowlist {
+			t.Error("after Clear, projects should return global")
+		}
+	})
+}
+
+func TestProxyServer_ConfigReloader(t *testing.T) {
+	// Test that SetConfigReloader and handleSighup work correctly
+
+	t.Run("handleSighup updates allowlist", func(t *testing.T) {
+		p := NewProxyServer(":0")
+
+		// Initial allowlist
+		p.Allowlist = NewAllowlist([]string{"initial.example.com"})
+
+		reloadCount := 0
+		newDomains := []string{"reloaded.example.com", "another.example.com"}
+
+		// Set config reloader
+		p.SetConfigReloader(func() (*Allowlist, error) {
+			reloadCount++
+			return NewAllowlist(newDomains), nil
+		})
+
+		// Manually call handleSighup (simulating signal)
+		p.handleSighup()
+
+		// Verify allowlist was updated
+		if p.Allowlist.IsAllowed("initial.example.com") {
+			t.Error("initial domain should no longer be allowed after reload")
+		}
+		if !p.Allowlist.IsAllowed("reloaded.example.com") {
+			t.Error("reloaded domain should be allowed after reload")
+		}
+		if reloadCount != 1 {
+			t.Errorf("reload function called %d times, expected 1", reloadCount)
+		}
+	})
+
+	t.Run("handleSighup ignores error", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		p := NewProxyServer(":0")
+		p.Logger = log.New(&logBuf, "", 0)
+
+		p.Allowlist = NewAllowlist([]string{"original.example.com"})
+
+		// Set reloader that returns error
+		p.SetConfigReloader(func() (*Allowlist, error) {
+			return nil, fmt.Errorf("config load failed")
+		})
+
+		// Manually call handleSighup
+		p.handleSighup()
+
+		// Allowlist should remain unchanged
+		if !p.Allowlist.IsAllowed("original.example.com") {
+			t.Error("original domain should still be allowed after failed reload")
+		}
+
+		// Error should be logged
+		if !strings.Contains(logBuf.String(), "config reload failed") {
+			t.Errorf("expected error to be logged, got: %s", logBuf.String())
+		}
+	})
+
+	t.Run("handleSighup with nil reloader does nothing", func(t *testing.T) {
+		p := NewProxyServer(":0")
+		p.Allowlist = NewAllowlist([]string{"example.com"})
+
+		// No config reloader set
+		p.handleSighup()
+
+		// Should still be valid
+		if !p.Allowlist.IsAllowed("example.com") {
+			t.Error("allowlist should be unchanged when no reloader is set")
+		}
+	})
+}
+
+func TestProxyServer_PerProjectAllowlist(t *testing.T) {
+	// Start a mock upstream for testing allowed connections
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+
+	upstreamAddr, cleanup := startMockUpstream(t, echoHandler)
+	defer cleanup()
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	// Create allowlist cache with project-specific allowlists
+	// Use different domain names to test the logic (even though only one upstream exists)
+	globalAllowlist := NewAllowlist([]string{"global.example.com"})
+	cache := NewAllowlistCache(globalAllowlist)
+
+	// Project A can access the upstream host AND project-a-domain.com
+	cache.SetProject("project-a", NewAllowlist([]string{upstreamHost, "project-a-domain.com"}))
+	// Project B can only access project-b-domain.com (NOT the upstream host)
+	cache.SetProject("project-b", NewAllowlist([]string{"project-b-domain.com"}))
+
+	// Token lookup function
+	tokenLookup := func(token string) (string, bool) {
+		switch token {
+		case "token-a":
+			return "project-a", true
+		case "token-b":
+			return "project-b", true
+		default:
+			return "", false
+		}
+	}
+
+	// Create proxy with per-project support
+	p := NewProxyServer(":0")
+	p.Allowlist = globalAllowlist
+	p.AllowlistCache = cache
+	p.TokenLookup = tokenLookup
+	p.TokenValidator = newMockTokenValidator("token-a", "token-b")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	// Helper to make proxy request
+	makeRequest := func(token, targetAddr string) (int, error) {
+		conn, err := net.Dial("tcp", proxyAddr)
+		if err != nil {
+			return 0, err
+		}
+		defer conn.Close()
+
+		authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:"+token))
+		connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: %s\r\n\r\n",
+			targetAddr, targetAddr, authHeader)
+		_, err = conn.Write([]byte(connectReq))
+		if err != nil {
+			return 0, err
+		}
+
+		reader := bufio.NewReader(conn)
+		statusLine, err := reader.ReadString('\n')
+		if err != nil {
+			return 0, err
+		}
+
+		var statusCode int
+		_, err = fmt.Sscanf(statusLine, "HTTP/1.1 %d", &statusCode)
+		return statusCode, err
+	}
+
+	// Test: Project A can access the upstream (200 = tunnel established)
+	status, err := makeRequest("token-a", upstreamAddr)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if status != 200 {
+		t.Errorf("project-a to upstream: expected 200, got %d", status)
+	}
+
+	// Test: Project B cannot access the upstream (403 = forbidden)
+	status, err = makeRequest("token-b", upstreamAddr)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if status != 403 {
+		t.Errorf("project-b to upstream: expected 403, got %d", status)
+	}
+
+	// Test: Project A cannot access a domain not in its allowlist
+	status, err = makeRequest("token-a", "blocked-domain.com:443")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if status != 403 {
+		t.Errorf("project-a to blocked domain: expected 403, got %d", status)
+	}
+
+	// Test: Both projects cannot access the global-only domain (because they have project-specific allowlists)
+	status, err = makeRequest("token-a", "global.example.com:443")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if status != 403 {
+		t.Errorf("project-a to global domain: expected 403, got %d", status)
+	}
+}

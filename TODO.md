@@ -226,23 +226,23 @@ Merge global and project configs into effective configuration.
 Wire configuration into the guardian proxy.
 
 ### 2.6.1 Allowlist from config
-- [ ] Modify `NewAllowlist` to accept config-derived domain list
-- [ ] Update `guardian.Server` to receive allowlist from config
-- [ ] Remove hardcoded `DefaultAllowedDomains` (or keep as fallback)
-- [ ] **Test**: Proxy uses config-derived allowlist
+- [x] Modify `NewAllowlist` to accept config-derived domain list
+- [x] Update `guardian.Server` to receive allowlist from config
+- [x] Remove hardcoded `DefaultAllowedDomains` (or keep as fallback)
+- [x] **Test**: Proxy uses config-derived allowlist
 
 ### 2.6.2 Dynamic allowlist updates
-- [ ] Implement mechanism for guardian to receive updated allowlist
-- [ ] Option A: Guardian reloads config on SIGHUP
-- [ ] Option B: Guardian exposes endpoint to update allowlist
-- [ ] For Phase 2, prefer Option A (simpler, no API versioning concerns)
-- [ ] **Test**: Config change + SIGHUP → allowlist updated
+- [x] Implement mechanism for guardian to receive updated allowlist
+- [x] Option A: Guardian reloads config on SIGHUP
+- [x] Option B: Guardian exposes endpoint to update allowlist
+- [x] For Phase 2, prefer Option A (simpler, no API versioning concerns)
+- [x] **Test**: Config change + SIGHUP → allowlist updated
 
 ### 2.6.3 Per-cloister allowlist
-- [ ] Guardian stores per-cloister allowlist (project-specific additions)
-- [ ] Token registration includes project name
-- [ ] Proxy looks up cloister's project, uses merged allowlist
-- [ ] **Test**: Two cloisters, different projects, different allowlists
+- [x] Guardian stores per-cloister allowlist (project-specific additions)
+- [x] Token registration includes project name
+- [x] Proxy looks up cloister's project, uses merged allowlist
+- [x] **Test**: Two cloisters, different projects, different allowlists
 
 ---
 

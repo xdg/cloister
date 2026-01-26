@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"testing"
 	"time"
+
+	"github.com/xdg/cloister/internal/config"
 )
 
 func TestAllowlist_IsAllowed(t *testing.T) {
@@ -291,5 +294,134 @@ func TestProxyServer_NilAllowlist(t *testing.T) {
 
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("expected status 403 with nil allowlist, got %d", resp.StatusCode)
+	}
+}
+
+func TestNewAllowlistFromConfig(t *testing.T) {
+	entries := []config.AllowEntry{
+		{Domain: "api.anthropic.com"},
+		{Domain: "api.openai.com"},
+		{Domain: "example.com"},
+	}
+
+	al := NewAllowlistFromConfig(entries)
+
+	// All domains from config should be allowed
+	for _, entry := range entries {
+		if !al.IsAllowed(entry.Domain) {
+			t.Errorf("domain %q should be allowed", entry.Domain)
+		}
+	}
+
+	// Domains not in config should be blocked
+	if al.IsAllowed("github.com") {
+		t.Error("github.com should not be allowed")
+	}
+}
+
+func TestNewAllowlistFromConfig_Empty(t *testing.T) {
+	al := NewAllowlistFromConfig(nil)
+
+	if al.IsAllowed("api.anthropic.com") {
+		t.Error("empty config should not allow any domains")
+	}
+}
+
+func TestAllowlist_Add(t *testing.T) {
+	al := NewAllowlist([]string{"example.com"})
+
+	// Verify initial state
+	if !al.IsAllowed("example.com") {
+		t.Error("example.com should be allowed initially")
+	}
+	if al.IsAllowed("api.anthropic.com") {
+		t.Error("api.anthropic.com should not be allowed initially")
+	}
+
+	// Add new domains
+	al.Add([]string{"api.anthropic.com", "api.openai.com"})
+
+	// Verify all domains are now allowed
+	if !al.IsAllowed("example.com") {
+		t.Error("example.com should still be allowed")
+	}
+	if !al.IsAllowed("api.anthropic.com") {
+		t.Error("api.anthropic.com should now be allowed")
+	}
+	if !al.IsAllowed("api.openai.com") {
+		t.Error("api.openai.com should now be allowed")
+	}
+}
+
+func TestAllowlist_Add_Empty(t *testing.T) {
+	al := NewAllowlist([]string{"example.com"})
+	al.Add(nil)
+
+	// Should still work after adding empty slice
+	if !al.IsAllowed("example.com") {
+		t.Error("example.com should still be allowed")
+	}
+}
+
+func TestAllowlist_Replace(t *testing.T) {
+	al := NewAllowlist([]string{"example.com", "old.com"})
+
+	// Verify initial state
+	if !al.IsAllowed("example.com") {
+		t.Error("example.com should be allowed initially")
+	}
+	if !al.IsAllowed("old.com") {
+		t.Error("old.com should be allowed initially")
+	}
+
+	// Replace with new domains
+	al.Replace([]string{"new.com", "api.anthropic.com"})
+
+	// Old domains should no longer be allowed
+	if al.IsAllowed("example.com") {
+		t.Error("example.com should no longer be allowed after replace")
+	}
+	if al.IsAllowed("old.com") {
+		t.Error("old.com should no longer be allowed after replace")
+	}
+
+	// New domains should be allowed
+	if !al.IsAllowed("new.com") {
+		t.Error("new.com should be allowed after replace")
+	}
+	if !al.IsAllowed("api.anthropic.com") {
+		t.Error("api.anthropic.com should be allowed after replace")
+	}
+}
+
+func TestAllowlist_Replace_Empty(t *testing.T) {
+	al := NewAllowlist([]string{"example.com"})
+	al.Replace(nil)
+
+	// All domains should be blocked after replacing with empty
+	if al.IsAllowed("example.com") {
+		t.Error("example.com should not be allowed after replace with empty")
+	}
+}
+
+func TestAllowlist_Domains(t *testing.T) {
+	original := []string{"example.com", "api.anthropic.com", "api.openai.com"}
+	al := NewAllowlist(original)
+
+	domains := al.Domains()
+
+	// Should have same number of domains
+	if len(domains) != len(original) {
+		t.Errorf("expected %d domains, got %d", len(original), len(domains))
+	}
+
+	// Sort both for comparison
+	sort.Strings(original)
+	sort.Strings(domains)
+
+	for i, d := range original {
+		if domains[i] != d {
+			t.Errorf("domain mismatch at %d: expected %q, got %q", i, d, domains[i])
+		}
 	}
 }

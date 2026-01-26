@@ -2,10 +2,13 @@ package guardian
 
 import (
 	"net"
+	"sync"
+
+	"github.com/xdg/cloister/internal/config"
 )
 
 // DefaultAllowedDomains contains the initial hardcoded allowlist for Phase 1.
-// This will be replaced by configurable allowlists in Phase 2.
+// This is used as a fallback when no configuration is provided.
 var DefaultAllowedDomains = []string{
 	"api.anthropic.com",
 	"api.openai.com",
@@ -14,7 +17,9 @@ var DefaultAllowedDomains = []string{
 
 // Allowlist enforces domain-based access control for the proxy.
 // It performs exact domain matching (no wildcards).
+// All methods are thread-safe.
 type Allowlist struct {
+	mu      sync.RWMutex
 	domains map[string]struct{}
 }
 
@@ -29,6 +34,15 @@ func NewAllowlist(domains []string) *Allowlist {
 	return a
 }
 
+// NewAllowlistFromConfig creates an Allowlist from config AllowEntry slice.
+func NewAllowlistFromConfig(entries []config.AllowEntry) *Allowlist {
+	domains := make([]string, len(entries))
+	for i, e := range entries {
+		domains[i] = e.Domain
+	}
+	return NewAllowlist(domains)
+}
+
 // NewDefaultAllowlist creates an Allowlist with the default allowed domains.
 func NewDefaultAllowlist() *Allowlist {
 	return NewAllowlist(DefaultAllowedDomains)
@@ -40,8 +54,41 @@ func NewDefaultAllowlist() *Allowlist {
 func (a *Allowlist) IsAllowed(host string) bool {
 	// Strip port if present
 	hostname := stripPort(host)
+	a.mu.RLock()
+	defer a.mu.RUnlock()
 	_, ok := a.domains[hostname]
 	return ok
+}
+
+// Add adds additional domains to the allowlist.
+func (a *Allowlist) Add(domains []string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, d := range domains {
+		a.domains[d] = struct{}{}
+	}
+}
+
+// Replace atomically replaces the allowlist domains.
+func (a *Allowlist) Replace(domains []string) {
+	newDomains := make(map[string]struct{}, len(domains))
+	for _, d := range domains {
+		newDomains[d] = struct{}{}
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.domains = newDomains
+}
+
+// Domains returns a copy of the current allowed domains.
+func (a *Allowlist) Domains() []string {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	result := make([]string, 0, len(a.domains))
+	for d := range a.domains {
+		result = append(result, d)
+	}
+	return result
 }
 
 // stripPort removes the port from a host:port string.
