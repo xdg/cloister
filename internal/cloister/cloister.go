@@ -51,7 +51,7 @@ func Start(opts StartOptions) (containerID string, tok string, err error) {
 	tok = token.Generate()
 
 	// Step 3: Build container name for registration
-	containerName := container.GenerateContainerName(opts.ProjectName, opts.BranchName)
+	containerName := container.GenerateContainerName(opts.ProjectName)
 
 	// Step 4: Persist token to disk (for recovery after guardian restart)
 	tokenDir, err := token.DefaultTokenDir()

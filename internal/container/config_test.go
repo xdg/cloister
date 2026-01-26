@@ -199,50 +199,27 @@ func TestConfig_ContainerName(t *testing.T) {
 	tests := []struct {
 		name     string
 		project  string
-		branch   string
 		expected string
 	}{
 		{
-			name:     "simple names",
+			name:     "simple name",
 			project:  "myproject",
-			branch:   "main",
-			expected: "cloister-myproject-main",
-		},
-		{
-			name:     "feature branch",
-			project:  "myproject",
-			branch:   "feature/new-feature",
-			expected: "cloister-myproject-feature-new-feature",
+			expected: "cloister-myproject",
 		},
 		{
 			name:     "uppercase project",
 			project:  "MyProject",
-			branch:   "Main",
-			expected: "cloister-myproject-main",
+			expected: "cloister-myproject",
 		},
 		{
-			name:     "special chars in both",
+			name:     "special chars",
 			project:  "my_project.v2",
-			branch:   "user@org/feature",
-			expected: "cloister-my-project-v2-user-org-feature",
+			expected: "cloister-my-project-v2",
 		},
 		{
 			name:     "empty project",
 			project:  "",
-			branch:   "main",
-			expected: "cloister-default-main",
-		},
-		{
-			name:     "empty branch",
-			project:  "myproject",
-			branch:   "",
-			expected: "cloister-myproject-default",
-		},
-		{
-			name:     "both empty",
-			project:  "",
-			branch:   "",
-			expected: "cloister-default-default",
+			expected: "cloister-default",
 		},
 	}
 
@@ -250,7 +227,6 @@ func TestConfig_ContainerName(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := &Config{
 				Project: tc.project,
-				Branch:  tc.branch,
 			}
 			result := cfg.ContainerName()
 			if result != tc.expected {
@@ -262,8 +238,8 @@ func TestConfig_ContainerName(t *testing.T) {
 
 func TestGenerateContainerName(t *testing.T) {
 	// Should match Config.ContainerName behavior
-	result := GenerateContainerName("myproject", "main")
-	expected := "cloister-myproject-main"
+	result := GenerateContainerName("myproject")
+	expected := "cloister-myproject"
 	if result != expected {
 		t.Errorf("GenerateContainerName() = %q, want %q", result, expected)
 	}
@@ -339,7 +315,7 @@ func TestConfig_BuildRunArgs(t *testing.T) {
 
 	// Check expected arguments are present
 	expectedPairs := map[string]string{
-		"--name":    "cloister-myproject-main",
+		"--name":    "cloister-myproject",
 		"-v":        "/home/user/projects/myproject:/work",
 		"-w":        "/work",
 		"--network": "cloister-net",
@@ -519,6 +495,39 @@ func TestGenerateCloisterName(t *testing.T) {
 	tests := []struct {
 		name     string
 		project  string
+		expected string
+	}{
+		{
+			name:     "simple name",
+			project:  "myproject",
+			expected: "myproject",
+		},
+		{
+			name:     "uppercase project",
+			project:  "MyProject",
+			expected: "myproject",
+		},
+		{
+			name:     "special chars",
+			project:  "my_project.v2",
+			expected: "my-project-v2",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := GenerateCloisterName(tc.project)
+			if result != tc.expected {
+				t.Errorf("GenerateCloisterName() = %q, want %q", result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestGenerateWorktreeCloisterName(t *testing.T) {
+	tests := []struct {
+		name     string
+		project  string
 		branch   string
 		expected string
 	}{
@@ -544,9 +553,9 @@ func TestGenerateCloisterName(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := GenerateCloisterName(tc.project, tc.branch)
+			result := GenerateWorktreeCloisterName(tc.project, tc.branch)
 			if result != tc.expected {
-				t.Errorf("GenerateCloisterName() = %q, want %q", result, tc.expected)
+				t.Errorf("GenerateWorktreeCloisterName() = %q, want %q", result, tc.expected)
 			}
 		})
 	}
@@ -557,8 +566,8 @@ func TestCloisterNameToContainerName(t *testing.T) {
 		cloisterName  string
 		containerName string
 	}{
-		{"myproject-main", "cloister-myproject-main"},
-		{"cloister-main", "cloister-cloister-main"},
+		{"myproject", "cloister-myproject"},
+		{"cloister", "cloister-cloister"},
 		{"", "cloister-"},
 	}
 
@@ -577,8 +586,8 @@ func TestContainerNameToCloisterName(t *testing.T) {
 		containerName string
 		cloisterName  string
 	}{
-		{"cloister-myproject-main", "myproject-main"},
-		{"cloister-cloister-main", "cloister-main"},
+		{"cloister-myproject", "myproject"},
+		{"cloister-cloister", "cloister"},
 		{"other-container", "other-container"}, // no prefix, returns unchanged
 		{"cloister-", ""},                      // prefix only
 	}
@@ -596,9 +605,9 @@ func TestContainerNameToCloisterName(t *testing.T) {
 func TestCloisterContainerNameRoundTrip(t *testing.T) {
 	// Test that converting cloister name to container name and back gives the original
 	cloisterNames := []string{
-		"myproject-main",
-		"cloister-main",
-		"test-feature-branch",
+		"myproject",
+		"cloister",
+		"test-project",
 	}
 
 	for _, original := range cloisterNames {

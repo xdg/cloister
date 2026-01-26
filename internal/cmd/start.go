@@ -58,7 +58,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Compute cloister name (user-facing) and container name (Docker internal)
-	cloisterName := container.GenerateCloisterName(projectName, branch)
+	cloisterName := container.GenerateCloisterName(projectName)
 	containerName := container.CloisterNameToContainerName(cloisterName)
 
 	// Step 4: Start the cloister container

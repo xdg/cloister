@@ -83,19 +83,13 @@ func detectCloisterName() (string, error) {
 		return "", fmt.Errorf("failed to detect git repository: %w", err)
 	}
 
-	// Detect branch
-	branch, err := project.DetectBranch(gitRoot)
-	if err != nil {
-		return "", fmt.Errorf("failed to detect git branch: %w", err)
-	}
-
 	// Get project name
 	projectName, err := project.ProjectName(gitRoot)
 	if err != nil {
 		return "", fmt.Errorf("failed to determine project name: %w", err)
 	}
 
-	return container.GenerateCloisterName(projectName, branch), nil
+	return container.GenerateCloisterName(projectName), nil
 }
 
 // findTokenForCloister looks up the token associated with a cloister (by container name).

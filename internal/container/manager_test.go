@@ -34,8 +34,7 @@ func TestManager_Start_Stop(t *testing.T) {
 	requireDocker(t)
 
 	projectName := testProjectName()
-	branchName := "main"
-	containerName := GenerateContainerName(projectName, branchName)
+	containerName := GenerateContainerName(projectName)
 
 	// Ensure cleanup after test
 	defer cleanupTestContainer(containerName)
@@ -50,7 +49,7 @@ func TestManager_Start_Stop(t *testing.T) {
 	// Configure the container
 	cfg := &Config{
 		Project:     projectName,
-		Branch:      branchName,
+		Branch:      "main",
 		ProjectPath: tmpDir,
 		Image:       "alpine:latest", // Use a small, common image for testing
 	}
@@ -109,8 +108,7 @@ func TestManager_Start_AlreadyExists(t *testing.T) {
 	requireDocker(t)
 
 	projectName := testProjectName()
-	branchName := "exists-test"
-	containerName := GenerateContainerName(projectName, branchName)
+	containerName := GenerateContainerName(projectName)
 
 	// Ensure cleanup after test
 	defer cleanupTestContainer(containerName)
@@ -124,7 +122,7 @@ func TestManager_Start_AlreadyExists(t *testing.T) {
 
 	cfg := &Config{
 		Project:     projectName,
-		Branch:      branchName,
+		Branch:      "main",
 		ProjectPath: tmpDir,
 		Image:       "alpine:latest",
 	}
@@ -179,8 +177,7 @@ func TestManager_Start_VerifySecuritySettings(t *testing.T) {
 	requireDocker(t)
 
 	projectName := testProjectName()
-	branchName := "security-test"
-	containerName := GenerateContainerName(projectName, branchName)
+	containerName := GenerateContainerName(projectName)
 
 	// Ensure cleanup after test
 	defer cleanupTestContainer(containerName)
@@ -194,7 +191,7 @@ func TestManager_Start_VerifySecuritySettings(t *testing.T) {
 
 	cfg := &Config{
 		Project:     projectName,
-		Branch:      branchName,
+		Branch:      "main",
 		ProjectPath: tmpDir,
 		Image:       "alpine:latest",
 		Network:     "", // No network for this test

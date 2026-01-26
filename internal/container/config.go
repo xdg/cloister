@@ -42,13 +42,13 @@ type Config struct {
 }
 
 // ContainerName returns the Docker container name in the format:
-// cloister-<project>-<branch>
+// cloister-<project>
 //
-// Both project and branch are sanitized for Docker compatibility.
+// The project name is sanitized for Docker compatibility.
+// Note: In Phase 1 (no worktree support), we only use the project name.
+// Worktree support will be added in a future phase.
 func (c *Config) ContainerName() string {
-	project := SanitizeName(c.Project)
-	branch := SanitizeName(c.Branch)
-	return "cloister-" + project + "-" + branch
+	return "cloister-" + SanitizeName(c.Project)
 }
 
 // ImageName returns the Docker image to use, defaulting to DefaultImage.
@@ -173,13 +173,17 @@ func SanitizeName(name string) string {
 	return result
 }
 
-// GenerateCloisterName creates the user-facing cloister name from project and branch.
-// The cloister name is <project>-<branch> (e.g., "myproject-main").
+// GenerateCloisterName creates the cloister name for a main checkout.
+// Returns just the sanitized project name (e.g., "foo").
 // This is the identifier shown in CLI output like `cloister list`.
-func GenerateCloisterName(project, branch string) string {
-	p := SanitizeName(project)
-	b := SanitizeName(branch)
-	return p + "-" + b
+func GenerateCloisterName(project string) string {
+	return SanitizeName(project)
+}
+
+// GenerateWorktreeCloisterName creates the cloister name for a worktree.
+// Returns <project>-<branch> (e.g., "foo-new-feature").
+func GenerateWorktreeCloisterName(project, branch string) string {
+	return SanitizeName(project) + "-" + SanitizeName(branch)
 }
 
 // CloisterNameToContainerName converts a user-facing cloister name to the internal
@@ -196,8 +200,9 @@ func ContainerNameToCloisterName(containerName string) string {
 }
 
 // GenerateContainerName is a convenience function that creates a container
-// name from project and branch strings without needing a full Config.
-func GenerateContainerName(project, branch string) string {
-	cfg := &Config{Project: project, Branch: branch}
+// name from a project string without needing a full Config.
+// Note: In Phase 1 (no worktree support), we only use the project name.
+func GenerateContainerName(project string) string {
+	cfg := &Config{Project: project}
 	return cfg.ContainerName()
 }

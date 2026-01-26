@@ -69,7 +69,7 @@ func TestStart_Stop_Integration(t *testing.T) {
 
 	projectName := testProjectName()
 	branchName := "main"
-	containerName := container.GenerateContainerName(projectName, branchName)
+	containerName := container.GenerateContainerName(projectName)
 
 	// Ensure cleanup after test
 	defer cleanupTestContainer(containerName)
@@ -148,7 +148,7 @@ func TestStart_InjectsEnvVars(t *testing.T) {
 
 	projectName := testProjectName()
 	branchName := "env-test"
-	containerName := container.GenerateContainerName(projectName, branchName)
+	containerName := container.GenerateContainerName(projectName)
 
 	// Ensure cleanup after test
 	defer cleanupTestContainer(containerName)
@@ -244,7 +244,7 @@ func TestStart_ConnectsToCloisterNet(t *testing.T) {
 
 	projectName := testProjectName()
 	branchName := "network-test"
-	containerName := container.GenerateContainerName(projectName, branchName)
+	containerName := container.GenerateContainerName(projectName)
 
 	// Ensure cleanup after test
 	defer cleanupTestContainer(containerName)
@@ -304,7 +304,7 @@ func TestStop_WithEmptyToken(t *testing.T) {
 
 	projectName := testProjectName()
 	branchName := "empty-token"
-	containerName := container.GenerateContainerName(projectName, branchName)
+	containerName := container.GenerateContainerName(projectName)
 
 	// Ensure cleanup after test
 	defer cleanupTestContainer(containerName)
