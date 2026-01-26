@@ -2,15 +2,10 @@ package token
 
 import (
 	"sync"
-
-	"github.com/xdg/cloister/internal/guardian"
 )
 
-// Compile-time check that Registry implements guardian.TokenValidator.
-var _ guardian.TokenValidator = (*Registry)(nil)
-
 // Registry is a thread-safe in-memory store mapping tokens to cloister names.
-// It implements the guardian.TokenValidator interface.
+// It implements the guardian.TokenValidator interface (Validate(string) bool).
 type Registry struct {
 	mu     sync.RWMutex
 	tokens map[string]string // token -> cloisterName

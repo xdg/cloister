@@ -330,7 +330,7 @@ func TestConfig_BuildRunArgs(t *testing.T) {
 		Project:     "myproject",
 		Branch:      "main",
 		ProjectPath: "/home/user/projects/myproject",
-		Image:       "cloister-default:latest",
+		Image:       "cloister:latest",
 		EnvVars:     []string{"FOO=bar", "BAZ=qux"},
 		Network:     "cloister-net",
 	}
@@ -393,7 +393,7 @@ func TestConfig_BuildRunArgs(t *testing.T) {
 	}
 
 	// Check image is last
-	if args[len(args)-1] != "cloister-default:latest" {
+	if args[len(args)-1] != "cloister:latest" {
 		t.Errorf("expected image as last arg, got %s", args[len(args)-1])
 	}
 }
@@ -504,8 +504,8 @@ func TestConfig_BuildRunArgs_CustomUID(t *testing.T) {
 }
 
 func TestConstants(t *testing.T) {
-	if DefaultImage != "cloister-default:latest" {
-		t.Errorf("DefaultImage = %q, want cloister-default:latest", DefaultImage)
+	if DefaultImage != "cloister:latest" {
+		t.Errorf("DefaultImage = %q, want cloister:latest", DefaultImage)
 	}
 	if DefaultWorkDir != "/work" {
 		t.Errorf("DefaultWorkDir = %q, want /work", DefaultWorkDir)

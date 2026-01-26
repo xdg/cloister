@@ -17,13 +17,13 @@ Before marking Phase 1 complete:
 1. `go test ./...` passes
 2. `go build ./cmd/cloister` produces working binary
 3. Manual verification of all "Verification" items from spec:
-   - [ ] `cloister start` → guardian starts if needed → container starts → shell at `/work`
-   - [ ] `curl -x $HTTP_PROXY https://api.anthropic.com` succeeds
-   - [ ] `curl -x $HTTP_PROXY https://github.com` fails (not in allowlist)
-   - [ ] Start 2 cloisters; each authenticated with own token
-   - [ ] `cloister stop` cleans up container
-   - [ ] `guardian stop` warns about running cloisters
-   - [ ] With `CLAUDE_CODE_OAUTH_TOKEN` set: `claude` command works inside container
+   - [x] `cloister start` → guardian starts if needed → container starts → shell at `/work`
+   - [x] `curl -x $HTTP_PROXY https://api.anthropic.com` succeeds
+   - [x] `curl -x $HTTP_PROXY https://github.com` fails (not in allowlist)
+   - [x] Start 2 cloisters; each authenticated with own token
+   - [x] `cloister stop` cleans up container
+   - [x] `guardian stop` warns about running cloisters
+   - [x] With `CLAUDE_CODE_OAUTH_TOKEN` set: `claude` command works inside container
 4. No race conditions (`go test -race ./...`)
 
 ## Dependencies Between Phases
@@ -162,7 +162,7 @@ Launch cloister containers with proper security settings.
 ### 1.5.1 Container configuration
 - [x] Create `internal/container/config.go`
 - [x] Define container create options struct
-- [x] Set container name format: `cloister-<project>-<branch>`
+- [x] Derive container name from cloister name: `cloister-${cloister_name}` (cloister name = `<project>` for main, `<project>-<branch>` for worktrees in Phase 5)
 - [x] Mount project directory at `/work` (read-write)
 - [x] Set working directory to `/work`
 
@@ -262,11 +262,19 @@ End-to-end testing and cleanup.
 - [x] Guardian container name: `cloister-guardian`
 
 ### 1.8.2 End-to-end integration
-- [ ] **Test**: Full `cloister start` → shell → `curl` test → `exit` → `cloister stop`
-- [ ] **Test**: Two concurrent cloisters with different tokens
-- [ ] **Test**: Guardian restart while cloister running (should work or fail gracefully)
+- [x] **Test**: Full `cloister start` → shell → `curl` test → `exit` → `cloister stop`
+- [x] **Test**: Two concurrent cloisters with different tokens
+- [x] **Test**: Guardian restart while cloister running (tokens recovered from disk)
+- [x] Token persistence: `~/.config/cloister/tokens/<container-name>` (one file per cloister)
+- [x] Guardian mounts token dir read-only, recovers tokens on startup
 
-### 1.8.3 Error handling polish
+### 1.8.3 Behavior fixes and polish
+- [ ] `cloister start` should attach to existing cloister, not error (per cli-workflows.md)
+- [ ] Clarify cloister name vs container name distinction throughout codebase:
+  - Cloister name: `<project>` (main) or `<project>-<branch>` (worktree) — user-facing identifier
+  - Container name: `cloister-${cloister_name}` — internal Docker detail, derived from cloister name
+  - `cloister list` and all CLI output should show cloister names, not container names
+- [ ] Fix `.claude.json`: add `"bypassPermissionsModeAccepted": true` to skip permission prompt
 - [ ] Clear error when Docker not running
 - [ ] Clear error when not in git repository
 - [ ] Clear error when guardian fails to start
@@ -275,7 +283,8 @@ End-to-end testing and cleanup.
 ### 1.8.4 Documentation
 - [ ] Update README with Phase 1 quick-start
 - [ ] Document env var requirements (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`)
-- [ ] Document known limitations (hardcoded allowlist, no persistence)
+- [ ] Document known limitations (hardcoded allowlist)
+- [ ] Document naming in specs: cloister name (`<project>`) vs container name (`cloister-<project>`)
 
 ---
 
@@ -285,7 +294,7 @@ End-to-end testing and cleanup.
 - Config file loading and merging
 - Project registry and auto-detection
 - Configurable allowlists
-- Token persistence across guardian restarts
+- ~~Token persistence across guardian restarts~~ (moved to Phase 1.8.2)
 
 ### Phase 3: Claude Code Integration
 - `cloister setup claude` wizard

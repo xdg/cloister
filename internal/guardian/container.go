@@ -5,6 +5,8 @@ package guardian
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/xdg/cloister/internal/docker"
@@ -20,10 +22,23 @@ const (
 
 	// BridgeNetwork is the default Docker bridge network for external access.
 	BridgeNetwork = "bridge"
+
+	// ContainerTokenDir is the path inside the guardian container where tokens are mounted.
+	ContainerTokenDir = "/var/lib/cloister/tokens"
 )
 
 // ErrGuardianNotRunning indicates the guardian container is not running.
 var ErrGuardianNotRunning = errors.New("guardian container is not running")
+
+// HostTokenDir returns the token directory path on the host.
+// This is ~/.config/cloister/tokens.
+func HostTokenDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".config", "cloister", "tokens"), nil
+}
 
 // ErrGuardianAlreadyRunning indicates the guardian container is already running.
 var ErrGuardianAlreadyRunning = errors.New("guardian container is already running")
@@ -77,14 +92,27 @@ func Start() error {
 		return err
 	}
 
+	// Get the host token directory for mounting
+	hostTokenDir, err := HostTokenDir()
+	if err != nil {
+		return fmt.Errorf("failed to get token directory: %w", err)
+	}
+
+	// Ensure token directory exists (creates with 0700 permissions)
+	if err := os.MkdirAll(hostTokenDir, 0700); err != nil {
+		return fmt.Errorf("failed to create token directory: %w", err)
+	}
+
 	// Build docker run arguments
 	// Port 9997 is exposed to the host for the token management API
 	// (used by CLI to register/revoke tokens)
+	// Token directory is mounted read-only for recovery on restart
 	args := []string{
 		"run", "-d",
 		"--name", ContainerName,
 		"--network", docker.CloisterNetworkName,
 		"-p", "127.0.0.1:9997:9997",
+		"-v", hostTokenDir + ":" + ContainerTokenDir + ":ro",
 		DefaultImage,
 		"cloister", "guardian", "run",
 	}

@@ -196,9 +196,25 @@ func init() {
 // runGuardianProxy starts the proxy and API servers and blocks until interrupted.
 func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	// Create an in-memory token registry
-	// Note: This means tokens are lost on container restart - persistence
-	// will be added in a later phase.
 	registry := token.NewRegistry()
+
+	// Load persisted tokens from disk (mounted from host)
+	store, err := token.NewStore(guardian.ContainerTokenDir)
+	if err != nil {
+		log.Printf("Warning: failed to open token store: %v", err)
+	} else {
+		tokens, err := store.Load()
+		if err != nil {
+			log.Printf("Warning: failed to load tokens: %v", err)
+		} else {
+			for tok, name := range tokens {
+				registry.Register(tok, name)
+			}
+			if len(tokens) > 0 {
+				log.Printf("Recovered %d tokens from disk", len(tokens))
+			}
+		}
+	}
 
 	// Create the proxy server
 	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)

@@ -52,8 +52,23 @@ func Start(opts StartOptions) (containerID string, tok string, err error) {
 	// Step 3: Build container name for registration
 	containerName := container.GenerateContainerName(opts.ProjectName, opts.BranchName)
 
-	// Step 4: Register the token with guardian
+	// Step 4: Persist token to disk (for recovery after guardian restart)
+	tokenDir, err := token.DefaultTokenDir()
+	if err != nil {
+		return "", "", err
+	}
+	store, err := token.NewStore(tokenDir)
+	if err != nil {
+		return "", "", err
+	}
+	if err := store.Save(containerName, tok); err != nil {
+		return "", "", err
+	}
+
+	// Step 5: Register the token with guardian
 	if err := guardian.RegisterToken(tok, containerName); err != nil {
+		// Clean up persisted token on failure
+		_ = store.Remove(containerName)
 		return "", "", err
 	}
 
@@ -62,6 +77,7 @@ func Start(opts StartOptions) (containerID string, tok string, err error) {
 		if err != nil {
 			// Best effort cleanup - ignore revocation errors
 			_ = guardian.RevokeToken(tok)
+			_ = store.Remove(containerName)
 		}
 	}()
 
@@ -154,7 +170,8 @@ func injectUserSettings(containerName string) error {
 
 // Stop orchestrates stopping a cloister container with proper cleanup:
 // 1. Revokes the token from guardian
-// 2. Stops and removes the container
+// 2. Removes the token from disk
+// 3. Stops and removes the container
 //
 // The token parameter should be the token returned from Start().
 // If the token is empty, only the container is stopped (token revocation is skipped).
@@ -167,7 +184,16 @@ func Stop(containerName string, tok string) error {
 		_ = guardian.RevokeToken(tok)
 	}
 
-	// Step 2: Stop and remove the container
+	// Step 2: Remove the token from disk (best effort)
+	tokenDir, err := token.DefaultTokenDir()
+	if err == nil {
+		store, err := token.NewStore(tokenDir)
+		if err == nil {
+			_ = store.Remove(containerName)
+		}
+	}
+
+	// Step 3: Stop and remove the container
 	mgr := container.NewManager()
 	return mgr.Stop(containerName)
 }

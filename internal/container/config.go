@@ -8,7 +8,7 @@ import (
 )
 
 // DefaultImage is the default Docker image for cloister containers.
-const DefaultImage = "cloister-default:latest"
+const DefaultImage = "cloister:latest"
 
 // DefaultWorkDir is the working directory inside the container where
 // the project is mounted.

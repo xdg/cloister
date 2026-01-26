@@ -150,6 +150,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - Improved error messages with actionable suggestions
 - `cloister start -d` (detached mode)
 - Non-git directory support with `--allow-no-git`
+- Guardian API versioning (CLI checks compatibility with container image)
 
 **Verification:**
 - Tab completion works for commands, cloister names, project names
