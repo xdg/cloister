@@ -122,7 +122,7 @@ When a cloister starts, the launcher configures agent-specific settings by writi
 
 **For Claude Code:**
 
-1. Creates `~/.claude.json` with `{"hasCompletedOnboarding": true}`
+1. Creates `~/.claude.json` with `{"hasCompletedOnboarding": true, "bypassPermissionsModeAccepted": true}`
 2. Appends alias to `~/.bashrc`:
    ```bash
    alias claude='claude --dangerously-skip-permissions'

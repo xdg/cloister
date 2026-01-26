@@ -15,10 +15,10 @@ import (
 
 var listCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List running cloister containers",
-	Long: `List all running cloister containers.
+	Short: "List running cloisters",
+	Long: `List all running cloisters.
 
-Displays container name, project, branch, uptime, and status in a table format.`,
+Displays cloister name, project, branch, uptime, and status in a table format.`,
 	Aliases: []string{"ls"},
 	RunE:    runList,
 }
@@ -53,7 +53,7 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	// Handle empty list
 	if len(cloisters) == 0 {
-		fmt.Println("No running cloister containers.")
+		fmt.Println("No running cloisters.")
 		return nil
 	}
 
@@ -63,11 +63,12 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Print header
 	fmt.Fprintln(w, "NAME\tPROJECT\tBRANCH\tUPTIME\tSTATUS")
 
-	// Print each container
+	// Print each cloister
 	for _, c := range cloisters {
-		project, branch := parseContainerName(c.Name)
+		cloisterName := container.ContainerNameToCloisterName(c.Name)
+		project, branch := parseCloisterName(cloisterName)
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			c.Name,
+			cloisterName,
 			project,
 			branch,
 			c.RunningFor,
@@ -79,25 +80,18 @@ func runList(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// parseContainerName extracts project and branch from a container name.
-// Container names follow the pattern: cloister-<project>-<branch>
+// parseCloisterName extracts project and branch from a cloister name.
+// Cloister names follow the pattern: <project>-<branch>
 // Returns project and branch, or the full name and empty string if unparseable.
-func parseContainerName(name string) (project, branch string) {
-	// Remove "cloister-" prefix
-	rest := strings.TrimPrefix(name, "cloister-")
-	if rest == name {
-		// No prefix found, return as-is
-		return name, ""
-	}
-
+func parseCloisterName(cloisterName string) (project, branch string) {
 	// Find the last hyphen to split project and branch
 	// Branch names can contain hyphens, so we use the last hyphen as the delimiter
 	// This assumes project names don't contain hyphens (or we use last hyphen)
-	lastHyphen := strings.LastIndex(rest, "-")
+	lastHyphen := strings.LastIndex(cloisterName, "-")
 	if lastHyphen == -1 {
 		// No hyphen found, entire string is project
-		return rest, ""
+		return cloisterName, ""
 	}
 
-	return rest[:lastHyphen], rest[lastHyphen+1:]
+	return cloisterName[:lastHyphen], cloisterName[lastHyphen+1:]
 }

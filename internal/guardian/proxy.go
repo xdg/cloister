@@ -21,7 +21,7 @@ const DefaultProxyPort = 3128
 // Timeout constants for tunnel connections.
 const (
 	// dialTimeout is the maximum time to establish a connection to the upstream server.
-	dialTimeout = 10 * time.Second
+	dialTimeout = 30 * time.Second
 	// idleTimeout is the maximum time a tunnel connection can be idle before being closed.
 	idleTimeout = 5 * time.Minute
 )
@@ -220,6 +220,29 @@ func (p *ProxyServer) logAuthFailure(r *http.Request, reason string) {
 	}
 }
 
+// log writes a formatted message to the proxy's logger.
+func (p *ProxyServer) log(format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	if p.Logger != nil {
+		p.Logger.Println(msg)
+	} else {
+		log.Println(msg)
+	}
+}
+
+// isTimeoutError checks if an error is a timeout error.
+func isTimeoutError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Check for net.Error timeout
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return netErr.Timeout()
+	}
+	return false
+}
+
 // handleConnect processes CONNECT requests.
 // It checks the allowlist and establishes a bidirectional tunnel to the upstream server.
 // Returns 403 Forbidden for non-allowed domains, 502 Bad Gateway for connection failures.
@@ -241,6 +264,13 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	upstreamConn, err := dialer.DialContext(r.Context(), "tcp", host)
 	if err != nil {
+		// Log timeout errors with specific message for debugging
+		if isTimeoutError(err) {
+			p.log("proxy connection timeout to %s after %v: %v", host, dialTimeout, err)
+			http.Error(w, fmt.Sprintf("Gateway Timeout - connection to upstream timed out after %v", dialTimeout), http.StatusGatewayTimeout)
+			return
+		}
+		p.log("proxy connection failed to %s: %v", host, err)
 		http.Error(w, fmt.Sprintf("Bad Gateway - failed to connect to upstream: %v", err), http.StatusBadGateway)
 		return
 	}

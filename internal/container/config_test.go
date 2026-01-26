@@ -514,3 +514,98 @@ func TestConstants(t *testing.T) {
 		t.Errorf("DefaultUID = %d, want 1000", DefaultUID)
 	}
 }
+
+func TestGenerateCloisterName(t *testing.T) {
+	tests := []struct {
+		name     string
+		project  string
+		branch   string
+		expected string
+	}{
+		{
+			name:     "simple names",
+			project:  "myproject",
+			branch:   "main",
+			expected: "myproject-main",
+		},
+		{
+			name:     "feature branch",
+			project:  "myproject",
+			branch:   "feature/new-feature",
+			expected: "myproject-feature-new-feature",
+		},
+		{
+			name:     "uppercase project",
+			project:  "MyProject",
+			branch:   "Main",
+			expected: "myproject-main",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := GenerateCloisterName(tc.project, tc.branch)
+			if result != tc.expected {
+				t.Errorf("GenerateCloisterName() = %q, want %q", result, tc.expected)
+			}
+		})
+	}
+}
+
+func TestCloisterNameToContainerName(t *testing.T) {
+	tests := []struct {
+		cloisterName  string
+		containerName string
+	}{
+		{"myproject-main", "cloister-myproject-main"},
+		{"cloister-main", "cloister-cloister-main"},
+		{"", "cloister-"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.cloisterName, func(t *testing.T) {
+			result := CloisterNameToContainerName(tc.cloisterName)
+			if result != tc.containerName {
+				t.Errorf("CloisterNameToContainerName(%q) = %q, want %q", tc.cloisterName, result, tc.containerName)
+			}
+		})
+	}
+}
+
+func TestContainerNameToCloisterName(t *testing.T) {
+	tests := []struct {
+		containerName string
+		cloisterName  string
+	}{
+		{"cloister-myproject-main", "myproject-main"},
+		{"cloister-cloister-main", "cloister-main"},
+		{"other-container", "other-container"}, // no prefix, returns unchanged
+		{"cloister-", ""},                      // prefix only
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.containerName, func(t *testing.T) {
+			result := ContainerNameToCloisterName(tc.containerName)
+			if result != tc.cloisterName {
+				t.Errorf("ContainerNameToCloisterName(%q) = %q, want %q", tc.containerName, result, tc.cloisterName)
+			}
+		})
+	}
+}
+
+func TestCloisterContainerNameRoundTrip(t *testing.T) {
+	// Test that converting cloister name to container name and back gives the original
+	cloisterNames := []string{
+		"myproject-main",
+		"cloister-main",
+		"test-feature-branch",
+	}
+
+	for _, original := range cloisterNames {
+		containerName := CloisterNameToContainerName(original)
+		result := ContainerNameToCloisterName(containerName)
+		if result != original {
+			t.Errorf("Round trip failed: %q -> %q -> %q", original, containerName, result)
+		}
+	}
+}

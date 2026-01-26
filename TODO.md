@@ -269,16 +269,16 @@ End-to-end testing and cleanup.
 - [x] Guardian mounts token dir read-only, recovers tokens on startup
 
 ### 1.8.3 Behavior fixes and polish
-- [ ] `cloister start` should attach to existing cloister, not error (per cli-workflows.md)
-- [ ] Clarify cloister name vs container name distinction throughout codebase:
+- [x] `cloister start` should attach to existing cloister, not error (per cli-workflows.md)
+- [x] Clarify cloister name vs container name distinction throughout codebase:
   - Cloister name: `<project>` (main) or `<project>-<branch>` (worktree) — user-facing identifier
   - Container name: `cloister-${cloister_name}` — internal Docker detail, derived from cloister name
   - `cloister list` and all CLI output should show cloister names, not container names
-- [ ] Fix `.claude.json`: add `"bypassPermissionsModeAccepted": true` to skip permission prompt
-- [ ] Clear error when Docker not running
-- [ ] Clear error when not in git repository
-- [ ] Clear error when guardian fails to start
-- [ ] Timeout handling for proxy connections
+- [x] Fix `.claude.json`: add `"bypassPermissionsModeAccepted": true` to skip permission prompt
+- [x] Clear error when Docker not running
+- [x] Clear error when not in git repository
+- [x] Clear error when guardian fails to start
+- [x] Timeout handling for proxy connections
 
 ### 1.8.4 Documentation
 - [ ] Update README with Phase 1 quick-start

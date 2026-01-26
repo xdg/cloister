@@ -3,6 +3,7 @@
 package cloister
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -43,7 +44,7 @@ type StartOptions struct {
 func Start(opts StartOptions) (containerID string, tok string, err error) {
 	// Step 1: Ensure guardian is running
 	if err := guardian.EnsureRunning(); err != nil {
-		return "", "", err
+		return "", "", fmt.Errorf("guardian failed to start: %w", err)
 	}
 
 	// Step 2: Generate a new token

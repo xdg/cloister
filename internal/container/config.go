@@ -173,6 +173,28 @@ func SanitizeName(name string) string {
 	return result
 }
 
+// GenerateCloisterName creates the user-facing cloister name from project and branch.
+// The cloister name is <project>-<branch> (e.g., "myproject-main").
+// This is the identifier shown in CLI output like `cloister list`.
+func GenerateCloisterName(project, branch string) string {
+	p := SanitizeName(project)
+	b := SanitizeName(branch)
+	return p + "-" + b
+}
+
+// CloisterNameToContainerName converts a user-facing cloister name to the internal
+// Docker container name by adding the "cloister-" prefix.
+func CloisterNameToContainerName(cloisterName string) string {
+	return "cloister-" + cloisterName
+}
+
+// ContainerNameToCloisterName converts an internal Docker container name to the
+// user-facing cloister name by removing the "cloister-" prefix.
+// Returns the input unchanged if it doesn't have the prefix.
+func ContainerNameToCloisterName(containerName string) string {
+	return strings.TrimPrefix(containerName, "cloister-")
+}
+
 // GenerateContainerName is a convenience function that creates a container
 // name from project and branch strings without needing a full Config.
 func GenerateContainerName(project, branch string) string {

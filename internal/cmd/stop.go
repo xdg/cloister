@@ -14,12 +14,12 @@ import (
 )
 
 var stopCmd = &cobra.Command{
-	Use:   "stop [container-name]",
-	Short: "Stop a cloister container",
-	Long: `Stop a cloister container and clean up its resources.
+	Use:   "stop [cloister-name]",
+	Short: "Stop a cloister",
+	Long: `Stop a cloister and clean up its resources.
 
-If no container name is provided, stops the container for the current project.
-Revokes the container's token from the guardian and removes the container.`,
+If no cloister name is provided, stops the cloister for the current project.
+Revokes the cloister's token from the guardian and removes the container.`,
 	RunE: runStop,
 }
 
@@ -28,22 +28,25 @@ func init() {
 }
 
 func runStop(cmd *cobra.Command, args []string) error {
-	var containerName string
+	var cloisterName string
 
 	if len(args) > 0 {
-		// Container name provided as argument
-		containerName = args[0]
+		// Cloister name provided as argument
+		cloisterName = args[0]
 	} else {
 		// Default to current project
-		name, err := detectContainerName()
+		name, err := detectCloisterName()
 		if err != nil {
 			return err
 		}
-		containerName = name
+		cloisterName = name
 	}
 
-	// Look up the token for this container from the guardian
-	token := findTokenForContainer(containerName)
+	// Convert cloister name to container name for Docker operations
+	containerName := container.CloisterNameToContainerName(cloisterName)
+
+	// Look up the token for this cloister from the guardian
+	token := findTokenForCloister(containerName)
 
 	// Stop the container (this also revokes the token)
 	err := cloister.Stop(containerName, token)
@@ -52,13 +55,13 @@ func runStop(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("Docker is not running; please start Docker and try again")
 		}
 		if errors.Is(err, container.ErrContainerNotFound) {
-			return fmt.Errorf("container %q not found", containerName)
+			return fmt.Errorf("cloister %q not found", cloisterName)
 		}
 		return fmt.Errorf("failed to stop cloister: %w", err)
 	}
 
 	// Print confirmation message
-	fmt.Printf("Stopped cloister container: %s\n", containerName)
+	fmt.Printf("Stopped cloister: %s\n", cloisterName)
 	if token != "" {
 		fmt.Println("Token revoked from guardian.")
 	}
@@ -66,13 +69,13 @@ func runStop(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// detectContainerName determines the container name based on the current project.
-func detectContainerName() (string, error) {
+// detectCloisterName determines the cloister name based on the current project.
+func detectCloisterName() (string, error) {
 	// Detect git root from current directory
 	gitRoot, err := project.DetectGitRoot(".")
 	if err != nil {
 		if errors.Is(err, project.ErrNotGitRepo) {
-			return "", fmt.Errorf("not in a git repository; specify container name or run from within a git project")
+			return "", fmt.Errorf("not in a git repository; specify cloister name or run from within a git project")
 		}
 		if errors.Is(err, project.ErrGitNotInstalled) {
 			return "", fmt.Errorf("git is not installed or not in PATH")
@@ -92,13 +95,13 @@ func detectContainerName() (string, error) {
 		return "", fmt.Errorf("failed to determine project name: %w", err)
 	}
 
-	return container.GenerateContainerName(projectName, branch), nil
+	return container.GenerateCloisterName(projectName, branch), nil
 }
 
-// findTokenForContainer looks up the token associated with a container name.
-// Returns empty string if no token is found (container may have been started externally
+// findTokenForCloister looks up the token associated with a cloister (by container name).
+// Returns empty string if no token is found (cloister may have been started externally
 // or guardian is not running).
-func findTokenForContainer(containerName string) string {
+func findTokenForCloister(containerName string) string {
 	// Get all registered tokens from guardian
 	tokens, err := guardian.ListTokens()
 	if err != nil {
@@ -107,13 +110,13 @@ func findTokenForContainer(containerName string) string {
 		return ""
 	}
 
-	// Find the token for this container
-	for token, cloisterName := range tokens {
-		if cloisterName == containerName {
+	// Find the token for this cloister (tokens are keyed by container name)
+	for token, name := range tokens {
+		if name == containerName {
 			return token
 		}
 	}
 
-	// No token found for this container
+	// No token found for this cloister
 	return ""
 }

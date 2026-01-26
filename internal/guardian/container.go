@@ -54,7 +54,13 @@ type containerState struct {
 
 // IsRunning checks if the guardian container is running.
 // Returns true if the container exists and is in the running state.
+// Returns docker.ErrDockerNotRunning if the Docker daemon is not accessible.
 func IsRunning() (bool, error) {
+	// Check Docker daemon availability first
+	if err := docker.CheckDaemon(); err != nil {
+		return false, err
+	}
+
 	state, err := getContainerState()
 	if err != nil {
 		return false, err
@@ -89,7 +95,7 @@ func Start() error {
 
 	// Ensure cloister-net exists
 	if err := docker.EnsureCloisterNetwork(); err != nil {
-		return err
+		return fmt.Errorf("failed to create cloister network: %w", err)
 	}
 
 	// Get the host token directory for mounting
@@ -120,7 +126,7 @@ func Start() error {
 	// Create and start the container
 	_, err = docker.Run(args...)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to start guardian container: %w", err)
 	}
 
 	// Connect to bridge network for external access to upstream servers
@@ -128,7 +134,7 @@ func Start() error {
 	if err != nil {
 		// If connecting to bridge fails, clean up the container
 		_ = removeContainer()
-		return err
+		return fmt.Errorf("failed to connect guardian to bridge network: %w", err)
 	}
 
 	return nil

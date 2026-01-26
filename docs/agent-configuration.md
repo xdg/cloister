@@ -56,10 +56,11 @@ Alternatively, set `ANTHROPIC_API_KEY` in your host environment — cloister wil
 2. **Creates `~/.claude.json` inside the container:**
    ```json
    {
-     "hasCompletedOnboarding": true
+     "hasCompletedOnboarding": true,
+     "bypassPermissionsModeAccepted": true
    }
    ```
-   This skips Claude's interactive onboarding flow.
+   This skips Claude's interactive onboarding flow and accepts bypass-permissions mode.
 
 3. **If permission skipping is enabled, creates a shell alias:**
    ```bash

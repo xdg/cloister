@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -15,15 +16,15 @@ import (
 
 var startCmd = &cobra.Command{
 	Use:   "start",
-	Short: "Start a cloister container for the current project",
-	Long: `Start a cloister container for the current project directory.
+	Short: "Start a cloister for the current project",
+	Long: `Start a cloister for the current project directory.
 
 Detects the project from the current git repository and starts a sandboxed
-container with the project mounted at /work. The guardian proxy is automatically
+cloister with the project mounted at /work. The guardian proxy is automatically
 started if not already running.
 
-After the container starts, an interactive shell is attached. When you exit
-the shell, the container remains running. Use 'cloister stop' to terminate it.`,
+After the cloister starts, an interactive shell is attached. When you exit
+the shell, the cloister remains running. Use 'cloister stop' to terminate it.`,
 	RunE: runStart,
 }
 
@@ -56,8 +57,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to determine project name: %w", err)
 	}
 
+	// Compute cloister name (user-facing) and container name (Docker internal)
+	cloisterName := container.GenerateCloisterName(projectName, branch)
+	containerName := container.CloisterNameToContainerName(cloisterName)
+
 	// Step 4: Start the cloister container
-	containerID, tok, err := cloister.Start(cloister.StartOptions{
+	_, tok, err := cloister.Start(cloister.StartOptions{
 		ProjectPath: gitRoot,
 		ProjectName: projectName,
 		BranchName:  branch,
@@ -68,19 +73,27 @@ func runStart(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("Docker is not running; please start Docker and try again")
 		}
 		if errors.Is(err, container.ErrContainerExists) {
-			containerName := container.GenerateContainerName(projectName, branch)
-			return fmt.Errorf("container %q already exists; use 'cloister stop %s' first or attach with 'docker exec -it %s /bin/bash'",
-				containerName, containerName, containerName)
+			// Container already exists - attach to it instead of erroring
+			return attachToExisting(containerName)
+		}
+		// Check if this is a guardian failure and provide actionable guidance
+		errStr := err.Error()
+		if strings.Contains(errStr, "guardian failed to start") {
+			// Detect common causes and provide specific guidance
+			if strings.Contains(errStr, "address already in use") || strings.Contains(errStr, "port is already allocated") {
+				return fmt.Errorf("%w\n\nHint: Port 9997 may be in use. Check if another guardian is running:\n  docker ps -a --filter name=cloister-guardian", err)
+			}
+			if strings.Contains(errStr, "No such image") || strings.Contains(errStr, "Unable to find image") {
+				return fmt.Errorf("%w\n\nHint: The cloister image may not be built. Try:\n  docker build -t cloister:latest .", err)
+			}
+			// Generic guardian failure message
+			return fmt.Errorf("%w\n\nHint: Check guardian status with:\n  cloister guardian status\n  docker logs cloister-guardian", err)
 		}
 		return fmt.Errorf("failed to start cloister: %w", err)
 	}
 
-	// Compute container name for display
-	containerName := container.GenerateContainerName(projectName, branch)
-
 	// Print startup information
-	fmt.Printf("Started cloister container: %s\n", containerName)
-	fmt.Printf("Container ID: %s\n", containerID[:12])
+	fmt.Printf("Started cloister: %s\n", cloisterName)
 	fmt.Printf("Project: %s (branch: %s)\n", projectName, branch)
 	fmt.Printf("Token: %s\n", tok)
 	fmt.Println()
@@ -90,15 +103,59 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Step 5: Attach interactive shell
 	exitCode, err := cloister.Attach(containerName)
 	if err != nil {
-		return fmt.Errorf("failed to attach to container: %w", err)
+		return fmt.Errorf("failed to attach to cloister: %w", err)
 	}
 
 	// Step 6: Print exit message
 	fmt.Println()
-	fmt.Printf("Shell exited with code %d. Container still running.\n", exitCode)
-	fmt.Printf("Use 'cloister stop %s' to terminate.\n", containerName)
+	fmt.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
+	fmt.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
 
 	// Step 7: Propagate shell exit code
+	if exitCode != 0 {
+		os.Exit(exitCode)
+	}
+
+	return nil
+}
+
+// attachToExisting attaches to an existing cloister, starting it if necessary.
+// containerName is the Docker container name (with "cloister-" prefix).
+func attachToExisting(containerName string) error {
+	mgr := container.NewManager()
+
+	// Derive user-facing cloister name from container name
+	cloisterName := container.ContainerNameToCloisterName(containerName)
+
+	// Check if the container is running
+	running, err := mgr.IsRunning(containerName)
+	if err != nil {
+		return fmt.Errorf("failed to check cloister status: %w", err)
+	}
+
+	if !running {
+		// Container exists but is stopped - start it first
+		fmt.Printf("Starting stopped cloister: %s\n", cloisterName)
+		if err := mgr.StartContainer(containerName); err != nil {
+			return fmt.Errorf("failed to start cloister: %w", err)
+		}
+	}
+
+	// Attach to the cloister
+	fmt.Printf("Entering cloister %s. Type 'exit' to leave.\n", cloisterName)
+	fmt.Println()
+
+	exitCode, err := cloister.Attach(containerName)
+	if err != nil {
+		return fmt.Errorf("failed to attach to cloister: %w", err)
+	}
+
+	// Print exit message
+	fmt.Println()
+	fmt.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
+	fmt.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
+
+	// Propagate shell exit code
 	if exitCode != 0 {
 		os.Exit(exitCode)
 	}

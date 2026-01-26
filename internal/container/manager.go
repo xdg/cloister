@@ -260,3 +260,28 @@ func (m *Manager) containerExists(name string) (bool, error) {
 
 	return false, nil
 }
+
+// IsRunning checks if a container with the given name exists and is running.
+// Returns (true, nil) if running, (false, nil) if exists but not running or doesn't exist,
+// and (false, err) if there was an error checking.
+func (m *Manager) IsRunning(name string) (bool, error) {
+	var containers []struct {
+		Names string `json:"Names"`
+		State string `json:"State"`
+	}
+
+	err := docker.RunJSONLines(&containers, "ps", "-a", "--filter", "name=^"+name+"$")
+	if err != nil {
+		return false, err
+	}
+
+	// Check for exact name match and running state
+	for _, c := range containers {
+		containerName := strings.TrimPrefix(c.Names, "/")
+		if containerName == name {
+			return c.State == "running", nil
+		}
+	}
+
+	return false, nil
+}
