@@ -281,10 +281,10 @@ End-to-end testing and cleanup.
 - [x] Timeout handling for proxy connections
 
 ### 1.8.4 Documentation
-- [ ] Update README with Phase 1 quick-start
-- [ ] Document env var requirements (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`)
-- [ ] Document known limitations (hardcoded allowlist)
-- [ ] Document naming in specs: cloister name (`<project>`) vs container name (`cloister-<project>`)
+- [x] Update README with Phase 1 quick-start
+- [x] Document env var requirements (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`)
+- [x] Document known limitations (hardcoded allowlist)
+- [x] Document naming in specs: cloister name (`<project>`) vs container name (`cloister-<project>`)
 
 ---
 

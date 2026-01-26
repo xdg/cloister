@@ -102,6 +102,28 @@ A **cloister** is a container session with a directory mounted at `/work`. Each 
 - Inherits all permissions from its project
 - Has its own audit log at `~/.local/share/cloister/logs/<cloister-name>.log`
 
+#### Naming Convention
+
+Cloister uses two related but distinct names:
+
+| Name | Format | Purpose |
+|------|--------|---------|
+| **Cloister name** | `<project>` or `<project>-<branch>` | User-facing identifier used in CLI commands, logs, and configuration |
+| **Container name** | `cloister-<cloister_name>` | Internal Docker container name (implementation detail) |
+
+Examples:
+
+| Project | Branch | Cloister Name | Container Name |
+|---------|--------|---------------|----------------|
+| my-api | (main checkout) | `my-api` | `cloister-my-api` |
+| my-api | feature-auth | `my-api-feature-auth` | `cloister-my-api-feature-auth` |
+| frontend | redesign | `frontend-redesign` | `cloister-frontend-redesign` |
+
+Users interact exclusively with cloister names. The `cloister-` prefix on container names is an internal convention that:
+- Prevents collisions with user containers
+- Makes cloister containers easily identifiable in `docker ps` output
+- Allows the CLI to filter for cloister-managed containers
+
 ### Non-Git Directories
 
 Cloister can operate on non-git directories, but this degrades the safety model:

@@ -6,22 +6,60 @@ Cloister isolates CLI-based AI coding tools in Docker containers with strict sec
 
 ## Quick Start
 
+### Prerequisites
+
+- Linux or macOS
+- Docker (or compatible equivalent like OrbStack)
+- Go 1.25+ (for building from source)
+- A git repository to work in
+- Claude Code credentials (OAuth token or API key)
+
+### Build and Install
+
 ```bash
-# Install cloister
+# Clone and build
+git clone https://github.com/xdg/cloister.git
+cd cloister
+make build          # creates ./cloister binary
+
+# Or install directly
 go install github.com/xdg/cloister/cmd/cloister@latest
+```
 
-# One-time: configure your AI agent credentials
-cloister setup claude   # eventually codex, gemini, etc.
+### Configure Credentials
 
-# Start a sandboxed session
-cd ~/repos/my-project
-cloister start
+Set your Claude credentials as environment variables:
 
-# Inside the cloister, your AI agent runs without permission checks
+```bash
+# Option 1: OAuth token (for Claude Pro/Max subscribers)
+# Run 'claude setup-token' first to get the token
+export CLAUDE_CODE_OAUTH_TOKEN="your-oauth-token"
+
+# Option 2: API key (for pay-per-use via Anthropic API)
+export ANTHROPIC_API_KEY="your-api-key"
+```
+
+### Start a Sandboxed Session
+
+```bash
+cd ~/repos/my-project    # any git repository
+cloister start           # guardian auto-starts on first use
+
+# You're now in a sandboxed shell at /work
 cloister:my-project:/work$ claude
 ```
 
-Open http://localhost:9999 to monitor requests and approve host commands.
+Inside the cloister, `claude` runs with `--dangerously-skip-permissions` because the cloister itself is the security boundary.
+
+### Key Commands
+
+```bash
+cloister start           # Start a cloister for the current repo
+cloister list            # List running cloisters
+cloister stop            # Stop the cloister for the current repo
+cloister guardian status # Check guardian proxy status
+cloister guardian stop   # Stop the guardian (warns if cloisters are running)
+```
 
 ## Features
 
@@ -67,11 +105,22 @@ Some sandboxes use **action control**: enumerate what the agent can do, then all
 
 Cloister works out of the box with sensible defaults. See [docs/config-reference.md](docs/config-reference.md) for details.
 
-## Requirements
+## Current Limitations
 
-- Docker (or compatible equivalent like OrbStack)
-- Go 1.25+ (for building from source)
-- Linux or macOS
+Cloister is in active development (Phase 1). Current limitations include:
+
+**Hardcoded network allowlist** — The proxy currently permits only these domains:
+- `api.anthropic.com` (Claude API)
+- `api.openai.com` (OpenAI API)
+- `generativelanguage.googleapis.com` (Google Gemini API)
+
+Package registries (npm, PyPI, Go modules), documentation sites, and other domains are not yet permitted. Custom domain configuration will be available in Phase 2.
+
+**Manual credential setup** — Claude Code credentials must be set via environment variables (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`). A setup wizard will be added in Phase 3.
+
+**No host command execution** — The `hostexec` feature for running host commands (git push, docker build, etc.) with approval is not yet implemented. This is planned for Phase 4.
+
+See [docs/implementation-phases.md](docs/implementation-phases.md) for the full roadmap.
 
 ## Contributing
 
