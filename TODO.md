@@ -69,28 +69,28 @@ Before marking Phase 2 complete:
 Define Go types for configuration and implement YAML parsing.
 
 ### 2.1.1 Config types
-- [ ] Create `internal/config/types.go`
-- [ ] Define `GlobalConfig` struct matching `config-reference.md` schema
-- [ ] Define `ProjectConfig` struct for per-project settings
-- [ ] Define `ProxyConfig`, `AllowEntry`, `CommandPattern` sub-structs
-- [ ] Use struct tags for YAML field mapping
-- [ ] **Test**: Struct tags correctly map to YAML field names
+- [x] Create `internal/config/types.go`
+- [x] Define `GlobalConfig` struct matching `config-reference.md` schema
+- [x] Define `ProjectConfig` struct for per-project settings
+- [x] Define `ProxyConfig`, `AllowEntry`, `CommandPattern` sub-structs
+- [x] Use struct tags for YAML field mapping
+- [x] **Test**: Struct tags correctly map to YAML field names
 
 ### 2.1.2 Config parsing
-- [ ] Create `internal/config/parse.go`
-- [ ] Implement `ParseGlobalConfig([]byte) (*GlobalConfig, error)`
-- [ ] Implement `ParseProjectConfig([]byte) (*ProjectConfig, error)`
-- [ ] Handle missing optional fields with sensible defaults
-- [ ] Return clear errors for invalid YAML or unknown fields
-- [ ] **Test**: Parse valid config, parse config with defaults, parse invalid config
+- [x] Create `internal/config/parse.go`
+- [x] Implement `ParseGlobalConfig([]byte) (*GlobalConfig, error)`
+- [x] Implement `ParseProjectConfig([]byte) (*ProjectConfig, error)`
+- [x] Handle missing optional fields with sensible defaults
+- [x] Return clear errors for invalid YAML or unknown fields
+- [x] **Test**: Parse valid config, parse config with defaults, parse invalid config
 
 ### 2.1.3 Config validation
-- [ ] Create `internal/config/validate.go`
-- [ ] Validate required fields present
-- [ ] Validate port numbers in valid range
-- [ ] Validate duration strings parseable
-- [ ] Validate regex patterns in command patterns compile
-- [ ] **Test**: Valid config passes, various invalid configs rejected with clear messages
+- [x] Create `internal/config/validate.go`
+- [x] Validate required fields present
+- [x] Validate port numbers in valid range
+- [x] Validate duration strings parseable
+- [x] Validate regex patterns in command patterns compile
+- [x] **Test**: Valid config passes, various invalid configs rejected with clear messages
 
 ---
 
