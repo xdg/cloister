@@ -1,300 +1,327 @@
-# Cloister Phase 1: Minimal Viable Cloister with Guardian
+# Cloister Phase 2: Configuration System
 
-Launch a sandboxed container with guardian-proxied networking. Produces a working (if limited) system that enables basic sandboxed development with Claude Code.
+Global and per-project config controls allowlists, project registry, and configurable settings. Transforms Phase 1's hardcoded behavior into a flexible configuration-driven system.
 
 ## Testing Philosophy
 
-- **Unit tests for core logic**: Token generation, allowlist matching, container naming
-- **Integration tests for guardian**: Proxy authentication, domain filtering
-- **Manual tests for end-to-end flows**: Container lifecycle, Claude Code operation
-- **Go tests**: Use `testing` package; `httptest` for proxy handler tests
-- **Table-driven tests**: Prefer table-driven tests for allowlist matching edge cases
+- **Unit tests for core logic**: Config parsing, merging, validation, allowlist expansion
+- **Integration tests for config loading**: File discovery, environment variable expansion, YAML parsing
+- **Manual tests for CLI workflows**: Config editing, project registration, allowlist behavior
+- **Go tests**: Use `testing` package; `os.MkdirTemp` for isolated config directories
+- **Table-driven tests**: Config merge precedence, allowlist domain matching with wildcards
+
+## Reference Documentation
+
+Before implementing, read these spec files in `./docs`:
+
+- **[config-reference.md](docs/config-reference.md)** — Full YAML schemas for global and project configs (primary reference for 2.1-2.5)
+- **[cloister-spec.md](docs/cloister-spec.md)** — Architecture, file layout (`~/.config/cloister/` structure), security model
+- **[cli-workflows.md](docs/cli-workflows.md)** — CLI command examples and expected behaviors (reference for 2.7)
+
+Provied relevant excerpts to subagents referenced in this doc if the excerpt is small, or tell subagents to read an entire doc.  Avoid using too much of your own context citing specs to subagents.
 
 ## Verification Checklist
 
-Before marking Phase 1 complete:
+Before marking Phase 2 complete:
 
-1. `go test ./...` passes
-2. `go build ./cmd/cloister` produces working binary
-3. Manual verification of all "Verification" items from spec:
-   - [x] `cloister start` → guardian starts if needed → container starts → shell at `/work`
-   - [x] `curl -x $HTTP_PROXY https://api.anthropic.com` succeeds
-   - [x] `curl -x $HTTP_PROXY https://github.com` fails (not in allowlist)
-   - [x] Start 2 cloisters; each authenticated with own token
-   - [x] `cloister stop` cleans up container
-   - [x] `guardian stop` warns about running cloisters
-   - [x] With `CLAUDE_CODE_OAUTH_TOKEN` set: `claude` command works inside container
-4. No race conditions (`go test -race ./...`)
+1. `make test` passes
+2. `make build` produces working binary
+3. `make lint` passes
+4. Manual verification of all "Verification" items from spec:
+   - [ ] Add domain to project config; cloister for that project allows it
+   - [ ] Same domain blocked for different project without that config
+   - [ ] `project list` shows registered projects
+   - [ ] Config edit opens in `$EDITOR`
+   - [ ] Guardian restart preserves token associations (already done in Phase 1)
+5. No race conditions (`make test-race`)
 
 ## Dependencies Between Phases
 
 ```
-1.1 Project Scaffolding
+2.1 Config Schema & Parsing
        │
        ▼
-1.2 Docker Network Setup
+2.2 Global Config Loading
        │
-       ▼
-1.3 Guardian Proxy ◄── 1.4 Token System (parallel)
-       │                    │
-       └────────┬───────────┘
-                ▼
-1.5 Container Launch
-       │
-       ▼
-1.6 CLI Commands
-       │
-       ▼
-1.7 Claude Code Bootstrap
-       │
-       ▼
-1.8 Integration & Polish
+       ├─► 2.3 Project Detection & Registry (parallel)
+       │              │
+       │              ▼
+       │         2.4 Per-Project Config
+       │              │
+       └──────────────┤
+                      ▼
+              2.5 Config Merging
+                      │
+                      ▼
+              2.6 Guardian Integration
+                      │
+                      ▼
+              2.7 CLI Commands
+                      │
+                      ▼
+              2.8 Integration & Polish
 ```
 
 ---
 
-## Phase 1.1: Project Scaffolding
+## Phase 2.1: Config Schema & Parsing
 
-Set up Go module structure and build infrastructure.
+Define Go types for configuration and implement YAML parsing.
 
-### 1.1.1 Go module initialization
-- [x] Initialize Go module (`go mod init github.com/xdg/cloister`)
-- [x] Create `cmd/cloister/main.go` with stub main
-- [x] Add `.gitignore` for Go binaries, test artifacts
+### 2.1.1 Config types
+- [ ] Create `internal/config/types.go`
+- [ ] Define `GlobalConfig` struct matching `config-reference.md` schema
+- [ ] Define `ProjectConfig` struct for per-project settings
+- [ ] Define `ProxyConfig`, `AllowEntry`, `CommandPattern` sub-structs
+- [ ] Use struct tags for YAML field mapping
+- [ ] **Test**: Struct tags correctly map to YAML field names
 
-### 1.1.2 CLI framework setup
-- [x] Add cobra dependency for CLI
-- [x] Create root command with version flag
-- [x] Set up subcommand structure: `start`, `stop`, `list`, `guardian`
-- [x] **Test**: Root command prints help without error
+### 2.1.2 Config parsing
+- [ ] Create `internal/config/parse.go`
+- [ ] Implement `ParseGlobalConfig([]byte) (*GlobalConfig, error)`
+- [ ] Implement `ParseProjectConfig([]byte) (*ProjectConfig, error)`
+- [ ] Handle missing optional fields with sensible defaults
+- [ ] Return clear errors for invalid YAML or unknown fields
+- [ ] **Test**: Parse valid config, parse config with defaults, parse invalid config
 
-### 1.1.3 Build infrastructure
-- [x] Create Makefile with `build`, `test`, `lint` targets
-- [x] Add `golangci-lint` configuration (`.golangci.yml`)
-- [x] Verify `make build` produces binary
-
----
-
-## Phase 1.2: Docker Network Setup
-
-Create and manage the `cloister-net` internal network.
-
-### 1.2.1 Docker CLI integration
-- [x] Create `internal/docker/docker.go` with CLI wrapper functions
-- [x] Use `docker` CLI with `--format '{{json .}}'` for parseable output
-- [x] Handle Docker daemon not running (check via `docker info`)
-- [x] Works with Docker Desktop, OrbStack, Colima, Podman, etc.
-
-### 1.2.2 Network management
-- [x] Implement `EnsureNetwork(name string, internal bool)` function
-- [x] Create `cloister-net` as internal network (no external access)
-- [x] Implement `NetworkExists(name string)` check
-- [x] **Test**: Create network, verify internal flag, cleanup
-
-### 1.2.3 Network cleanup
-- [x] Implement `RemoveNetworkIfEmpty(name string)` function
-- [x] Handle "network in use" errors appropriately
-- [x] **Test**: Removal blocked when container attached
+### 2.1.3 Config validation
+- [ ] Create `internal/config/validate.go`
+- [ ] Validate required fields present
+- [ ] Validate port numbers in valid range
+- [ ] Validate duration strings parseable
+- [ ] Validate regex patterns in command patterns compile
+- [ ] **Test**: Valid config passes, various invalid configs rejected with clear messages
 
 ---
 
-## Phase 1.3: Guardian HTTP CONNECT Proxy
+## Phase 2.2: Global Config Loading
 
-Implement the allowlist-enforcing HTTP CONNECT proxy.
+Load global configuration from `~/.config/cloister/config.yaml`.
 
-### 1.3.1 Proxy server skeleton
-- [x] Create `internal/guardian/proxy.go`
-- [x] Implement basic HTTP server on :3128
-- [x] Handle CONNECT method requests
-- [x] Return 405 for non-CONNECT methods
+### 2.2.1 Config directory management
+- [ ] Create `internal/config/paths.go`
+- [ ] Implement `ConfigDir() string` returning `~/.config/cloister/`
+- [ ] Implement `EnsureConfigDir() error` creating directory if missing
+- [ ] Handle `XDG_CONFIG_HOME` override
+- [ ] **Test**: Path resolution with/without XDG override
 
-### 1.3.2 Allowlist enforcement
-- [x] Create `internal/guardian/allowlist.go`
-- [x] Hardcode initial allowlist: `api.anthropic.com`, `api.openai.com`, `generativelanguage.googleapis.com`
-- [x] Implement domain matching (exact match, no wildcards yet)
-- [x] Return 403 Forbidden for non-allowed domains
-- [x] **Test**: Table-driven tests for allowed/denied domains
+### 2.2.2 Default config generation
+- [ ] Create `internal/config/defaults.go`
+- [ ] Define `DefaultGlobalConfig()` with full default allowlist from spec
+- [ ] Include all documentation sites, package registries, AI APIs
+- [ ] Set sensible defaults for timeouts, rate limits, etc.
+- [ ] **Test**: Default config is valid, contains expected domains
 
-### 1.3.3 CONNECT tunneling
-- [x] Establish upstream TLS connection on allowed requests
-- [x] Respond with `200 Connection Established`
-- [x] Bidirectional copy between client and upstream
-- [x] Handle connection timeouts and errors
-- [x] **Test**: Mock upstream, verify tunnel establishment
+### 2.2.3 Config file loading
+- [ ] Create `internal/config/load.go`
+- [ ] Implement `LoadGlobalConfig() (*GlobalConfig, error)`
+- [ ] Return default config if file doesn't exist
+- [ ] Expand `~` in paths to actual home directory
+- [ ] Log config file path used for debugging
+- [ ] **Test**: Load existing config, load missing config (use defaults), handle corrupt file
 
-### 1.3.4 Proxy authentication
-- [x] Parse `Proxy-Authorization` header
-- [x] Validate token against registered tokens (from 1.4)
-- [x] Return 407 Proxy Authentication Required on missing/invalid token
-- [x] Log authentication failures with source IP
-- [x] **Test**: Request with valid token succeeds, invalid fails
-
----
-
-## Phase 1.4: Token System
-
-Generate and validate per-cloister authentication tokens.
-
-### 1.4.1 Token generation
-- [x] Create `internal/token/token.go`
-- [x] Implement `Generate() string` using crypto/rand (32 bytes, hex encoded)
-- [x] **Test**: Generated tokens are 64 hex characters, unique
-
-### 1.4.2 Token registry
-- [x] Create `internal/token/registry.go`
-- [x] Implement in-memory token→cloister-name map
-- [x] `Register(token, cloisterName)` and `Validate(token) (cloisterName, bool)`
-- [x] `Revoke(token)` for cleanup on container stop
-- [x] Thread-safe with mutex
-- [x] **Test**: Register, validate, revoke lifecycle
-
-### 1.4.3 Token injection
-- [x] Pass token to container via `CLOISTER_TOKEN` env var
-- [x] Pass proxy address via `HTTP_PROXY` and `HTTPS_PROXY` env vars
-- [x] Format: `http://token:$CLOISTER_TOKEN@guardian:3128`
+### 2.2.4 Config file creation
+- [ ] Implement `WriteDefaultConfig() error` to create initial config.yaml
+- [ ] Write commented YAML with documentation
+- [ ] Only create if file doesn't exist (don't overwrite)
+- [ ] **Test**: Creates file with expected content, doesn't overwrite existing
 
 ---
 
-## Phase 1.5: Container Launch
+## Phase 2.3: Project Detection & Registry
 
-Launch cloister containers with proper security settings.
+Identify projects and maintain a registry mapping names to locations.
 
-### 1.5.1 Container configuration
-- [x] Create `internal/container/config.go`
-- [x] Define container create options struct
-- [x] Derive container name from cloister name: `cloister-${cloister_name}` (cloister name = `<project>` for main, `<project>-<branch>` for worktrees in Phase 5)
-- [x] Mount project directory at `/work` (read-write)
-- [x] Set working directory to `/work`
+### 2.3.1 Git repository detection
+- [ ] Create `internal/project/detect.go`
+- [ ] Implement `DetectProject(path string) (*ProjectInfo, error)`
+- [ ] Walk up directory tree to find `.git`
+- [ ] Extract remote URL from git config (`git remote get-url origin`)
+- [ ] Derive project name from directory basename (already done in Phase 1, consolidate here)
+- [ ] Handle detached HEAD, bare repos gracefully
+- [ ] **Test**: Detect project in repo root, subdirectory, handle non-repo
 
-### 1.5.2 Security hardening
-- [x] Add `--cap-drop=ALL`
-- [x] Add `--security-opt=no-new-privileges`
-- [x] Connect only to `cloister-net` (no bridge network)
-- [x] Run as non-root user (UID 1000)
+### 2.3.2 Project registry storage
+- [ ] Create `internal/project/registry.go`
+- [ ] Define `Registry` struct with project map
+- [ ] Store in `~/.config/cloister/projects.yaml` (list of known projects)
+- [ ] Fields: name, remote URL, root path, last used timestamp
+- [ ] **Test**: Load registry, save registry, round-trip
 
-### 1.5.3 Container lifecycle
-- [x] Create `internal/container/manager.go`
-- [x] Implement `Start(projectPath, branchName string) (containerID, error)`
-- [x] Implement `Stop(containerName string) error`
-- [x] Implement `List() ([]ContainerInfo, error)`
-- [x] Handle container already exists (return error or attach)
-- [x] **Test**: Start container, verify settings, stop, verify removal
+### 2.3.3 Project registration
+- [ ] Implement `Register(info *ProjectInfo) error`
+- [ ] Auto-register on first `cloister start` in a directory
+- [ ] Update existing entry if same name but different path (warn user)
+- [ ] Handle name collisions (different remotes, same basename) - suggest rename or use full name
+- [ ] **Test**: Register new project, update existing, handle collision
 
-### 1.5.4 Interactive shell attachment
-- [x] Attach stdin/stdout/stderr to container
-- [x] Allocate TTY for interactive use
-- [x] Handle Ctrl+C gracefully (detach, don't kill)
-- [x] Return exit code from shell session
-
----
-
-## Phase 1.6: CLI Commands
-
-Wire up the CLI commands to the container and guardian systems.
-
-### 1.6.1 `cloister start` command
-- [x] Detect project from current directory (git root)
-- [x] Detect branch from git HEAD
-- [x] Ensure guardian is running (auto-start if not)
-- [x] Generate token and register with guardian
-- [x] Start container with token injected
-- [x] Attach interactive shell
-- [x] On shell exit, leave container running (user runs `cloister stop` explicitly)
-
-### 1.6.2 `cloister stop` command
-- [x] Accept container name argument (or default to current project)
-- [x] Revoke token from guardian
-- [x] Stop and remove container
-- [x] Print confirmation message
-
-### 1.6.3 `cloister list` command
-- [x] List all running cloister containers
-- [x] Show: name, project, branch, uptime, status
-- [x] Format as table
-
-### 1.6.4 `cloister guardian` subcommands
-- [x] `guardian start`: Start guardian container if not running
-- [x] `guardian stop`: Stop guardian (warn if cloisters running)
-- [x] `guardian status`: Show guardian status, uptime, active token count
-- [x] Guardian container connected to both `cloister-net` and bridge
+### 2.3.4 Project lookup
+- [ ] Implement `Lookup(name string) (*ProjectInfo, error)`
+- [ ] Implement `LookupByPath(path string) (*ProjectInfo, error)`
+- [ ] Implement `List() []*ProjectInfo`
+- [ ] **Test**: Lookup by name, by path, list all
 
 ---
 
-## Phase 1.7: Claude Code Bootstrap
+## Phase 2.4: Per-Project Configuration
 
-Configure containers for Claude Code operation.
+Load and manage project-specific configuration files.
 
-### 1.7.1 Default container image
-- [x] Create `Dockerfile` for default image
-- [x] Base: Ubuntu 24.04
-- [x] Install: Go, Node.js, Python, curl, git
-- [x] Install: Claude Code via native installer (`curl -fsSL https://claude.ai/install.sh | bash`)
-- [x] Verify `claude` is in PATH (likely `~/.claude/bin`)
-- [x] Create non-root user (UID 1000)
-- [x] Build and tag as `cloister-default:latest`
+### 2.4.1 Project config paths
+- [ ] Project configs stored at `~/.config/cloister/projects/<name>.yaml`
+- [ ] Implement `ProjectConfigPath(name string) string`
+- [ ] Ensure projects directory exists on first use
+- [ ] **Test**: Path generation is consistent
 
-### 1.7.2 User settings injection
-- [x] Copy host `~/.claude/` into container at creation time (one-way snapshot)
-- [x] Agent inherits user's settings, skills, memory, CLAUDE.md
-- [x] Writes inside container are isolated (no modification of host config)
-- [x] Handle missing `~/.claude/` gracefully (fresh install)
+### 2.4.2 Project config loading
+- [ ] Implement `LoadProjectConfig(name string) (*ProjectConfig, error)`
+- [ ] Return empty/default config if file doesn't exist
+- [ ] Validate remote URL matches registered project (warn on mismatch)
+- [ ] **Test**: Load existing config, load missing config, handle corrupt file
 
-### 1.7.3 Credential injection
-- [x] Pass `ANTHROPIC_API_KEY` from host if set
-- [x] Pass `CLAUDE_CODE_OAUTH_TOKEN` from host if set
-- [x] Document this is temporary (replaced in Phase 3)
+### 2.4.3 Project config creation
+- [ ] Implement `InitProjectConfig(info *ProjectInfo) error`
+- [ ] Create minimal project config with remote URL and root path
+- [ ] Don't overwrite existing config
+- [ ] **Test**: Creates file, preserves existing
 
-### 1.7.4 Claude Code configuration
-- [x] Create `~/.claude.json` in container with onboarding skipped
-- [x] Set up `claude --dangerously-skip-permissions` alias in bashrc
-- [x] Ensure proxy env vars visible to Claude process
+### 2.4.4 Project config editing
+- [ ] Implement `EditProjectConfig(name string) error`
+- [ ] Open config file in `$EDITOR` (fall back to `vi`)
+- [ ] Create minimal config first if doesn't exist
+- [ ] Validate config after edit, warn on errors
+- [ ] **Test**: Manual - opens in editor, warns on invalid
 
 ---
 
-## Phase 1.8: Integration and Polish
+## Phase 2.5: Config Merging
 
-End-to-end testing and cleanup.
+Merge global and project configs into effective configuration.
 
-### 1.8.1 Guardian container setup
-- [x] Create guardian Dockerfile (or use same binary in guardian mode)
-- [x] `cloister guardian` runs binary with `guardian` subcommand
-- [x] Guardian container exposes :3128 to `cloister-net`
-- [x] Guardian container name: `cloister-guardian`
+### 2.5.1 Allowlist merging
+- [ ] Create `internal/config/merge.go`
+- [ ] Project allowlist entries add to (not replace) global allowlist
+- [ ] Implement `MergeAllowlists(global, project []AllowEntry) []AllowEntry`
+- [ ] Deduplicate domains
+- [ ] **Test**: Merge with overlap, merge with additions only
 
-### 1.8.2 End-to-end integration
-- [x] **Test**: Full `cloister start` → shell → `curl` test → `exit` → `cloister stop`
-- [x] **Test**: Two concurrent cloisters with different tokens
-- [x] **Test**: Guardian restart while cloister running (tokens recovered from disk)
-- [x] Token persistence: `~/.config/cloister/tokens/<container-name>` (one file per cloister)
-- [x] Guardian mounts token dir read-only, recovers tokens on startup
+### 2.5.2 Command pattern merging
+- [ ] Project auto_approve patterns add to global patterns
+- [ ] Project manual_approve patterns add to global patterns
+- [ ] Implement `MergeCommandPatterns(global, project *CommandConfig) *CommandConfig`
+- [ ] **Test**: Pattern merging, no duplicates
 
-### 1.8.3 Behavior fixes and polish
-- [x] `cloister start` should attach to existing cloister, not error (per cli-workflows.md)
-- [x] Clarify cloister name vs container name distinction throughout codebase:
-  - Cloister name: `<project>` (main) or `<project>-<branch>` (worktree) — user-facing identifier
-  - Container name: `cloister-${cloister_name}` — internal Docker detail, derived from cloister name
-  - `cloister list` and all CLI output should show cloister names, not container names
-- [x] Fix `.claude.json`: add `"bypassPermissionsModeAccepted": true` to skip permission prompt
-- [x] Clear error when Docker not running
-- [x] Clear error when not in git repository
-- [x] Clear error when guardian fails to start
-- [x] Timeout handling for proxy connections
+### 2.5.3 Effective config resolution
+- [ ] Implement `ResolveConfig(project string) (*EffectiveConfig, error)`
+- [ ] Load global config
+- [ ] Load project config (if project provided)
+- [ ] Merge allowlists and patterns
+- [ ] Return merged effective config
+- [ ] **Test**: Resolution with project, resolution without project (global only)
 
-### 1.8.4 Documentation
-- [x] Update README with Phase 1 quick-start
-- [x] Document env var requirements (`ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`)
-- [x] Document known limitations (hardcoded allowlist)
-- [x] Document naming in specs: cloister name (`<project>`) vs container name (`cloister-<project>`)
+---
+
+## Phase 2.6: Guardian Integration
+
+Wire configuration into the guardian proxy.
+
+### 2.6.1 Allowlist from config
+- [ ] Modify `NewAllowlist` to accept config-derived domain list
+- [ ] Update `guardian.Server` to receive allowlist from config
+- [ ] Remove hardcoded `DefaultAllowedDomains` (or keep as fallback)
+- [ ] **Test**: Proxy uses config-derived allowlist
+
+### 2.6.2 Dynamic allowlist updates
+- [ ] Implement mechanism for guardian to receive updated allowlist
+- [ ] Option A: Guardian reloads config on SIGHUP
+- [ ] Option B: Guardian exposes endpoint to update allowlist
+- [ ] For Phase 2, prefer Option A (simpler, no API versioning concerns)
+- [ ] **Test**: Config change + SIGHUP → allowlist updated
+
+### 2.6.3 Per-cloister allowlist
+- [ ] Guardian stores per-cloister allowlist (project-specific additions)
+- [ ] Token registration includes project name
+- [ ] Proxy looks up cloister's project, uses merged allowlist
+- [ ] **Test**: Two cloisters, different projects, different allowlists
+
+---
+
+## Phase 2.7: CLI Commands
+
+Implement configuration and project management commands.
+
+### 2.7.1 `cloister config` command
+- [ ] Create `internal/cmd/config.go`
+- [ ] `config show`: Print current effective global config
+- [ ] `config edit`: Open global config in `$EDITOR`
+- [ ] `config path`: Print path to config file
+- [ ] `config init`: Create default config if missing
+- [ ] **Test**: Manual - commands work as expected
+
+### 2.7.2 `cloister project list` command
+- [ ] Create `internal/cmd/project.go`
+- [ ] List all registered projects
+- [ ] Show: name, root path, remote URL, last used
+- [ ] Format as table
+- [ ] **Test**: Manual - list shows registered projects
+
+### 2.7.3 `cloister project show` command
+- [ ] `project show <name>`: Show project details
+- [ ] Display: name, root, remote, effective allowlist additions
+- [ ] Show config file path
+- [ ] **Test**: Manual - show displays details
+
+### 2.7.4 `cloister project edit` command
+- [ ] `project edit <name>`: Open project config in `$EDITOR`
+- [ ] Auto-complete project names
+- [ ] **Test**: Manual - opens correct file
+
+### 2.7.5 `cloister project remove` command
+- [ ] `project remove <name>`: Remove project from registry
+- [ ] Optionally remove project config file (`--config` flag)
+- [ ] Don't remove if cloisters running for that project
+- [ ] **Test**: Manual - removes from registry, handles running cloisters
+
+### 2.7.6 Update `cloister start`
+- [ ] Auto-register project on first start
+- [ ] Load and apply project-specific allowlist
+- [ ] Pass project name to guardian on token registration
+- [ ] **Test**: Manual - start registers project, uses project allowlist
+
+---
+
+## Phase 2.8: Integration & Polish
+
+End-to-end testing and documentation.
+
+### 2.8.1 End-to-end integration
+- [ ] **Test**: Fresh install → default config created → cloister starts
+- [ ] **Test**: Add domain to project config → restart cloister → domain allowed
+- [ ] **Test**: Same domain denied for different project
+- [ ] **Test**: `project list` → `project show` → `project edit` workflow
+- [ ] **Test**: Config validation errors shown clearly
+
+### 2.8.2 Migration from Phase 1
+- [ ] Existing cloisters continue to work (backward compatible)
+- [ ] First run after upgrade creates default config
+- [ ] Token persistence (Phase 1.8.2) continues to work with config
+- [ ] Document upgrade path (none needed, automatic)
+
+### 2.8.3 Error handling improvements
+- [ ] Clear error when config file has syntax errors
+- [ ] Clear error when project not found in registry
+- [ ] Suggest `project list` when project lookup fails
+- [ ] Warn when config has unknown fields (typo detection)
+
+### 2.8.4 Documentation
+- [ ] Update README with config system overview
+- [ ] Update config-reference.md with any schema changes
+- [ ] Add examples for common configurations
+- [ ] Document allowlist best practices
 
 ---
 
 ## Not In Scope (Deferred to Later Phases)
-
-### Phase 2: Configuration System
-- Config file loading and merging
-- Project registry and auto-detection
-- Configurable allowlists
-- ~~Token persistence across guardian restarts~~ (moved to Phase 1.8.2)
 
 ### Phase 3: Claude Code Integration
 - `cloister setup claude` wizard
@@ -303,10 +330,24 @@ End-to-end testing and cleanup.
 
 ### Phase 4: Host Execution
 - hostexec wrapper
-- Request and approval servers
-- Approval web UI
+- Request server (:9998) and approval server (:9999)
+- Approval web UI with htmx
+- Auto-approve and manual-approve pattern execution
 
-### Future
-- Worktree support
-- Domain approval flow
-- Devcontainer integration
+### Phase 5: Worktree Support
+- `cloister start -b <branch>` creates managed worktrees
+- Worktree cleanup and management
+
+### Phase 6: Domain Approval Flow
+- Proxy holds connection for unlisted domains
+- Interactive domain approval with persistence options
+
+### Phase 7: Polish
+- Shell completion
+- Read-only reference mounts
+- Audit logging
+- Detached mode, non-git support
+
+### Future: Devcontainer Integration
+- Devcontainer.json discovery and image building
+- Security overrides for mounts and capabilities
