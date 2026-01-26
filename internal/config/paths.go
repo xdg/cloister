@@ -1,0 +1,58 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// ConfigDir returns the cloister configuration directory path.
+// By default, this is ~/.config/cloister/. If the XDG_CONFIG_HOME
+// environment variable is set, it uses $XDG_CONFIG_HOME/cloister/ instead.
+// The returned path always has a trailing slash.
+func ConfigDir() string {
+	base := os.Getenv("XDG_CONFIG_HOME")
+	if base == "" {
+		base = "~/.config"
+	}
+	return expandHome(base) + "/cloister/"
+}
+
+// EnsureConfigDir creates the cloister configuration directory if it
+// doesn't exist. It uses 0700 permissions for security (user-only access).
+// Returns nil if the directory already exists or was successfully created.
+func EnsureConfigDir() error {
+	return os.MkdirAll(ConfigDir(), 0700)
+}
+
+// GlobalConfigPath returns the full path to the global configuration file.
+// This is ConfigDir() + "config.yaml".
+func GlobalConfigPath() string {
+	return ConfigDir() + "config.yaml"
+}
+
+// ProjectsDir returns the path to the projects configuration directory.
+// This is ConfigDir() + "projects/".
+func ProjectsDir() string {
+	return ConfigDir() + "projects/"
+}
+
+// expandHome replaces a leading ~ in path with the user's home directory.
+// If the home directory cannot be determined, the path is returned unchanged.
+func expandHome(path string) string {
+	if path == "~" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return home
+	}
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
+}

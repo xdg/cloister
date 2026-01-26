@@ -99,32 +99,32 @@ Define Go types for configuration and implement YAML parsing.
 Load global configuration from `~/.config/cloister/config.yaml`.
 
 ### 2.2.1 Config directory management
-- [ ] Create `internal/config/paths.go`
-- [ ] Implement `ConfigDir() string` returning `~/.config/cloister/`
-- [ ] Implement `EnsureConfigDir() error` creating directory if missing
-- [ ] Handle `XDG_CONFIG_HOME` override
-- [ ] **Test**: Path resolution with/without XDG override
+- [x] Create `internal/config/paths.go`
+- [x] Implement `ConfigDir() string` returning `~/.config/cloister/`
+- [x] Implement `EnsureConfigDir() error` creating directory if missing
+- [x] Handle `XDG_CONFIG_HOME` override
+- [x] **Test**: Path resolution with/without XDG override
 
 ### 2.2.2 Default config generation
-- [ ] Create `internal/config/defaults.go`
-- [ ] Define `DefaultGlobalConfig()` with full default allowlist from spec
-- [ ] Include all documentation sites, package registries, AI APIs
-- [ ] Set sensible defaults for timeouts, rate limits, etc.
-- [ ] **Test**: Default config is valid, contains expected domains
+- [x] Create `internal/config/defaults.go`
+- [x] Define `DefaultGlobalConfig()` with full default allowlist from spec
+- [x] Include all documentation sites, package registries, AI APIs
+- [x] Set sensible defaults for timeouts, rate limits, etc.
+- [x] **Test**: Default config is valid, contains expected domains
 
 ### 2.2.3 Config file loading
-- [ ] Create `internal/config/load.go`
-- [ ] Implement `LoadGlobalConfig() (*GlobalConfig, error)`
-- [ ] Return default config if file doesn't exist
-- [ ] Expand `~` in paths to actual home directory
-- [ ] Log config file path used for debugging
-- [ ] **Test**: Load existing config, load missing config (use defaults), handle corrupt file
+- [x] Create `internal/config/load.go`
+- [x] Implement `LoadGlobalConfig() (*GlobalConfig, error)`
+- [x] Return default config if file doesn't exist
+- [x] Expand `~` in paths to actual home directory
+- [x] Log config file path used for debugging
+- [x] **Test**: Load existing config, load missing config (use defaults), handle corrupt file
 
 ### 2.2.4 Config file creation
-- [ ] Implement `WriteDefaultConfig() error` to create initial config.yaml
-- [ ] Write commented YAML with documentation
-- [ ] Only create if file doesn't exist (don't overwrite)
-- [ ] **Test**: Creates file with expected content, doesn't overwrite existing
+- [x] Implement `WriteDefaultConfig() error` to create initial config.yaml
+- [x] Write commented YAML with documentation
+- [x] Only create if file doesn't exist (don't overwrite)
+- [x] **Test**: Creates file with expected content, doesn't overwrite existing
 
 ---
 

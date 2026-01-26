@@ -1,0 +1,104 @@
+package config
+
+import (
+	"errors"
+	"fmt"
+	"log"
+	"os"
+)
+
+// LoadGlobalConfig loads the global configuration from the default config path.
+// If the config file doesn't exist, it returns DefaultGlobalConfig().
+// If the file exists but cannot be read or parsed, it returns an error.
+// All paths containing ~ are expanded to the actual home directory.
+func LoadGlobalConfig() (*GlobalConfig, error) {
+	path := GlobalConfigPath()
+	log.Printf("config: loading global config from %s", path)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("config: file not found, using defaults")
+			cfg := DefaultGlobalConfig()
+			expandGlobalPaths(cfg)
+			return cfg, nil
+		}
+		return nil, fmt.Errorf("read global config: %w", err)
+	}
+
+	cfg, err := ParseGlobalConfig(data)
+	if err != nil {
+		return nil, fmt.Errorf("load global config: %w", err)
+	}
+
+	if err := ValidateGlobalConfig(cfg); err != nil {
+		return nil, fmt.Errorf("load global config: %w", err)
+	}
+
+	expandGlobalPaths(cfg)
+	return cfg, nil
+}
+
+// LoadProjectConfig loads a project configuration by name.
+// The config file is expected at ProjectsDir() + name + ".yaml".
+// If the config file doesn't exist, it returns DefaultProjectConfig().
+// If the file exists but cannot be read or parsed, it returns an error.
+// All paths containing ~ are expanded to the actual home directory.
+func LoadProjectConfig(name string) (*ProjectConfig, error) {
+	path := ProjectsDir() + name + ".yaml"
+	log.Printf("config: loading project config from %s", path)
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			log.Printf("config: file not found, using defaults")
+			cfg := DefaultProjectConfig()
+			expandProjectPaths(cfg)
+			return cfg, nil
+		}
+		return nil, fmt.Errorf("read project config %q: %w", name, err)
+	}
+
+	cfg, err := ParseProjectConfig(data)
+	if err != nil {
+		return nil, fmt.Errorf("load project config %q: %w", name, err)
+	}
+
+	if err := ValidateProjectConfig(cfg); err != nil {
+		return nil, fmt.Errorf("load project config %q: %w", name, err)
+	}
+
+	expandProjectPaths(cfg)
+	return cfg, nil
+}
+
+// expandGlobalPaths expands ~ to the home directory in all path fields
+// of the global configuration.
+func expandGlobalPaths(cfg *GlobalConfig) {
+	// Expand log paths
+	cfg.Log.File = expandHome(cfg.Log.File)
+	cfg.Log.PerCloisterDir = expandHome(cfg.Log.PerCloisterDir)
+
+	// Expand agent config mount paths
+	for name, agent := range cfg.Agents {
+		agent.ConfigMount = expandHome(agent.ConfigMount)
+		cfg.Agents[name] = agent
+	}
+
+	// Expand blocked mount paths
+	for i, mount := range cfg.Devcontainer.BlockedMounts {
+		cfg.Devcontainer.BlockedMounts[i] = expandHome(mount)
+	}
+}
+
+// expandProjectPaths expands ~ to the home directory in all path fields
+// of the project configuration.
+func expandProjectPaths(cfg *ProjectConfig) {
+	// Expand root path
+	cfg.Root = expandHome(cfg.Root)
+
+	// Expand refs paths
+	for i, ref := range cfg.Refs {
+		cfg.Refs[i] = expandHome(ref)
+	}
+}

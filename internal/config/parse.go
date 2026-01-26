@@ -46,3 +46,8 @@ func strictUnmarshal(data []byte, v any) error {
 	}
 	return err
 }
+
+// MarshalProjectConfig marshals a ProjectConfig struct to YAML.
+func MarshalProjectConfig(cfg *ProjectConfig) ([]byte, error) {
+	return yaml.Marshal(cfg)
+}
