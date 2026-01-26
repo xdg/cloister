@@ -862,6 +862,145 @@ func TestLookup_NotFound(t *testing.T) {
 	}
 }
 
+func TestRegistry_Remove(t *testing.T) {
+	testTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+	reg := &Registry{
+		Projects: []RegistryEntry{
+			{
+				Name:     "project-alpha",
+				Root:     "/home/user/repos/alpha",
+				Remote:   "git@github.com:user/alpha.git",
+				LastUsed: testTime,
+			},
+			{
+				Name:     "project-beta",
+				Root:     "/home/user/repos/beta",
+				Remote:   "git@github.com:user/beta.git",
+				LastUsed: testTime.Add(time.Hour),
+			},
+			{
+				Name:     "project-gamma",
+				Root:     "/home/user/repos/gamma",
+				Remote:   "git@github.com:user/gamma.git",
+				LastUsed: testTime.Add(2 * time.Hour),
+			},
+		},
+	}
+
+	// Remove middle project
+	err := reg.Remove("project-beta")
+	if err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+
+	// Should have 2 projects left
+	if len(reg.Projects) != 2 {
+		t.Fatalf("expected 2 projects after removal, got %d", len(reg.Projects))
+	}
+
+	// project-beta should be gone
+	if reg.FindByName("project-beta") != nil {
+		t.Error("project-beta should have been removed")
+	}
+
+	// Other projects should still exist
+	if reg.FindByName("project-alpha") == nil {
+		t.Error("project-alpha should still exist")
+	}
+	if reg.FindByName("project-gamma") == nil {
+		t.Error("project-gamma should still exist")
+	}
+}
+
+func TestRegistry_Remove_NotFound(t *testing.T) {
+	reg := &Registry{
+		Projects: []RegistryEntry{
+			{
+				Name:     "existing-project",
+				Root:     "/home/user/repos/existing",
+				Remote:   "git@github.com:user/existing.git",
+				LastUsed: time.Now(),
+			},
+		},
+	}
+
+	err := reg.Remove("non-existent")
+	if err == nil {
+		t.Fatal("expected error for non-existent project")
+	}
+	if !errors.Is(err, ErrProjectNotFound) {
+		t.Errorf("expected ErrProjectNotFound, got %v", err)
+	}
+
+	// Registry should be unchanged
+	if len(reg.Projects) != 1 {
+		t.Errorf("expected 1 project (unchanged), got %d", len(reg.Projects))
+	}
+}
+
+func TestRegistry_Remove_LastProject(t *testing.T) {
+	reg := &Registry{
+		Projects: []RegistryEntry{
+			{
+				Name:     "only-project",
+				Root:     "/home/user/repos/only",
+				Remote:   "git@github.com:user/only.git",
+				LastUsed: time.Now(),
+			},
+		},
+	}
+
+	err := reg.Remove("only-project")
+	if err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+
+	// Should have 0 projects
+	if len(reg.Projects) != 0 {
+		t.Fatalf("expected 0 projects after removal, got %d", len(reg.Projects))
+	}
+}
+
+func TestRegistry_Remove_FirstProject(t *testing.T) {
+	testTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+	reg := &Registry{
+		Projects: []RegistryEntry{
+			{
+				Name:     "first-project",
+				Root:     "/home/user/repos/first",
+				Remote:   "git@github.com:user/first.git",
+				LastUsed: testTime,
+			},
+			{
+				Name:     "second-project",
+				Root:     "/home/user/repos/second",
+				Remote:   "git@github.com:user/second.git",
+				LastUsed: testTime.Add(time.Hour),
+			},
+		},
+	}
+
+	err := reg.Remove("first-project")
+	if err != nil {
+		t.Fatalf("Remove() error = %v", err)
+	}
+
+	// Should have 1 project left
+	if len(reg.Projects) != 1 {
+		t.Fatalf("expected 1 project after removal, got %d", len(reg.Projects))
+	}
+
+	// first-project should be gone
+	if reg.FindByName("first-project") != nil {
+		t.Error("first-project should have been removed")
+	}
+
+	// second-project should still exist
+	if reg.FindByName("second-project") == nil {
+		t.Error("second-project should still exist")
+	}
+}
+
 func TestLookupByPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)

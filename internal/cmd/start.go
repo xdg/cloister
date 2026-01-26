@@ -51,17 +51,45 @@ func runStart(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to detect git branch: %w", err)
 	}
 
-	// Step 3: Get project name
+	// Step 3: Get project name and remote URL
 	projectName, err := project.ProjectName(gitRoot)
 	if err != nil {
 		return fmt.Errorf("failed to determine project name: %w", err)
+	}
+	remoteURL := project.GetRemoteURL(gitRoot)
+
+	// Step 4: Auto-register project in registry
+	reg, err := project.LoadRegistry()
+	if err != nil {
+		// Log warning but continue - registry is not critical for operation
+		fmt.Fprintf(os.Stderr, "Warning: failed to load project registry: %v\n", err)
+	} else {
+		info := &project.ProjectInfo{
+			Name:   projectName,
+			Root:   gitRoot,
+			Remote: remoteURL,
+			Branch: branch,
+		}
+		if err := reg.Register(info); err != nil {
+			// Check for name collision
+			var collisionErr *project.NameCollisionError
+			if errors.As(err, &collisionErr) {
+				fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+			} else {
+				fmt.Fprintf(os.Stderr, "Warning: failed to register project: %v\n", err)
+			}
+		} else {
+			if err := project.SaveRegistry(reg); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to save project registry: %v\n", err)
+			}
+		}
 	}
 
 	// Compute cloister name (user-facing) and container name (Docker internal)
 	cloisterName := container.GenerateCloisterName(projectName)
 	containerName := container.CloisterNameToContainerName(cloisterName)
 
-	// Step 4: Start the cloister container
+	// Step 5: Start the cloister container
 	_, tok, err := cloister.Start(cloister.StartOptions{
 		ProjectPath: gitRoot,
 		ProjectName: projectName,
@@ -100,18 +128,18 @@ func runStart(cmd *cobra.Command, args []string) error {
 	fmt.Println("Attaching interactive shell...")
 	fmt.Println()
 
-	// Step 5: Attach interactive shell
+	// Step 6: Attach interactive shell
 	exitCode, err := cloister.Attach(containerName)
 	if err != nil {
 		return fmt.Errorf("failed to attach to cloister: %w", err)
 	}
 
-	// Step 6: Print exit message
+	// Step 7: Print exit message
 	fmt.Println()
 	fmt.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
 	fmt.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
 
-	// Step 7: Propagate shell exit code
+	// Step 8: Propagate shell exit code
 	if exitCode != 0 {
 		os.Exit(exitCode)
 	}

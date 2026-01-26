@@ -225,6 +225,21 @@ func (r *Registry) List() []RegistryEntry {
 	return result
 }
 
+// Remove removes a project from the registry by name.
+// Returns ErrProjectNotFound if no project with that name exists.
+// This method modifies the registry in-memory; the caller must call SaveRegistry to persist.
+func (r *Registry) Remove(name string) error {
+	for i := range r.Projects {
+		if r.Projects[i].Name == name {
+			// Remove by replacing with last element and truncating
+			r.Projects[i] = r.Projects[len(r.Projects)-1]
+			r.Projects = r.Projects[:len(r.Projects)-1]
+			return nil
+		}
+	}
+	return ErrProjectNotFound
+}
+
 // Lookup loads the registry from disk and finds a project by name.
 // Returns ErrProjectNotFound if the project does not exist.
 func Lookup(name string) (*RegistryEntry, error) {
