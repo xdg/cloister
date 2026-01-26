@@ -199,25 +199,25 @@ Load and manage project-specific configuration files.
 Merge global and project configs into effective configuration.
 
 ### 2.5.1 Allowlist merging
-- [ ] Create `internal/config/merge.go`
-- [ ] Project allowlist entries add to (not replace) global allowlist
-- [ ] Implement `MergeAllowlists(global, project []AllowEntry) []AllowEntry`
-- [ ] Deduplicate domains
-- [ ] **Test**: Merge with overlap, merge with additions only
+- [x] Create `internal/config/merge.go`
+- [x] Project allowlist entries add to (not replace) global allowlist
+- [x] Implement `MergeAllowlists(global, project []AllowEntry) []AllowEntry`
+- [x] Deduplicate domains
+- [x] **Test**: Merge with overlap, merge with additions only
 
 ### 2.5.2 Command pattern merging
-- [ ] Project auto_approve patterns add to global patterns
-- [ ] Project manual_approve patterns add to global patterns
-- [ ] Implement `MergeCommandPatterns(global, project *CommandConfig) *CommandConfig`
-- [ ] **Test**: Pattern merging, no duplicates
+- [x] Project auto_approve patterns add to global patterns
+- [x] Project manual_approve patterns add to global patterns
+- [x] Implement `MergeCommandPatterns(global, project *CommandConfig) *CommandConfig`
+- [x] **Test**: Pattern merging, no duplicates
 
 ### 2.5.3 Effective config resolution
-- [ ] Implement `ResolveConfig(project string) (*EffectiveConfig, error)`
-- [ ] Load global config
-- [ ] Load project config (if project provided)
-- [ ] Merge allowlists and patterns
-- [ ] Return merged effective config
-- [ ] **Test**: Resolution with project, resolution without project (global only)
+- [x] Implement `ResolveConfig(project string) (*EffectiveConfig, error)`
+- [x] Load global config
+- [x] Load project config (if project provided)
+- [x] Merge allowlists and patterns
+- [x] Return merged effective config
+- [x] **Test**: Resolution with project, resolution without project (global only)
 
 ---
 

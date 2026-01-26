@@ -1,0 +1,397 @@
+package config
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestMergeAllowlists_Empty(t *testing.T) {
+	result := MergeAllowlists(nil, nil)
+	if result != nil {
+		t.Errorf("MergeAllowlists(nil, nil) = %v, want nil", result)
+	}
+
+	result = MergeAllowlists([]AllowEntry{}, []AllowEntry{})
+	if result != nil {
+		t.Errorf("MergeAllowlists([], []) = %v, want nil", result)
+	}
+}
+
+func TestMergeAllowlists_GlobalOnly(t *testing.T) {
+	global := []AllowEntry{
+		{Domain: "example.com"},
+		{Domain: "api.example.com"},
+	}
+
+	result := MergeAllowlists(global, nil)
+	if len(result) != 2 {
+		t.Fatalf("len(result) = %d, want 2", len(result))
+	}
+	if result[0].Domain != "example.com" {
+		t.Errorf("result[0].Domain = %q, want %q", result[0].Domain, "example.com")
+	}
+	if result[1].Domain != "api.example.com" {
+		t.Errorf("result[1].Domain = %q, want %q", result[1].Domain, "api.example.com")
+	}
+}
+
+func TestMergeAllowlists_ProjectOnly(t *testing.T) {
+	project := []AllowEntry{
+		{Domain: "project.example.com"},
+		{Domain: "docs.project.com"},
+	}
+
+	result := MergeAllowlists(nil, project)
+	if len(result) != 2 {
+		t.Fatalf("len(result) = %d, want 2", len(result))
+	}
+	if result[0].Domain != "project.example.com" {
+		t.Errorf("result[0].Domain = %q, want %q", result[0].Domain, "project.example.com")
+	}
+	if result[1].Domain != "docs.project.com" {
+		t.Errorf("result[1].Domain = %q, want %q", result[1].Domain, "docs.project.com")
+	}
+}
+
+func TestMergeAllowlists_Merge(t *testing.T) {
+	global := []AllowEntry{
+		{Domain: "golang.org"},
+		{Domain: "api.anthropic.com"},
+	}
+	project := []AllowEntry{
+		{Domain: "custom.example.com"},
+		{Domain: "internal.corp.com"},
+	}
+
+	result := MergeAllowlists(global, project)
+	if len(result) != 4 {
+		t.Fatalf("len(result) = %d, want 4", len(result))
+	}
+
+	// Verify order: global entries first, then project entries
+	expected := []string{"golang.org", "api.anthropic.com", "custom.example.com", "internal.corp.com"}
+	for i, want := range expected {
+		if result[i].Domain != want {
+			t.Errorf("result[%d].Domain = %q, want %q", i, result[i].Domain, want)
+		}
+	}
+}
+
+func TestMergeAllowlists_Dedup(t *testing.T) {
+	global := []AllowEntry{
+		{Domain: "golang.org"},
+		{Domain: "api.anthropic.com"},
+		{Domain: "shared.example.com"},
+	}
+	project := []AllowEntry{
+		{Domain: "shared.example.com"}, // Duplicate
+		{Domain: "golang.org"},         // Duplicate
+		{Domain: "unique.project.com"},
+	}
+
+	result := MergeAllowlists(global, project)
+	if len(result) != 4 {
+		t.Fatalf("len(result) = %d, want 4", len(result))
+	}
+
+	// Verify duplicates are removed, keeping global order
+	expected := []string{"golang.org", "api.anthropic.com", "shared.example.com", "unique.project.com"}
+	for i, want := range expected {
+		if result[i].Domain != want {
+			t.Errorf("result[%d].Domain = %q, want %q", i, result[i].Domain, want)
+		}
+	}
+}
+
+func TestMergeCommandPatterns_Merge(t *testing.T) {
+	global := []CommandPattern{
+		{Pattern: "^docker compose ps$"},
+		{Pattern: "^docker compose logs.*$"},
+	}
+	project := []CommandPattern{
+		{Pattern: "^make test$"},
+		{Pattern: "^npm run build$"},
+	}
+
+	result := MergeCommandPatterns(global, project)
+	if len(result) != 4 {
+		t.Fatalf("len(result) = %d, want 4", len(result))
+	}
+
+	// Verify order: global patterns first, then project patterns
+	expected := []string{"^docker compose ps$", "^docker compose logs.*$", "^make test$", "^npm run build$"}
+	for i, want := range expected {
+		if result[i].Pattern != want {
+			t.Errorf("result[%d].Pattern = %q, want %q", i, result[i].Pattern, want)
+		}
+	}
+}
+
+func TestMergeCommandPatterns_Dedup(t *testing.T) {
+	global := []CommandPattern{
+		{Pattern: "^docker compose ps$"},
+		{Pattern: "^make test$"},
+	}
+	project := []CommandPattern{
+		{Pattern: "^make test$"},         // Duplicate
+		{Pattern: "^docker compose ps$"}, // Duplicate
+		{Pattern: "^npm run lint$"},
+	}
+
+	result := MergeCommandPatterns(global, project)
+	if len(result) != 3 {
+		t.Fatalf("len(result) = %d, want 3", len(result))
+	}
+
+	// Verify duplicates are removed, keeping global order
+	expected := []string{"^docker compose ps$", "^make test$", "^npm run lint$"}
+	for i, want := range expected {
+		if result[i].Pattern != want {
+			t.Errorf("result[%d].Pattern = %q, want %q", i, result[i].Pattern, want)
+		}
+	}
+}
+
+func TestMergeCommandPatterns_Empty(t *testing.T) {
+	result := MergeCommandPatterns(nil, nil)
+	if result != nil {
+		t.Errorf("MergeCommandPatterns(nil, nil) = %v, want nil", result)
+	}
+
+	result = MergeCommandPatterns([]CommandPattern{}, []CommandPattern{})
+	if result != nil {
+		t.Errorf("MergeCommandPatterns([], []) = %v, want nil", result)
+	}
+}
+
+func TestResolveConfig_GlobalOnly(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// No project name, should return global-only config
+	cfg, err := ResolveConfig("")
+	if err != nil {
+		t.Fatalf("ResolveConfig(\"\") error = %v", err)
+	}
+
+	// Verify global values are present
+	if cfg.ProxyListen != ":3128" {
+		t.Errorf("cfg.ProxyListen = %q, want %q", cfg.ProxyListen, ":3128")
+	}
+	if cfg.Agent != "claude" {
+		t.Errorf("cfg.Agent = %q, want %q", cfg.Agent, "claude")
+	}
+	if cfg.RateLimit != 120 {
+		t.Errorf("cfg.RateLimit = %d, want %d", cfg.RateLimit, 120)
+	}
+
+	// Verify allowlist contains default entries
+	if len(cfg.Allow) == 0 {
+		t.Error("cfg.Allow should not be empty")
+	}
+
+	// Verify project-specific fields are empty
+	if cfg.ProjectName != "" {
+		t.Errorf("cfg.ProjectName = %q, want empty", cfg.ProjectName)
+	}
+	if cfg.ProjectRoot != "" {
+		t.Errorf("cfg.ProjectRoot = %q, want empty", cfg.ProjectRoot)
+	}
+}
+
+func TestResolveConfig_WithProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Create project config directory
+	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
+	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+
+	// Create project config with additional allowlist and commands
+	projectContent := `
+remote: "git@github.com:example/myproject.git"
+root: "/projects/myproject"
+refs:
+  - "/docs/api-spec"
+proxy:
+  allow:
+    - domain: "custom.myproject.com"
+    - domain: "internal.corp.net"
+commands:
+  auto_approve:
+    - pattern: "^make test$"
+    - pattern: "^npm run build$"
+`
+	projectPath := filepath.Join(projectsDir, "myproject.yaml")
+	if err := os.WriteFile(projectPath, []byte(projectContent), 0600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cfg, err := ResolveConfig("myproject")
+	if err != nil {
+		t.Fatalf("ResolveConfig(\"myproject\") error = %v", err)
+	}
+
+	// Verify global values are still present
+	if cfg.ProxyListen != ":3128" {
+		t.Errorf("cfg.ProxyListen = %q, want %q", cfg.ProxyListen, ":3128")
+	}
+	if cfg.Agent != "claude" {
+		t.Errorf("cfg.Agent = %q, want %q", cfg.Agent, "claude")
+	}
+
+	// Verify project-specific fields
+	if cfg.ProjectName != "myproject" {
+		t.Errorf("cfg.ProjectName = %q, want %q", cfg.ProjectName, "myproject")
+	}
+	if cfg.ProjectRoot != "/projects/myproject" {
+		t.Errorf("cfg.ProjectRoot = %q, want %q", cfg.ProjectRoot, "/projects/myproject")
+	}
+	if cfg.ProjectRemote != "git@github.com:example/myproject.git" {
+		t.Errorf("cfg.ProjectRemote = %q, want %q", cfg.ProjectRemote, "git@github.com:example/myproject.git")
+	}
+	if len(cfg.ProjectRefs) != 1 || cfg.ProjectRefs[0] != "/docs/api-spec" {
+		t.Errorf("cfg.ProjectRefs = %v, want %v", cfg.ProjectRefs, []string{"/docs/api-spec"})
+	}
+
+	// Verify merged allowlist contains both global and project entries
+	// Global has defaults like "golang.org", "api.anthropic.com"
+	// Project adds "custom.myproject.com", "internal.corp.net"
+	foundGolang := false
+	foundCustom := false
+	for _, entry := range cfg.Allow {
+		if entry.Domain == "golang.org" {
+			foundGolang = true
+		}
+		if entry.Domain == "custom.myproject.com" {
+			foundCustom = true
+		}
+	}
+	if !foundGolang {
+		t.Error("cfg.Allow should contain global entry 'golang.org'")
+	}
+	if !foundCustom {
+		t.Error("cfg.Allow should contain project entry 'custom.myproject.com'")
+	}
+
+	// Verify merged auto_approve patterns
+	// Global has "^docker compose ps$", "^docker compose logs.*$"
+	// Project adds "^make test$", "^npm run build$"
+	foundDockerPs := false
+	foundMakeTest := false
+	for _, pattern := range cfg.AutoApprove {
+		if pattern.Pattern == "^docker compose ps$" {
+			foundDockerPs = true
+		}
+		if pattern.Pattern == "^make test$" {
+			foundMakeTest = true
+		}
+	}
+	if !foundDockerPs {
+		t.Error("cfg.AutoApprove should contain global pattern '^docker compose ps$'")
+	}
+	if !foundMakeTest {
+		t.Error("cfg.AutoApprove should contain project pattern '^make test$'")
+	}
+}
+
+func TestResolveConfig_ProjectNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Project doesn't exist, should use default (empty) project config
+	cfg, err := ResolveConfig("nonexistent-project")
+	if err != nil {
+		t.Fatalf("ResolveConfig(\"nonexistent-project\") error = %v", err)
+	}
+
+	// Verify global values are present
+	if cfg.ProxyListen != ":3128" {
+		t.Errorf("cfg.ProxyListen = %q, want %q", cfg.ProxyListen, ":3128")
+	}
+
+	// Verify project name is set even though config doesn't exist
+	if cfg.ProjectName != "nonexistent-project" {
+		t.Errorf("cfg.ProjectName = %q, want %q", cfg.ProjectName, "nonexistent-project")
+	}
+
+	// Verify project-specific fields are empty (default project config)
+	if cfg.ProjectRoot != "" {
+		t.Errorf("cfg.ProjectRoot = %q, want empty", cfg.ProjectRoot)
+	}
+	if cfg.ProjectRemote != "" {
+		t.Errorf("cfg.ProjectRemote = %q, want empty", cfg.ProjectRemote)
+	}
+
+	// Verify allowlist is global-only (no project additions)
+	// Since project config is empty, merged list equals global list
+	if len(cfg.Allow) == 0 {
+		t.Error("cfg.Allow should contain global default entries")
+	}
+
+	// Verify no project-specific domains were added
+	for _, entry := range cfg.Allow {
+		// All entries should be from the global defaults
+		if entry.Domain == "custom.myproject.com" {
+			t.Error("cfg.Allow should not contain project-specific domains for nonexistent project")
+		}
+	}
+}
+
+func TestResolveConfig_MergeDedup(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Create project config directory
+	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
+	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+
+	// Create project config with overlapping entries
+	projectContent := `
+remote: "git@github.com:example/dedup.git"
+proxy:
+  allow:
+    - domain: "golang.org"
+    - domain: "unique.project.com"
+commands:
+  auto_approve:
+    - pattern: "^docker compose ps$"
+    - pattern: "^project-specific$"
+`
+	projectPath := filepath.Join(projectsDir, "dedup-test.yaml")
+	if err := os.WriteFile(projectPath, []byte(projectContent), 0600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	cfg, err := ResolveConfig("dedup-test")
+	if err != nil {
+		t.Fatalf("ResolveConfig(\"dedup-test\") error = %v", err)
+	}
+
+	// Count occurrences of "golang.org" in allowlist
+	golangCount := 0
+	for _, entry := range cfg.Allow {
+		if entry.Domain == "golang.org" {
+			golangCount++
+		}
+	}
+	if golangCount != 1 {
+		t.Errorf("'golang.org' appears %d times in allowlist, want 1", golangCount)
+	}
+
+	// Count occurrences of "^docker compose ps$" in auto_approve
+	dockerPsCount := 0
+	for _, pattern := range cfg.AutoApprove {
+		if pattern.Pattern == "^docker compose ps$" {
+			dockerPsCount++
+		}
+	}
+	if dockerPsCount != 1 {
+		t.Errorf("'^docker compose ps$' appears %d times in auto_approve, want 1", dockerPsCount)
+	}
+}
