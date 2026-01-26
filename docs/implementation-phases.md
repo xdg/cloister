@@ -15,6 +15,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - Guardian container with HTTP CONNECT proxy (:3128)
 - Minimal hardcoded allowlist: `api.anthropic.com`, `api.openai.com`, `generativelanguage.googleapis.com`
 - Per-cloister tokens (generated at start, passed via env)
+- Token persistence (`~/.config/cloister/tokens/`) to survive guardian restarts
 - Proxy authentication via `Proxy-Authorization` header
 - Basic container launch with project bind-mounted at `/work`
 - Default container image (Ubuntu + Go/Node/Python/Claude CLI)
@@ -46,7 +47,6 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - Project auto-detection from git repos (name from directory basename)
 - Project registry (maps names to paths)
 - Per-project allowlist merging with global
-- Token persistence (`~/.config/cloister/tokens/`) to survive guardian restarts
 - CLI: `project list/show/edit/remove`, `config` command for settings
 
 **Verification:**
