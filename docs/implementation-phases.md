@@ -6,7 +6,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 
 ---
 
-## Phase 1: Minimal Viable Cloister with Guardian
+## Phase 1: Minimal Viable Cloister with Guardian (COMPLETE)
 
 **Goal:** `cloister start` launches a sandboxed container with guardian-proxied networking.
 
