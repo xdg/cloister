@@ -314,3 +314,206 @@ func TestSentinelErrors(t *testing.T) {
 		}
 	})
 }
+
+func TestDetectProject_Valid(t *testing.T) {
+	// This test runs in the cloister repo itself
+	info, err := DetectProject("")
+	if err != nil {
+		if errors.Is(err, ErrGitNotInstalled) {
+			t.Skip("git not installed")
+		}
+		t.Fatalf("DetectProject failed: %v", err)
+	}
+
+	// Should return the project info
+	if info == nil {
+		t.Fatal("expected non-nil ProjectInfo")
+	}
+
+	// Name should be "cloister"
+	if info.Name != "cloister" {
+		t.Errorf("expected project name 'cloister', got %q", info.Name)
+	}
+
+	// Root should be an absolute path
+	if !filepath.IsAbs(info.Root) {
+		t.Errorf("expected absolute path for Root, got %q", info.Root)
+	}
+
+	// Root should contain "cloister"
+	if !strings.Contains(info.Root, "cloister") {
+		t.Errorf("expected Root to contain 'cloister', got %q", info.Root)
+	}
+
+	// Branch should be non-empty
+	if info.Branch == "" {
+		t.Error("expected non-empty Branch")
+	}
+
+	// Remote should contain "cloister" (the cloister repo has a remote)
+	if !strings.Contains(info.Remote, "cloister") {
+		t.Errorf("expected Remote to contain 'cloister', got %q", info.Remote)
+	}
+}
+
+func TestDetectProject_Subdirectory(t *testing.T) {
+	// Get the current repo root first
+	root, err := DetectGitRoot("")
+	if err != nil {
+		if errors.Is(err, ErrGitNotInstalled) {
+			t.Skip("git not installed")
+		}
+		t.Skip("not in a git repo")
+	}
+
+	// Detect from a subdirectory
+	subDir := filepath.Join(root, "internal", "project")
+	info, err := DetectProject(subDir)
+	if err != nil {
+		t.Fatalf("DetectProject from subdirectory failed: %v", err)
+	}
+
+	// Should return the same root
+	if info.Root != root {
+		t.Errorf("expected Root %q from subdirectory, got %q", root, info.Root)
+	}
+
+	// Name should still be "cloister"
+	if info.Name != "cloister" {
+		t.Errorf("expected project name 'cloister', got %q", info.Name)
+	}
+}
+
+func TestDetectProject_NoRemote(t *testing.T) {
+	// Create a temporary git repo without a remote
+	tmpDir, err := os.MkdirTemp("", "test-no-remote-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Initialize git repo
+	if _, err := runGit(tmpDir, "init"); err != nil {
+		if errors.Is(err, ErrGitNotInstalled) {
+			t.Skip("git not installed")
+		}
+		t.Fatalf("git init failed: %v", err)
+	}
+
+	// Configure user for commit
+	if _, err := runGit(tmpDir, "config", "user.email", "test@test.com"); err != nil {
+		t.Fatalf("git config user.email failed: %v", err)
+	}
+	if _, err := runGit(tmpDir, "config", "user.name", "Test User"); err != nil {
+		t.Fatalf("git config user.name failed: %v", err)
+	}
+
+	// Create an initial commit so we have a branch
+	testFile := filepath.Join(tmpDir, "test.txt")
+	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+		t.Fatalf("failed to write test file: %v", err)
+	}
+	if _, err := runGit(tmpDir, "add", "test.txt"); err != nil {
+		t.Fatalf("git add failed: %v", err)
+	}
+	if _, err := runGit(tmpDir, "commit", "-m", "initial commit"); err != nil {
+		t.Fatalf("git commit failed: %v", err)
+	}
+
+	// Detect project
+	info, err := DetectProject(tmpDir)
+	if err != nil {
+		t.Fatalf("DetectProject failed: %v", err)
+	}
+
+	// Remote should be empty
+	if info.Remote != "" {
+		t.Errorf("expected empty Remote, got %q", info.Remote)
+	}
+
+	// Name should be the directory name (starts with "test-no-remote-")
+	if !strings.HasPrefix(info.Name, "test-no-remote-") {
+		t.Errorf("expected project name starting with 'test-no-remote-', got %q", info.Name)
+	}
+
+	// Branch should be non-empty (probably "master" or "main")
+	if info.Branch == "" {
+		t.Error("expected non-empty Branch")
+	}
+}
+
+func TestDetectProject_NotGitRepo(t *testing.T) {
+	// Create a temporary directory that is not a git repo
+	tmpDir, err := os.MkdirTemp("", "test-not-git-*")
+	if err != nil {
+		t.Fatalf("failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	_, err = DetectProject(tmpDir)
+	if err == nil {
+		t.Fatal("expected error for non-git directory")
+	}
+
+	if !errors.Is(err, ErrNotGitRepo) {
+		t.Errorf("expected ErrNotGitRepo, got: %v", err)
+	}
+}
+
+func TestGetRemoteURL(t *testing.T) {
+	t.Run("with remote", func(t *testing.T) {
+		root, err := DetectGitRoot("")
+		if err != nil {
+			if errors.Is(err, ErrGitNotInstalled) {
+				t.Skip("git not installed")
+			}
+			t.Skip("not in a git repo")
+		}
+
+		remote := GetRemoteURL(root)
+		// The cloister repo should have a remote
+		if remote == "" {
+			t.Error("expected non-empty remote URL for cloister repo")
+		}
+		if !strings.Contains(remote, "cloister") {
+			t.Errorf("expected remote to contain 'cloister', got %q", remote)
+		}
+	})
+
+	t.Run("without remote", func(t *testing.T) {
+		// Create a temporary git repo without a remote
+		tmpDir, err := os.MkdirTemp("", "test-remote-*")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		// Initialize git repo
+		if _, err := runGit(tmpDir, "init"); err != nil {
+			if errors.Is(err, ErrGitNotInstalled) {
+				t.Skip("git not installed")
+			}
+			t.Fatalf("git init failed: %v", err)
+		}
+
+		remote := GetRemoteURL(tmpDir)
+		if remote != "" {
+			t.Errorf("expected empty remote, got %q", remote)
+		}
+	})
+
+	t.Run("not a git repo", func(t *testing.T) {
+		// Create a temporary directory that is not a git repo
+		tmpDir, err := os.MkdirTemp("", "test-not-repo-*")
+		if err != nil {
+			t.Fatalf("failed to create temp dir: %v", err)
+		}
+		defer os.RemoveAll(tmpDir)
+
+		remote := GetRemoteURL(tmpDir)
+		// Should return empty string (not an error)
+		if remote != "" {
+			t.Errorf("expected empty remote for non-git dir, got %q", remote)
+		}
+	})
+}

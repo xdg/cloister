@@ -166,3 +166,54 @@ func extractProjectName(remoteURL string) string {
 	}
 	return matches[1]
 }
+
+// ProjectInfo contains detected information about a git project.
+type ProjectInfo struct {
+	Name   string // Project name (from remote URL or directory)
+	Root   string // Absolute path to git root
+	Remote string // Remote URL (origin), may be empty
+	Branch string // Current branch or commit hash
+}
+
+// GetRemoteURL returns the origin remote URL for the git repository at gitRoot.
+// Returns empty string if no remote is configured (this is not an error).
+func GetRemoteURL(gitRoot string) string {
+	out, err := runGit(gitRoot, "config", "--get", "remote.origin.url")
+	if err != nil {
+		return ""
+	}
+	return out
+}
+
+// DetectProject detects project information from a path within a git repository.
+// If path is empty, uses the current working directory.
+// Returns ErrNotGitRepo if the path is not within a git repository.
+func DetectProject(path string) (*ProjectInfo, error) {
+	// Find the git root
+	gitRoot, err := DetectGitRoot(path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get the project name
+	name, err := ProjectName(gitRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get project name: %w", err)
+	}
+
+	// Get the remote URL (empty string is OK)
+	remote := GetRemoteURL(gitRoot)
+
+	// Get the current branch
+	branch, err := DetectBranch(gitRoot)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect branch: %w", err)
+	}
+
+	return &ProjectInfo{
+		Name:   name,
+		Root:   gitRoot,
+		Remote: remote,
+		Branch: branch,
+	}, nil
+}

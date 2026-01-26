@@ -133,33 +133,33 @@ Load global configuration from `~/.config/cloister/config.yaml`.
 Identify projects and maintain a registry mapping names to locations.
 
 ### 2.3.1 Git repository detection
-- [ ] Create `internal/project/detect.go`
-- [ ] Implement `DetectProject(path string) (*ProjectInfo, error)`
-- [ ] Walk up directory tree to find `.git`
-- [ ] Extract remote URL from git config (`git remote get-url origin`)
-- [ ] Derive project name from directory basename (already done in Phase 1, consolidate here)
-- [ ] Handle detached HEAD, bare repos gracefully
-- [ ] **Test**: Detect project in repo root, subdirectory, handle non-repo
+- [x] Create `internal/project/detect.go`
+- [x] Implement `DetectProject(path string) (*ProjectInfo, error)`
+- [x] Walk up directory tree to find `.git`
+- [x] Extract remote URL from git config (`git remote get-url origin`)
+- [x] Derive project name from directory basename (already done in Phase 1, consolidate here)
+- [x] Handle detached HEAD, bare repos gracefully
+- [x] **Test**: Detect project in repo root, subdirectory, handle non-repo
 
 ### 2.3.2 Project registry storage
-- [ ] Create `internal/project/registry.go`
-- [ ] Define `Registry` struct with project map
-- [ ] Store in `~/.config/cloister/projects.yaml` (list of known projects)
-- [ ] Fields: name, remote URL, root path, last used timestamp
-- [ ] **Test**: Load registry, save registry, round-trip
+- [x] Create `internal/project/registry.go`
+- [x] Define `Registry` struct with project map
+- [x] Store in `~/.config/cloister/projects.yaml` (list of known projects)
+- [x] Fields: name, remote URL, root path, last used timestamp
+- [x] **Test**: Load registry, save registry, round-trip
 
 ### 2.3.3 Project registration
-- [ ] Implement `Register(info *ProjectInfo) error`
-- [ ] Auto-register on first `cloister start` in a directory
-- [ ] Update existing entry if same name but different path (warn user)
-- [ ] Handle name collisions (different remotes, same basename) - suggest rename or use full name
-- [ ] **Test**: Register new project, update existing, handle collision
+- [x] Implement `Register(info *ProjectInfo) error`
+- [x] Auto-register on first `cloister start` in a directory
+- [x] Update existing entry if same name but different path (warn user)
+- [x] Handle name collisions (different remotes, same basename) - suggest rename or use full name
+- [x] **Test**: Register new project, update existing, handle collision
 
 ### 2.3.4 Project lookup
-- [ ] Implement `Lookup(name string) (*ProjectInfo, error)`
-- [ ] Implement `LookupByPath(path string) (*ProjectInfo, error)`
-- [ ] Implement `List() []*ProjectInfo`
-- [ ] **Test**: Lookup by name, by path, list all
+- [x] Implement `Lookup(name string) (*ProjectInfo, error)`
+- [x] Implement `LookupByPath(path string) (*ProjectInfo, error)`
+- [x] Implement `List() []*ProjectInfo`
+- [x] **Test**: Lookup by name, by path, list all
 
 ---
 
