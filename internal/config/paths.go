@@ -37,6 +37,12 @@ func ProjectsDir() string {
 	return ConfigDir() + "projects/"
 }
 
+// ProjectConfigPath returns the full path to a project configuration file.
+// The returned path is ProjectsDir() + name + ".yaml".
+func ProjectConfigPath(name string) string {
+	return ProjectsDir() + name + ".yaml"
+}
+
 // expandHome replaces a leading ~ in path with the user's home directory.
 // If the home directory cannot be determined, the path is returned unchanged.
 func expandHome(path string) string {

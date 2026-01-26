@@ -336,3 +336,113 @@ func TestEnsureProjectsDir(t *testing.T) {
 		t.Errorf("EnsureProjectsDir() second call error = %v", err)
 	}
 }
+
+func TestInitProjectConfig_Creates(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// File should not exist yet
+	path := ProjectConfigPath("test-project")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("config file should not exist before test: %v", err)
+	}
+
+	// Init project config
+	if err := InitProjectConfig("test-project", "git@github.com:example/repo.git", "/home/user/projects/repo"); err != nil {
+		t.Fatalf("InitProjectConfig() error = %v", err)
+	}
+
+	// Verify file exists
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("os.Stat() error = %v", err)
+	}
+
+	// Verify permissions are 0600
+	perm := info.Mode().Perm()
+	if perm != 0600 {
+		t.Errorf("config file permissions = %o, want 0600", perm)
+	}
+
+	// Read and verify content
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+
+	// Parse the written config
+	parsedCfg, err := ParseProjectConfig(data)
+	if err != nil {
+		t.Fatalf("ParseProjectConfig() error = %v", err)
+	}
+
+	// Verify values
+	if parsedCfg.Remote != "git@github.com:example/repo.git" {
+		t.Errorf("parsedCfg.Remote = %q, want %q", parsedCfg.Remote, "git@github.com:example/repo.git")
+	}
+	if parsedCfg.Root != "/home/user/projects/repo" {
+		t.Errorf("parsedCfg.Root = %q, want %q", parsedCfg.Root, "/home/user/projects/repo")
+	}
+}
+
+func TestInitProjectConfig_DoesNotOverwrite(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Create projects directory and write a custom config
+	projectsDir := ProjectsDir()
+	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+
+	customContent := "remote: \"original-remote\"\nroot: \"/original/path\"\n"
+	path := ProjectConfigPath("test-project")
+	if err := os.WriteFile(path, []byte(customContent), 0600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	// Call InitProjectConfig - should not overwrite
+	if err := InitProjectConfig("test-project", "new-remote", "/new/path"); err != nil {
+		t.Fatalf("InitProjectConfig() error = %v", err)
+	}
+
+	// Verify content is unchanged
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+	if string(data) != customContent {
+		t.Errorf("config file was overwritten, content = %q, want %q", string(data), customContent)
+	}
+}
+
+func TestInitProjectConfig_CreatesDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Verify projects directory does not exist
+	projectsDir := ProjectsDir()
+	if _, err := os.Stat(projectsDir); !os.IsNotExist(err) {
+		t.Fatalf("projects dir should not exist before test: %v", err)
+	}
+
+	// Init project config
+	if err := InitProjectConfig("test-project", "test-remote", "/test/path"); err != nil {
+		t.Fatalf("InitProjectConfig() error = %v", err)
+	}
+
+	// Verify projects directory was created
+	info, err := os.Stat(projectsDir)
+	if err != nil {
+		t.Fatalf("os.Stat() error = %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("projects dir should be a directory")
+	}
+
+	// Verify directory permissions are 0700
+	perm := info.Mode().Perm()
+	if perm != 0700 {
+		t.Errorf("projects dir permissions = %o, want 0700", perm)
+	}
+}

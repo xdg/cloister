@@ -185,13 +185,53 @@ func EnsureProjectsDir() error {
 	return os.MkdirAll(ProjectsDir(), 0700)
 }
 
+// InitProjectConfig creates a minimal project configuration file if it doesn't exist.
+// The config file is written to ProjectConfigPath(name).
+// If the config file already exists, it returns nil without overwriting.
+// The projects directory is created if it doesn't exist.
+// The file is written with 0600 permissions (user read/write only).
+func InitProjectConfig(name string, remote string, root string) error {
+	path := ProjectConfigPath(name)
+
+	// Check if file already exists
+	_, err := os.Stat(path)
+	if err == nil {
+		// File exists, don't overwrite
+		return nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		// Some other error occurred
+		return err
+	}
+
+	// Create a minimal config with just remote and root
+	cfg := &ProjectConfig{
+		Remote: remote,
+		Root:   root,
+	}
+
+	// Ensure projects directory exists
+	if err := EnsureProjectsDir(); err != nil {
+		return err
+	}
+
+	// Marshal the config to YAML
+	data, err := MarshalProjectConfig(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Write the config file with user-only permissions
+	return os.WriteFile(path, data, 0600)
+}
+
 // WriteProjectConfig writes a project configuration to the projects directory.
-// The config file is written to ProjectsDir() + name + ".yaml".
+// The config file is written to ProjectConfigPath(name).
 // If the config file already exists and overwrite is false, it returns nil.
 // The projects directory is created if it doesn't exist.
 // The file is written with 0600 permissions (user read/write only).
 func WriteProjectConfig(name string, cfg *ProjectConfig, overwrite bool) error {
-	path := ProjectsDir() + name + ".yaml"
+	path := ProjectConfigPath(name)
 
 	// Check if file already exists
 	_, err := os.Stat(path)

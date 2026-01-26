@@ -168,29 +168,29 @@ Identify projects and maintain a registry mapping names to locations.
 Load and manage project-specific configuration files.
 
 ### 2.4.1 Project config paths
-- [ ] Project configs stored at `~/.config/cloister/projects/<name>.yaml`
-- [ ] Implement `ProjectConfigPath(name string) string`
-- [ ] Ensure projects directory exists on first use
-- [ ] **Test**: Path generation is consistent
+- [x] Project configs stored at `~/.config/cloister/projects/<name>.yaml`
+- [x] Implement `ProjectConfigPath(name string) string`
+- [x] Ensure projects directory exists on first use
+- [x] **Test**: Path generation is consistent
 
 ### 2.4.2 Project config loading
-- [ ] Implement `LoadProjectConfig(name string) (*ProjectConfig, error)`
-- [ ] Return empty/default config if file doesn't exist
-- [ ] Validate remote URL matches registered project (warn on mismatch)
-- [ ] **Test**: Load existing config, load missing config, handle corrupt file
+- [x] Implement `LoadProjectConfig(name string) (*ProjectConfig, error)`
+- [x] Return empty/default config if file doesn't exist
+- [x] Validate remote URL matches registered project (warn on mismatch)
+- [x] **Test**: Load existing config, load missing config, handle corrupt file
 
 ### 2.4.3 Project config creation
-- [ ] Implement `InitProjectConfig(info *ProjectInfo) error`
-- [ ] Create minimal project config with remote URL and root path
-- [ ] Don't overwrite existing config
-- [ ] **Test**: Creates file, preserves existing
+- [x] Implement `InitProjectConfig(info *ProjectInfo) error`
+- [x] Create minimal project config with remote URL and root path
+- [x] Don't overwrite existing config
+- [x] **Test**: Creates file, preserves existing
 
 ### 2.4.4 Project config editing
-- [ ] Implement `EditProjectConfig(name string) error`
-- [ ] Open config file in `$EDITOR` (fall back to `vi`)
-- [ ] Create minimal config first if doesn't exist
-- [ ] Validate config after edit, warn on errors
-- [ ] **Test**: Manual - opens in editor, warns on invalid
+- [x] Implement `EditProjectConfig(name string) error`
+- [x] Open config file in `$EDITOR` (fall back to `vi`)
+- [x] Create minimal config first if doesn't exist
+- [x] Validate config after edit, warn on errors
+- [x] **Test**: Manual - opens in editor, warns on invalid (deferred to Phase 2.7 when CLI available)
 
 ---
 

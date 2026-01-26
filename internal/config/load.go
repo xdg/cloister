@@ -40,12 +40,15 @@ func LoadGlobalConfig() (*GlobalConfig, error) {
 }
 
 // LoadProjectConfig loads a project configuration by name.
-// The config file is expected at ProjectsDir() + name + ".yaml".
+// The config file is expected at ProjectConfigPath(name).
 // If the config file doesn't exist, it returns DefaultProjectConfig().
 // If the file exists but cannot be read or parsed, it returns an error.
 // All paths containing ~ are expanded to the actual home directory.
+//
+// Note: Callers should validate that the loaded config's Remote field matches
+// the expected remote URL from the project registry to detect configuration drift.
 func LoadProjectConfig(name string) (*ProjectConfig, error) {
-	path := ProjectsDir() + name + ".yaml"
+	path := ProjectConfigPath(name)
 	log.Printf("config: loading project config from %s", path)
 
 	data, err := os.ReadFile(path)

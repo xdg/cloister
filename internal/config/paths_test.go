@@ -216,3 +216,30 @@ func TestProjectsDir_TrailingSlash(t *testing.T) {
 		t.Errorf("ProjectsDir() = %q, want trailing slash", dir)
 	}
 }
+
+func TestProjectConfigPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/test/config")
+
+	path := ProjectConfigPath("my-project")
+
+	want := "/test/config/cloister/projects/my-project.yaml"
+	if path != want {
+		t.Errorf("ProjectConfigPath() = %q, want %q", path, want)
+	}
+}
+
+func TestProjectConfigPath_Default(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	path := ProjectConfigPath("my-project")
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("os.UserHomeDir() error = %v", err)
+	}
+
+	want := home + "/.config/cloister/projects/my-project.yaml"
+	if path != want {
+		t.Errorf("ProjectConfigPath() = %q, want %q", path, want)
+	}
+}
