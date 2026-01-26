@@ -6,7 +6,7 @@ CMD_PATH := ./cmd/cloister
 D2_SOURCES := $(wildcard docs/diagrams/*.d2)
 D2_SVGS := $(D2_SOURCES:.d2=.svg)
 
-.PHONY: build install test lint clean diagrams clean-diagrams
+.PHONY: build install test test-race lint clean diagrams clean-diagrams
 
 # Go targets
 build:
@@ -17,6 +17,9 @@ install:
 
 test:
 	go test ./...
+
+test-race:
+	go test -race ./...
 
 lint:
 	golangci-lint run
