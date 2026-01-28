@@ -72,10 +72,10 @@ Extract helpers from duplicated code patterns. No API changes.
 - [x] **Test**: Add unit tests for error helpers
 
 ### Q.1.5 Extract guardian client HTTP helper
-- [ ] In `internal/guardian/client.go`, extract shared HTTP request execution
-- [ ] Lines 55-72, 84-106, 118-135 all repeat: get client, do request, check status, decode error
-- [ ] Create private `doRequest(method, path string, body, result any) error` helper
-- [ ] **Test**: Existing client tests pass
+- [x] In `internal/guardian/client.go`, extract shared HTTP request execution
+- [x] Lines 55-72, 84-106, 118-135 all repeat: get client, do request, check status, decode error
+- [x] Create private `doRequest(method, path string, body, result any) error` helper
+- [x] **Test**: Existing client tests pass
 
 ### Q.1.6 Extract guardian container call pattern
 - [ ] In `internal/guardian/container.go`, extract guardian client call pattern
