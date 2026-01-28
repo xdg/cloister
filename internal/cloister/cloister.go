@@ -16,6 +16,43 @@ import (
 // containerHomeDir is the home directory for the cloister user inside containers.
 const containerHomeDir = "/home/cloister"
 
+// ContainerManager is the interface for container operations.
+// This allows injecting mock implementations for testing.
+type ContainerManager interface {
+	Create(cfg *container.Config) (string, error)
+	Start(cfg *container.Config) (string, error)
+	StartContainer(containerName string) error
+	Stop(containerName string) error
+	Attach(containerName string) (int, error)
+}
+
+// Option configures cloister operations.
+type Option func(*options)
+
+type options struct {
+	manager ContainerManager
+}
+
+// WithManager sets a custom container manager for dependency injection.
+// If not set, a default container.NewManager() is used.
+func WithManager(m ContainerManager) Option {
+	return func(o *options) {
+		o.manager = m
+	}
+}
+
+// getManager returns the configured manager or creates a default one.
+func getManager(opts ...Option) ContainerManager {
+	o := &options{}
+	for _, opt := range opts {
+		opt(o)
+	}
+	if o.manager == nil {
+		return container.NewManager()
+	}
+	return o.manager
+}
+
 // getTokenStore creates a token store using the default token directory.
 // This helper consolidates the repeated pattern of getting the token directory
 // and creating a store from it.
@@ -52,7 +89,12 @@ type StartOptions struct {
 //
 // Returns the container ID and token. The token is returned so it can be used
 // for cleanup later (revocation when stopping the container).
-func Start(opts StartOptions) (containerID string, tok string, err error) {
+//
+// Options can be used to inject dependencies for testing:
+//
+//	Start(opts, WithManager(mockManager))
+func Start(opts StartOptions, options ...Option) (containerID string, tok string, err error) {
+	mgr := getManager(options...)
 	// Step 1: Ensure guardian is running
 	if err := guardian.EnsureRunning(); err != nil {
 		return "", "", fmt.Errorf("guardian failed to start: %w", err)
@@ -106,7 +148,6 @@ func Start(opts StartOptions) (containerID string, tok string, err error) {
 	}
 
 	// Step 6: Create the container (without starting)
-	mgr := container.NewManager()
 	containerID, err = mgr.Create(cfg)
 	if err != nil {
 		return "", "", err
@@ -183,7 +224,12 @@ func injectUserSettings(containerName string) error {
 //
 // The token parameter should be the token returned from Start().
 // If the token is empty, only the container is stopped (token revocation is skipped).
-func Stop(containerName string, tok string) error {
+//
+// Options can be used to inject dependencies for testing:
+//
+//	Stop(containerName, tok, WithManager(mockManager))
+func Stop(containerName string, tok string, options ...Option) error {
+	mgr := getManager(options...)
 	// Step 1: Revoke the token from guardian (if provided)
 	// We ignore revocation errors and continue with container stop.
 	// The token will become orphaned but won't cause security issues
@@ -198,7 +244,6 @@ func Stop(containerName string, tok string) error {
 	}
 
 	// Step 3: Stop and remove the container
-	mgr := container.NewManager()
 	return mgr.Stop(containerName)
 }
 
@@ -213,7 +258,11 @@ func Stop(containerName string, tok string) error {
 //
 // Ctrl+C inside the container is handled by the shell; it does not terminate
 // the attachment or kill the container.
-func Attach(containerID string) (exitCode int, err error) {
-	mgr := container.NewManager()
+//
+// Options can be used to inject dependencies for testing:
+//
+//	Attach(containerID, WithManager(mockManager))
+func Attach(containerID string, options ...Option) (exitCode int, err error) {
+	mgr := getManager(options...)
 	return mgr.Attach(containerID)
 }

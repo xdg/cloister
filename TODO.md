@@ -146,10 +146,10 @@ Consolidate redundant API methods. May require updating callers.
 Add interfaces and injection points to enable unit testing without Docker.
 
 ### Q.4.1 Inject container.Manager in cloister
-- [ ] In `internal/cloister/cloister.go`, add `Manager` field to package or use functional options
-- [ ] Replace inline `container.NewManager()` calls with injected dependency
-- [ ] Default to `container.NewManager()` when not injected
-- [ ] **Test**: Add unit test using mock Manager
+- [x] In `internal/cloister/cloister.go`, add `Manager` field to package or use functional options
+- [x] Replace inline `container.NewManager()` calls with injected dependency
+- [x] Default to `container.NewManager()` when not injected
+- [x] **Test**: Add unit test using mock Manager
 
 ### Q.4.2 Add DockerRunner interface in container
 - [ ] In `internal/container/manager.go`, define `DockerRunner` interface
