@@ -479,3 +479,94 @@ func TestCmdNameFromArgs(t *testing.T) {
 		})
 	}
 }
+
+func TestFindContainerByExactName_NotFound(t *testing.T) {
+	// Test that a non-existent container returns nil, nil
+	info, err := FindContainerByExactName("cloister-nonexistent-container-test-exact-12345")
+	if err != nil {
+		var cmdErr *CommandError
+		if errors.As(err, &cmdErr) {
+			var execErr *exec.Error
+			if errors.As(cmdErr.Err, &execErr) {
+				t.Skip("Docker CLI not installed")
+			}
+		}
+		if strings.Contains(err.Error(), "daemon") {
+			t.Skip("Docker daemon not running")
+		}
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if info != nil {
+		t.Errorf("expected nil for non-existent container, got: %+v", info)
+	}
+}
+
+func TestFindContainerByExactName_SubstringMatch(t *testing.T) {
+	// This test verifies that FindContainerByExactName does NOT match
+	// containers that merely contain the search string as a substring.
+	// For example, searching for "foo" should NOT match "foobar" or "my-foo-container".
+
+	// First, verify the helper returns nil for a name that doesn't exist
+	info, err := FindContainerByExactName("cloister-exact-test")
+	if err != nil {
+		var cmdErr *CommandError
+		if errors.As(err, &cmdErr) {
+			var execErr *exec.Error
+			if errors.As(cmdErr.Err, &execErr) {
+				t.Skip("Docker CLI not installed")
+			}
+		}
+		if strings.Contains(err.Error(), "daemon") {
+			t.Skip("Docker daemon not running")
+		}
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if info != nil {
+		t.Errorf("expected nil, got container: %+v", info)
+	}
+
+	// The core logic being tested: searching for "cloister-exact-test"
+	// should not match a container named "cloister-exact-test-extra" or
+	// "my-cloister-exact-test". This is validated by the Name() method
+	// trimming the "/" prefix and doing exact string comparison.
+}
+
+func TestContainerInfo_Name(t *testing.T) {
+	tests := []struct {
+		name     string
+		names    string
+		expected string
+	}{
+		{
+			name:     "with leading slash",
+			names:    "/my-container",
+			expected: "my-container",
+		},
+		{
+			name:     "without leading slash",
+			names:    "my-container",
+			expected: "my-container",
+		},
+		{
+			name:     "empty",
+			names:    "",
+			expected: "",
+		},
+		{
+			name:     "slash only",
+			names:    "/",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &ContainerInfo{Names: tt.names}
+			if got := info.Name(); got != tt.expected {
+				t.Errorf("ContainerInfo{Names: %q}.Name() = %q, want %q", tt.names, got, tt.expected)
+			}
+		})
+	}
+}

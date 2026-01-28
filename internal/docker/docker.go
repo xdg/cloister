@@ -230,3 +230,42 @@ func StartContainer(containerName string) error {
 	_, err := Run("start", containerName)
 	return err
 }
+
+// ContainerInfo holds information about a Docker container.
+type ContainerInfo struct {
+	ID    string `json:"ID"`
+	Names string `json:"Names"`
+	State string `json:"State"`
+}
+
+// Name returns the container name with the leading slash removed.
+// Docker often returns names with a "/" prefix (e.g., "/cloister-foo").
+func (c *ContainerInfo) Name() string {
+	return strings.TrimPrefix(c.Names, "/")
+}
+
+// FindContainerByExactName finds a container with the exact name specified.
+// Returns nil, nil if no container with that exact name exists.
+// Returns the container info if found.
+//
+// Note: Docker's --filter name= performs substring matching, so this function
+// applies additional filtering to ensure exact matches only.
+func FindContainerByExactName(name string) (*ContainerInfo, error) {
+	var containers []ContainerInfo
+
+	// Docker filter uses regex, so anchor with ^ and $
+	err := RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^"+name+"$")
+	if err != nil {
+		return nil, err
+	}
+
+	// Docker filter is still substring match even with anchors in some cases,
+	// so verify exact match
+	for i := range containers {
+		if containers[i].Name() == name {
+			return &containers[i], nil
+		}
+	}
+
+	return nil, nil
+}

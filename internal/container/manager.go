@@ -218,47 +218,20 @@ func (m *Manager) Attach(containerName string) (int, error) {
 
 // containerExists checks if a container with the given name exists (running or stopped).
 func (m *Manager) containerExists(name string) (bool, error) {
-	var containers []struct {
-		Names string `json:"Names"`
-	}
-
-	err := docker.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^"+name+"$")
+	info, err := docker.FindContainerByExactName(name)
 	if err != nil {
 		return false, err
 	}
-
-	// Check for exact name match (docker filter is substring match)
-	for _, c := range containers {
-		containerName := strings.TrimPrefix(c.Names, "/")
-		if containerName == name {
-			return true, nil
-		}
-	}
-
-	return false, nil
+	return info != nil, nil
 }
 
 // IsRunning checks if a container with the given name exists and is running.
 // Returns (true, nil) if running, (false, nil) if exists but not running or doesn't exist,
 // and (false, err) if there was an error checking.
 func (m *Manager) IsRunning(name string) (bool, error) {
-	var containers []struct {
-		Names string `json:"Names"`
-		State string `json:"State"`
-	}
-
-	err := docker.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^"+name+"$")
+	info, err := docker.FindContainerByExactName(name)
 	if err != nil {
 		return false, err
 	}
-
-	// Check for exact name match and running state
-	for _, c := range containers {
-		containerName := strings.TrimPrefix(c.Names, "/")
-		if containerName == name {
-			return c.State == "running", nil
-		}
-	}
-
-	return false, nil
+	return info != nil && info.State == "running", nil
 }

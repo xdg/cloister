@@ -204,22 +204,19 @@ func EnsureRunning() error {
 // getContainerState retrieves the current state of the guardian container.
 // Returns nil if the container doesn't exist.
 func getContainerState() (*containerState, error) {
-	var containers []containerState
-
-	err := docker.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^"+ContainerName+"$")
+	info, err := docker.FindContainerByExactName(ContainerName)
 	if err != nil {
 		return nil, err
 	}
-
-	// Check for exact name match (docker filter is substring match)
-	for _, c := range containers {
-		name := strings.TrimPrefix(c.Name, "/")
-		if name == ContainerName {
-			return &c, nil
-		}
+	if info == nil {
+		return nil, nil
 	}
 
-	return nil, nil
+	return &containerState{
+		ID:    info.ID,
+		Name:  info.Name(),
+		State: info.State,
+	}, nil
 }
 
 // removeContainer stops and removes the guardian container.

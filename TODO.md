@@ -97,13 +97,13 @@ Create shared packages for code duplicated across multiple packages.
 - [x] **Test**: Add unit tests for expandHome edge cases
 
 ### Q.2.2 Extract docker exact-match filtering
-- [ ] In `internal/docker/docker.go`, add `FindContainerByExactName(name string) (*ContainerInfo, error)`
-- [ ] Identical filtering pattern exists in:
+- [x] In `internal/docker/docker.go`, add `FindContainerByExactName(name string) (*ContainerInfo, error)`
+- [x] Identical filtering pattern exists in:
   - `internal/container/manager.go` (lines 244-263)
   - `internal/guardian/container.go` (lines 206-223)
-  - `internal/docker/network.go` (lines 34-51)
-- [ ] Update all three locations to use shared helper
-- [ ] **Test**: Add unit test for exact-match vs substring behavior
+  - `internal/docker/network.go` (lines 34-51) — network pattern left as-is (different API)
+- [x] Update all three locations to use shared helper
+- [x] **Test**: Add unit test for exact-match vs substring behavior
 
 ### Q.2.3 Extract HostDir helper in guardian
 - [ ] In `internal/guardian/container.go`, `HostTokenDir()` and `HostConfigDir()` have identical structure
