@@ -1,323 +1,203 @@
-# Cloister Phase 2: Configuration System
+# Cloister Quality Improvements
 
-Global and per-project config controls allowlists, project registry, and configurable settings. Transforms Phase 1's hardcoded behavior into a flexible configuration-driven system.
+Code quality refactoring following Phase 2 completion. Eliminates duplication, improves testability, and simplifies APIs without changing external behavior.
 
 ## Testing Philosophy
 
-- **Unit tests for core logic**: Config parsing, merging, validation, allowlist expansion
-- **Integration tests for config loading**: File discovery, environment variable expansion, YAML parsing
-- **Manual tests for CLI workflows**: Config editing, project registration, allowlist behavior
-- **Go tests**: Use `testing` package; `os.MkdirTemp` for isolated config directories
-- **Table-driven tests**: Config merge precedence, allowlist domain matching with wildcards
-
-## Reference Documentation
-
-Before implementing, read these spec files in `./docs`:
-
-- **[config-reference.md](docs/config-reference.md)** — Full YAML schemas for global and project configs (primary reference for 2.1-2.5)
-- **[cloister-spec.md](docs/cloister-spec.md)** — Architecture, file layout (`~/.config/cloister/` structure), security model
-- **[cli-workflows.md](docs/cli-workflows.md)** — CLI command examples and expected behaviors (reference for 2.7)
-
-Provied relevant excerpts to subagents referenced in this doc if the excerpt is small, or tell subagents to read an entire doc.  Avoid using too much of your own context citing specs to subagents.
+- **Unit tests for refactored code**: All extracted helpers must have unit tests
+- **Regression tests**: Existing tests must continue passing after each change
+- **No behavior changes**: These are internal refactors; external APIs remain stable
+- **Go tests**: Use `testing` package; verify coverage doesn't decrease
+- **Incremental commits**: One logical change per commit for easy bisection
 
 ## Verification Checklist
 
-Before marking Phase 2 complete:
+Before marking Quality phase complete:
 
 1. `make test` passes
 2. `make build` produces working binary
 3. `make lint` passes
-4. Manual verification of all "Verification" items from spec:
-   - [ ] Add domain to project config; cloister for that project allows it
-   - [ ] Same domain blocked for different project without that config
-   - [ ] `project list` shows registered projects
-   - [ ] Config edit opens in `$EDITOR`
-   - [ ] Guardian restart preserves token associations (already done in Phase 1)
-5. No race conditions (`make test-race`)
+4. `make test-race` passes (no race conditions)
+5. Code coverage does not decrease from baseline
+6. Manual smoke test: `cloister start` / `cloister stop` workflow works
 
 ## Dependencies Between Phases
 
 ```
-2.1 Config Schema & Parsing
+Q.1 Foundation (Duplicate Code Elimination)
        │
        ▼
-2.2 Global Config Loading
+Q.2 Shared Utilities
        │
-       ├─► 2.3 Project Detection & Registry (parallel)
-       │              │
-       │              ▼
-       │         2.4 Per-Project Config
-       │              │
-       └──────────────┤
-                      ▼
-              2.5 Config Merging
-                      │
-                      ▼
-              2.6 Guardian Integration
-                      │
-                      ▼
-              2.7 CLI Commands
-                      │
-                      ▼
-              2.8 Integration & Polish
+       ▼
+Q.3 API Simplification
+       │
+       ▼
+Q.4 Dependency Injection & Testability
+       │
+       ▼
+Q.5 Testing & Polish
 ```
 
 ---
 
-## Phase 2.1: Config Schema & Parsing
+## Phase Q.1: Foundation — Duplicate Code Elimination
 
-Define Go types for configuration and implement YAML parsing.
+Extract helpers from duplicated code patterns. No API changes.
 
-### 2.1.1 Config types
-- [x] Create `internal/config/types.go`
-- [x] Define `GlobalConfig` struct matching `config-reference.md` schema
-- [x] Define `ProjectConfig` struct for per-project settings
-- [x] Define `ProxyConfig`, `AllowEntry`, `CommandPattern` sub-structs
-- [x] Use struct tags for YAML field mapping
-- [x] **Test**: Struct tags correctly map to YAML field names
+### Q.1.1 Consolidate docker strict/non-strict function pairs
+- [ ] In `internal/docker/docker.go`, consolidate `RunJSON` and `RunJSONStrict` into single function
+- [ ] Add `strict bool` parameter or use options pattern
+- [ ] Same for `RunJSONLines` and `RunJSONLinesStrict`
+- [ ] Extract repeated `cmdName` extraction (lines 54-57, 121-124, 181-184, 207-210) into helper
+- [ ] **Test**: Existing tests pass; add test for strict vs non-strict behavior
 
-### 2.1.2 Config parsing
-- [x] Create `internal/config/parse.go`
-- [x] Implement `ParseGlobalConfig([]byte) (*GlobalConfig, error)`
-- [x] Implement `ParseProjectConfig([]byte) (*ProjectConfig, error)`
-- [x] Handle missing optional fields with sensible defaults
-- [x] Return clear errors for invalid YAML or unknown fields
-- [x] **Test**: Parse valid config, parse config with defaults, parse invalid config
+### Q.1.2 Extract container creation helper
+- [ ] In `internal/container/manager.go`, extract shared logic from `Start()` and `Create()`
+- [ ] Lines 45-78 and 86-119 are 95% identical
+- [ ] Create private `createContainer()` helper
+- [ ] **Test**: Existing container tests pass
 
-### 2.1.3 Config validation
-- [x] Create `internal/config/validate.go`
-- [x] Validate required fields present
-- [x] Validate port numbers in valid range
-- [x] Validate duration strings parseable
-- [x] Validate regex patterns in command patterns compile
-- [x] **Test**: Valid config passes, various invalid configs rejected with clear messages
+### Q.1.3 Extract token store helper in cloister
+- [ ] In `internal/cloister/cloister.go`, extract token store creation pattern
+- [ ] `Start()` (lines 57-67) and `Stop()` (lines 189-195) both create tokenDir/store
+- [ ] Create `getTokenStore() (*token.Store, error)` helper
+- [ ] **Test**: Existing cloister tests pass
 
----
+### Q.1.4 Extract cmd error helpers
+- [ ] Create `internal/cmd/errors.go`
+- [ ] Extract `dockerNotRunningError()` — used in 6 locations across start.go, stop.go, list.go, guardian.go
+- [ ] Extract `gitDetectionError(err error) error` — handles ErrNotGitRepo/ErrGitNotInstalled consistently
+- [ ] Update all call sites to use helpers
+- [ ] **Test**: Add unit tests for error helpers
 
-## Phase 2.2: Global Config Loading
+### Q.1.5 Extract guardian client HTTP helper
+- [ ] In `internal/guardian/client.go`, extract shared HTTP request execution
+- [ ] Lines 55-72, 84-106, 118-135 all repeat: get client, do request, check status, decode error
+- [ ] Create private `doRequest(method, path string, body, result any) error` helper
+- [ ] **Test**: Existing client tests pass
 
-Load global configuration from `~/.config/cloister/config.yaml`.
-
-### 2.2.1 Config directory management
-- [x] Create `internal/config/paths.go`
-- [x] Implement `ConfigDir() string` returning `~/.config/cloister/`
-- [x] Implement `EnsureConfigDir() error` creating directory if missing
-- [x] Handle `XDG_CONFIG_HOME` override
-- [x] **Test**: Path resolution with/without XDG override
-
-### 2.2.2 Default config generation
-- [x] Create `internal/config/defaults.go`
-- [x] Define `DefaultGlobalConfig()` with full default allowlist from spec
-- [x] Include all documentation sites, package registries, AI APIs
-- [x] Set sensible defaults for timeouts, rate limits, etc.
-- [x] **Test**: Default config is valid, contains expected domains
-
-### 2.2.3 Config file loading
-- [x] Create `internal/config/load.go`
-- [x] Implement `LoadGlobalConfig() (*GlobalConfig, error)`
-- [x] Return default config if file doesn't exist
-- [x] Expand `~` in paths to actual home directory
-- [x] Log config file path used for debugging
-- [x] **Test**: Load existing config, load missing config (use defaults), handle corrupt file
-
-### 2.2.4 Config file creation
-- [x] Implement `WriteDefaultConfig() error` to create initial config.yaml
-- [x] Write commented YAML with documentation
-- [x] Only create if file doesn't exist (don't overwrite)
-- [x] **Test**: Creates file with expected content, doesn't overwrite existing
+### Q.1.6 Extract guardian container call pattern
+- [ ] In `internal/guardian/container.go`, extract guardian client call pattern
+- [ ] `RegisterToken`, `RevokeToken`, `ListTokens` all: check IsRunning(), create client, call method
+- [ ] Create helper that handles IsRunning check and client creation
+- [ ] **Test**: Existing guardian tests pass
 
 ---
 
-## Phase 2.3: Project Detection & Registry
+## Phase Q.2: Shared Utilities
 
-Identify projects and maintain a registry mapping names to locations.
+Create shared packages for code duplicated across multiple packages.
 
-### 2.3.1 Git repository detection
-- [x] Create `internal/project/detect.go`
-- [x] Implement `DetectProject(path string) (*ProjectInfo, error)`
-- [x] Walk up directory tree to find `.git`
-- [x] Extract remote URL from git config (`git remote get-url origin`)
-- [x] Derive project name from directory basename (already done in Phase 1, consolidate here)
-- [x] Handle detached HEAD, bare repos gracefully
-- [x] **Test**: Detect project in repo root, subdirectory, handle non-repo
+### Q.2.1 Create internal/pathutil package
+- [ ] Create `internal/pathutil/home.go`
+- [ ] Move `expandHome()` from `internal/config/paths.go` (lines 46-64)
+- [ ] Remove duplicate from `internal/project/registry.go` (lines 97-115)
+- [ ] Update both packages to import from pathutil
+- [ ] **Test**: Add unit tests for expandHome edge cases
 
-### 2.3.2 Project registry storage
-- [x] Create `internal/project/registry.go`
-- [x] Define `Registry` struct with project map
-- [x] Store in `~/.config/cloister/projects.yaml` (list of known projects)
-- [x] Fields: name, remote URL, root path, last used timestamp
-- [x] **Test**: Load registry, save registry, round-trip
+### Q.2.2 Extract docker exact-match filtering
+- [ ] In `internal/docker/docker.go`, add `FindContainerByExactName(name string) (*ContainerInfo, error)`
+- [ ] Identical filtering pattern exists in:
+  - `internal/container/manager.go` (lines 244-263)
+  - `internal/guardian/container.go` (lines 206-223)
+  - `internal/docker/network.go` (lines 34-51)
+- [ ] Update all three locations to use shared helper
+- [ ] **Test**: Add unit test for exact-match vs substring behavior
 
-### 2.3.3 Project registration
-- [x] Implement `Register(info *ProjectInfo) error`
-- [x] Auto-register on first `cloister start` in a directory
-- [x] Update existing entry if same name but different path (warn user)
-- [x] Handle name collisions (different remotes, same basename) - suggest rename or use full name
-- [x] **Test**: Register new project, update existing, handle collision
-
-### 2.3.4 Project lookup
-- [x] Implement `Lookup(name string) (*ProjectInfo, error)`
-- [x] Implement `LookupByPath(path string) (*ProjectInfo, error)`
-- [x] Implement `List() []*ProjectInfo`
-- [x] **Test**: Lookup by name, by path, list all
+### Q.2.3 Extract HostDir helper in guardian
+- [ ] In `internal/guardian/container.go`, `HostTokenDir()` and `HostConfigDir()` have identical structure
+- [ ] Extract `hostCloisterPath(subdir string) (string, error)` helper
+- [ ] Both get home dir, join with `.config/cloister/<subdir>`
+- [ ] **Test**: Existing tests pass
 
 ---
 
-## Phase 2.4: Per-Project Configuration
+## Phase Q.3: API Simplification
 
-Load and manage project-specific configuration files.
+Consolidate redundant API methods. May require updating callers.
 
-### 2.4.1 Project config paths
-- [x] Project configs stored at `~/.config/cloister/projects/<name>.yaml`
-- [x] Implement `ProjectConfigPath(name string) string`
-- [x] Ensure projects directory exists on first use
-- [x] **Test**: Path generation is consistent
+### Q.3.1 Consolidate token.Registry methods
+- [ ] In `internal/token/registry.go`, consolidate lookup methods
+- [ ] Replace `Lookup()`, `LookupProject()`, `LookupInfo()` with single `Lookup() (TokenInfo, bool)`
+- [ ] Callers use only the fields they need from TokenInfo
+- [ ] Consolidate `List()` and `ListInfo()` into single `List() map[string]TokenInfo`
+- [ ] Mark old `Register()` as deprecated, prefer `RegisterWithProject()`
+- [ ] Update callers in `internal/guardian/` and `internal/cmd/`
+- [ ] **Test**: Update tests to use new signatures
 
-### 2.4.2 Project config loading
-- [x] Implement `LoadProjectConfig(name string) (*ProjectConfig, error)`
-- [x] Return empty/default config if file doesn't exist
-- [x] Validate remote URL matches registered project (warn on mismatch)
-- [x] **Test**: Load existing config, load missing config, handle corrupt file
+### Q.3.2 Consolidate config merge functions
+- [ ] In `internal/config/merge.go`, extract generic merge helper
+- [ ] `MergeAllowlists()` and `MergeCommandPatterns()` have identical dedup logic
+- [ ] Create generic `mergeSlice[T comparable](a, b []T, key func(T) string) []T`
+- [ ] Or use simpler approach: extract dedup logic to helper
+- [ ] **Test**: Existing merge tests pass
 
-### 2.4.3 Project config creation
-- [x] Implement `InitProjectConfig(info *ProjectInfo) error`
-- [x] Create minimal project config with remote URL and root path
-- [x] Don't overwrite existing config
-- [x] **Test**: Creates file, preserves existing
-
-### 2.4.4 Project config editing
-- [x] Implement `EditProjectConfig(name string) error`
-- [x] Open config file in `$EDITOR` (fall back to `vi`)
-- [x] Create minimal config first if doesn't exist
-- [x] Validate config after edit, warn on errors
-- [x] **Test**: Manual - opens in editor, warns on invalid (deferred to Phase 2.7 when CLI available)
+### Q.3.3 Consolidate container existence checks
+- [ ] In `internal/container/manager.go`, consolidate `containerExists()` and `IsRunning()`
+- [ ] Both query same Docker data; return `(exists bool, running bool, err error)`
+- [ ] Single Docker call per check instead of separate calls
+- [ ] **Test**: Add test verifying single Docker call
 
 ---
 
-## Phase 2.5: Config Merging
+## Phase Q.4: Dependency Injection & Testability
 
-Merge global and project configs into effective configuration.
+Add interfaces and injection points to enable unit testing without Docker.
 
-### 2.5.1 Allowlist merging
-- [x] Create `internal/config/merge.go`
-- [x] Project allowlist entries add to (not replace) global allowlist
-- [x] Implement `MergeAllowlists(global, project []AllowEntry) []AllowEntry`
-- [x] Deduplicate domains
-- [x] **Test**: Merge with overlap, merge with additions only
+### Q.4.1 Inject container.Manager in cloister
+- [ ] In `internal/cloister/cloister.go`, add `Manager` field to package or use functional options
+- [ ] Replace inline `container.NewManager()` calls with injected dependency
+- [ ] Default to `container.NewManager()` when not injected
+- [ ] **Test**: Add unit test using mock Manager
 
-### 2.5.2 Command pattern merging
-- [x] Project auto_approve patterns add to global patterns
-- [x] Project manual_approve patterns add to global patterns
-- [x] Implement `MergeCommandPatterns(global, project *CommandConfig) *CommandConfig`
-- [x] **Test**: Pattern merging, no duplicates
+### Q.4.2 Add DockerRunner interface in container
+- [ ] In `internal/container/manager.go`, define `DockerRunner` interface
+- [ ] Interface wraps `docker.Run`, `docker.RunJSONLines` calls
+- [ ] Add `Runner` field to `Manager` struct, default to real implementation
+- [ ] **Test**: Add unit test using mock DockerRunner
 
-### 2.5.3 Effective config resolution
-- [x] Implement `ResolveConfig(project string) (*EffectiveConfig, error)`
-- [x] Load global config
-- [x] Load project config (if project provided)
-- [x] Merge allowlists and patterns
-- [x] Return merged effective config
-- [x] **Test**: Resolution with project, resolution without project (global only)
+### Q.4.3 Add Clock interface in project.Registry
+- [ ] In `internal/project/registry.go`, inject time source
+- [ ] Replace direct `time.Now()` calls (lines 123, 181) with clock interface
+- [ ] Default to real time when not injected
+- [ ] **Test**: Add test verifying LastUsed timestamp updates
 
 ---
 
-## Phase 2.6: Guardian Integration
+## Phase Q.5: Testing & Polish
 
-Wire configuration into the guardian proxy.
+Add missing tests and file organization improvements.
 
-### 2.6.1 Allowlist from config
-- [x] Modify `NewAllowlist` to accept config-derived domain list
-- [x] Update `guardian.Server` to receive allowlist from config
-- [x] Remove hardcoded `DefaultAllowedDomains` (or keep as fallback)
-- [x] **Test**: Proxy uses config-derived allowlist
+### Q.5.1 Add cmd package tests
+- [ ] Create `internal/cmd/start_test.go` — test runStart logic
+- [ ] Create `internal/cmd/stop_test.go` — test runStop logic
+- [ ] Create `internal/cmd/list_test.go` — test runList logic
+- [ ] Focus on error handling paths (Docker not running, git detection, etc.)
+- [ ] **Test**: New tests achieve >70% coverage for these files
 
-### 2.6.2 Dynamic allowlist updates
-- [x] Implement mechanism for guardian to receive updated allowlist
-- [x] Option A: Guardian reloads config on SIGHUP
-- [x] Option B: Guardian exposes endpoint to update allowlist
-- [x] For Phase 2, prefer Option A (simpler, no API versioning concerns)
-- [x] **Test**: Config change + SIGHUP → allowlist updated
+### Q.5.2 Add token package tests
+- [ ] Add test for `DefaultTokenDir()` — currently 0% coverage
+- [ ] Add test for `Store.Dir()` — currently 0% coverage
+- [ ] **Test**: Token package coverage increases to >90%
 
-### 2.6.3 Per-cloister allowlist
-- [x] Guardian stores per-cloister allowlist (project-specific additions)
-- [x] Token registration includes project name
-- [x] Proxy looks up cloister's project, uses merged allowlist
-- [x] **Test**: Two cloisters, different projects, different allowlists
+### Q.5.3 Refactor os.Exit in cmd handlers
+- [ ] In `internal/cmd/start.go`, replace `os.Exit(exitCode)` (lines 152, 196) with typed error
+- [ ] Define `ExitCodeError` type that carries exit code
+- [ ] Handle in root command to call `os.Exit` with code
+- [ ] **Test**: Test that exit code propagates correctly
 
----
+### Q.5.4 File organization
+- [ ] Move name generation functions from `internal/container/config.go` to `internal/container/names.go`
+- [ ] Move `AllowlistCache` from `internal/guardian/proxy.go` to `internal/guardian/allowlist_cache.go`
+- [ ] Move credential env var logic from `internal/token/env.go` to `internal/token/credentials.go`
+- [ ] **Test**: No behavior change, existing tests pass
 
-## Phase 2.7: CLI Commands
-
-Implement configuration and project management commands.
-
-### 2.7.1 `cloister config` command
-- [x] Create `internal/cmd/config.go`
-- [x] `config show`: Print current effective global config
-- [x] `config edit`: Open global config in `$EDITOR`
-- [x] `config path`: Print path to config file
-- [x] `config init`: Create default config if missing
-- [x] **Test**: Manual - commands work as expected (deferred to integration testing)
-
-### 2.7.2 `cloister project list` command
-- [x] Create `internal/cmd/project.go`
-- [x] List all registered projects
-- [x] Show: name, root path, remote URL, last used
-- [x] Format as table
-- [x] **Test**: Manual - list shows registered projects (deferred to integration testing)
-
-### 2.7.3 `cloister project show` command
-- [x] `project show <name>`: Show project details
-- [x] Display: name, root, remote, effective allowlist additions
-- [x] Show config file path
-- [x] **Test**: Manual - show displays details (deferred to integration testing)
-
-### 2.7.4 `cloister project edit` command
-- [x] `project edit <name>`: Open project config in `$EDITOR`
-- [x] Auto-complete project names
-- [x] **Test**: Manual - opens correct file (deferred to integration testing)
-
-### 2.7.5 `cloister project remove` command
-- [x] `project remove <name>`: Remove project from registry
-- [x] Optionally remove project config file (`--config` flag)
-- [x] Don't remove if cloisters running for that project
-- [x] **Test**: Manual - removes from registry, handles running cloisters (deferred to integration testing)
-
-### 2.7.6 Update `cloister start`
-- [x] Auto-register project on first start
-- [x] Load and apply project-specific allowlist (infrastructure ready; full guardian wiring deferred)
-- [x] Pass project name to guardian on token registration
-- [x] **Test**: Manual - start registers project, uses project allowlist (deferred to integration testing)
-
----
-
-## Phase 2.8: Integration & Polish
-
-End-to-end testing and documentation.
-
-### 2.8.1 End-to-end integration
-- [x] **Test**: Fresh install → default config created → cloister starts
-- [x] **Test**: Add domain to project config → restart cloister → domain allowed
-- [x] **Test**: Same domain denied for different project
-- [x] **Test**: `project list` → `project show` → `project edit` workflow
-- [x] **Test**: Config validation errors shown clearly
-
-### 2.8.2 Migration from Phase 1
-- [x] Existing cloisters continue to work (backward compatible)
-- [x] First run after upgrade creates default config
-- [x] Token persistence (Phase 1.8.2) continues to work with config
-- [x] Document upgrade path (none needed, automatic)
-
-### 2.8.3 Error handling improvements
-- [x] Clear error when config file has syntax errors
-- [x] Clear error when project not found in registry
-- [x] Suggest `project list` when project lookup fails
-- [x] Warn when config has unknown fields (typo detection)
-
-### 2.8.4 Documentation
-- [x] Update README with config system overview
-- [x] Update config-reference.md with any schema changes (no changes needed)
-- [x] Add examples for common configurations (in README)
-- [x] Document allowlist best practices (default config includes best practices)
+### Q.5.5 Code style consistency
+- [ ] Use `filepath.Join` consistently instead of string concatenation in `internal/project/registry.go`
+- [ ] Rename shadowing variable in `internal/cmd/list.go` line 86 (`project` shadows package)
+- [ ] Group sentinel errors together in `internal/docker/docker.go`
+- [ ] **Test**: `make lint` passes
 
 ---
 
@@ -350,6 +230,7 @@ End-to-end testing and documentation.
 - `project show` and `project edit` should infer project name from current directory
 - Suppress log output in user-facing commands (or redirect to stderr with --verbose flag)
 - Don't show usage on config load errors (just show error message)
+- Multi-arch Docker image builds (linux/amd64, linux/arm64)
 
 ### Future: Devcontainer Integration
 - Devcontainer.json discovery and image building
