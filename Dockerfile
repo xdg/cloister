@@ -4,6 +4,9 @@ ARG TARGETARCH
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Force apt to use IPv4 (BuildKit's network has flaky IPv6 to Ubuntu mirrors)
+RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
+
 # Core tools
 RUN apt-get update && apt-get install -y \
     git \
