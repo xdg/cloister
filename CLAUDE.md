@@ -60,6 +60,19 @@ This is a greenfield Go project. Primary components:
 - Approval web UI uses [htmx](https://htmx.org/) (~14kb) with SSE for real-time updates
 - All assets (HTML templates, htmx, CSS) embedded via `go:embed` for single-binary distribution
 
+## Internal Packages
+
+| Package | Purpose |
+|---------|---------|
+| `internal/cloister` | High-level orchestration for starting/stopping cloister containers with guardian integration. Coordinates token registration, container creation, and user settings injection. |
+| `internal/cmd` | CLI command implementations using cobra. Handles `start`, `stop`, `list`, `config`, `project`, and `guardian` subcommands. |
+| `internal/config` | Configuration types, YAML parsing, validation, and merging. Manages global config (`~/.config/cloister/config.yaml`) and per-project configs. |
+| `internal/container` | Docker container lifecycle management. Creates containers with security constraints, manages start/stop/attach operations. |
+| `internal/docker` | Low-level Docker CLI wrapper. Provides `Run`, `RunJSON`, `RunJSONLines` helpers and network management for `cloister-net`. |
+| `internal/guardian` | HTTP CONNECT proxy server with domain allowlist, token validation API, and per-project allowlist caching. Runs inside the guardian container. |
+| `internal/project` | Git repository detection and project registry. Tracks known projects in `~/.config/cloister/projects.yaml` with remote URLs and paths. |
+| `internal/token` | Cryptographic token generation, in-memory registry, and disk persistence. Also provides proxy environment variable configuration for containers. |
+
 ## Documentation
 
 | Document | Contents |
