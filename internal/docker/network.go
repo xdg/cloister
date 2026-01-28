@@ -36,7 +36,7 @@ func NetworkExists(name string) (bool, error) {
 		Name string `json:"Name"`
 	}
 
-	err := RunJSONLines(&networks, "network", "ls", "--filter", "name=^"+name+"$")
+	err := RunJSONLines(&networks, false, "network", "ls", "--filter", "name=^"+name+"$")
 	if err != nil {
 		return false, err
 	}
@@ -55,7 +55,7 @@ func InspectNetwork(name string) (*NetworkInspectInfo, error) {
 	var info NetworkInspectInfo
 
 	// docker network inspect with --format '{{json .}}' returns a single JSON object
-	err := RunJSON(&info, "network", "inspect", name)
+	err := RunJSON(&info, false, "network", "inspect", name)
 	if err != nil {
 		return nil, err
 	}

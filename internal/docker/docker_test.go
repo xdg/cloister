@@ -226,7 +226,7 @@ type NetworkInfo struct {
 func TestRunJSONLines_NetworkList(t *testing.T) {
 	// Test with docker network ls which returns newline-separated JSON objects
 	var networks []NetworkInfo
-	err := RunJSONLines(&networks, "network", "ls")
+	err := RunJSONLines(&networks, false, "network", "ls")
 	if err != nil {
 		var cmdErr *CommandError
 		if errors.As(err, &cmdErr) {
@@ -265,7 +265,7 @@ func TestRunJSONLines_NetworkList(t *testing.T) {
 func TestRunJSONLines_EmptyResult(t *testing.T) {
 	// docker container ls with impossible filter should return empty
 	var containers []map[string]any
-	err := RunJSONLines(&containers, "container", "ls", "--filter", "name=cloister-impossible-name-99999")
+	err := RunJSONLines(&containers, false, "container", "ls", "--filter", "name=cloister-impossible-name-99999")
 	if err != nil {
 		var cmdErr *CommandError
 		if errors.As(err, &cmdErr) {
@@ -314,7 +314,7 @@ func TestRunJSONLinesStrict_EmptyResult(t *testing.T) {
 func TestRunJSON_InvalidContainer(t *testing.T) {
 	// docker inspect on non-existent container should return CommandError
 	var result map[string]any
-	err := RunJSON(&result, "inspect", "cloister-nonexistent-container-12345")
+	err := RunJSON(&result, false, "inspect", "cloister-nonexistent-container-12345")
 	if err == nil {
 		t.Fatal("expected error for non-existent container")
 	}
@@ -354,5 +354,128 @@ func TestRunJSONLinesStrict_WithResults(t *testing.T) {
 
 	if len(networks) == 0 {
 		t.Error("expected at least one network")
+	}
+}
+
+func TestRunJSONLines_StrictVsNonStrict(t *testing.T) {
+	// Test that strict=false returns nil on empty output, strict=true returns ErrNoResults
+	// Use an impossible filter to guarantee empty results
+
+	// Test non-strict mode (strict=false)
+	var containersNonStrict []map[string]any
+	errNonStrict := RunJSONLines(&containersNonStrict, false, "container", "ls", "--filter", "name=cloister-impossible-name-strict-test-99999")
+
+	if errNonStrict != nil {
+		var cmdErr *CommandError
+		if errors.As(errNonStrict, &cmdErr) {
+			var execErr *exec.Error
+			if errors.As(cmdErr.Err, &execErr) {
+				t.Skip("Docker CLI not installed")
+			}
+		}
+		if strings.Contains(errNonStrict.Error(), "daemon") {
+			t.Skip("Docker daemon not running")
+		}
+		t.Fatalf("non-strict mode: unexpected error: %v", errNonStrict)
+	}
+	// Non-strict mode should return nil for empty results
+
+	// Test strict mode (strict=true)
+	var containersStrict []map[string]any
+	errStrict := RunJSONLines(&containersStrict, true, "container", "ls", "--filter", "name=cloister-impossible-name-strict-test-99999")
+
+	if errStrict == nil {
+		t.Fatal("strict mode: expected ErrNoResults for empty result, got nil")
+	}
+	if !errors.Is(errStrict, ErrNoResults) {
+		var cmdErr *CommandError
+		if errors.As(errStrict, &cmdErr) {
+			var execErr *exec.Error
+			if errors.As(cmdErr.Err, &execErr) {
+				t.Skip("Docker CLI not installed")
+			}
+		}
+		t.Fatalf("strict mode: expected ErrNoResults, got: %v", errStrict)
+	}
+}
+
+func TestRunJSON_StrictVsNonStrict(t *testing.T) {
+	// Test that strict=false returns nil on empty output, strict=true returns ErrNoResults
+	// docker inspect with format on a non-existent name produces CommandError (not empty output)
+	// so we need a different approach: use "docker volume ls" with impossible filter
+
+	// Test non-strict mode (strict=false)
+	var volumesNonStrict []map[string]any
+	errNonStrict := RunJSONLines(&volumesNonStrict, false, "volume", "ls", "--filter", "name=cloister-impossible-volume-99999")
+
+	if errNonStrict != nil {
+		var cmdErr *CommandError
+		if errors.As(errNonStrict, &cmdErr) {
+			var execErr *exec.Error
+			if errors.As(cmdErr.Err, &execErr) {
+				t.Skip("Docker CLI not installed")
+			}
+		}
+		if strings.Contains(errNonStrict.Error(), "daemon") {
+			t.Skip("Docker daemon not running")
+		}
+		t.Fatalf("non-strict mode: unexpected error: %v", errNonStrict)
+	}
+	// Non-strict mode should return nil for empty results
+
+	// Test strict mode (strict=true)
+	var volumesStrict []map[string]any
+	errStrict := RunJSONLines(&volumesStrict, true, "volume", "ls", "--filter", "name=cloister-impossible-volume-99999")
+
+	if errStrict == nil {
+		t.Fatal("strict mode: expected ErrNoResults for empty result, got nil")
+	}
+	if !errors.Is(errStrict, ErrNoResults) {
+		var cmdErr *CommandError
+		if errors.As(errStrict, &cmdErr) {
+			var execErr *exec.Error
+			if errors.As(cmdErr.Err, &execErr) {
+				t.Skip("Docker CLI not installed")
+			}
+		}
+		t.Fatalf("strict mode: expected ErrNoResults, got: %v", errStrict)
+	}
+}
+
+func TestCmdNameFromArgs(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "empty args",
+			args:     []string{},
+			expected: "",
+		},
+		{
+			name:     "single arg",
+			args:     []string{"inspect"},
+			expected: "inspect",
+		},
+		{
+			name:     "multiple args",
+			args:     []string{"network", "ls", "--filter", "name=test"},
+			expected: "network",
+		},
+		{
+			name:     "nil args",
+			args:     nil,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := cmdNameFromArgs(tt.args)
+			if result != tt.expected {
+				t.Errorf("cmdNameFromArgs(%v) = %q, want %q", tt.args, result, tt.expected)
+			}
+		})
 	}
 }

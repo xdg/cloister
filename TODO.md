@@ -46,11 +46,11 @@ Q.5 Testing & Polish
 Extract helpers from duplicated code patterns. No API changes.
 
 ### Q.1.1 Consolidate docker strict/non-strict function pairs
-- [ ] In `internal/docker/docker.go`, consolidate `RunJSON` and `RunJSONStrict` into single function
-- [ ] Add `strict bool` parameter or use options pattern
-- [ ] Same for `RunJSONLines` and `RunJSONLinesStrict`
-- [ ] Extract repeated `cmdName` extraction (lines 54-57, 121-124, 181-184, 207-210) into helper
-- [ ] **Test**: Existing tests pass; add test for strict vs non-strict behavior
+- [x] In `internal/docker/docker.go`, consolidate `RunJSON` and `RunJSONStrict` into single function
+- [x] Add `strict bool` parameter or use options pattern
+- [x] Same for `RunJSONLines` and `RunJSONLinesStrict`
+- [x] Extract repeated `cmdName` extraction (lines 54-57, 121-124, 181-184, 207-210) into helper
+- [x] **Test**: Existing tests pass; add test for strict vs non-strict behavior
 
 ### Q.1.2 Extract container creation helper
 - [ ] In `internal/container/manager.go`, extract shared logic from `Start()` and `Create()`

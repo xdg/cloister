@@ -174,7 +174,7 @@ func (m *Manager) Stop(containerName string) error {
 func (m *Manager) List() ([]ContainerInfo, error) {
 	var containers []ContainerInfo
 
-	err := docker.RunJSONLines(&containers, "ps", "-a", "--filter", "name=^cloister-")
+	err := docker.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^cloister-")
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func (m *Manager) containerExists(name string) (bool, error) {
 		Names string `json:"Names"`
 	}
 
-	err := docker.RunJSONLines(&containers, "ps", "-a", "--filter", "name=^"+name+"$")
+	err := docker.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^"+name+"$")
 	if err != nil {
 		return false, err
 	}
@@ -271,7 +271,7 @@ func (m *Manager) IsRunning(name string) (bool, error) {
 		State string `json:"State"`
 	}
 
-	err := docker.RunJSONLines(&containers, "ps", "-a", "--filter", "name=^"+name+"$")
+	err := docker.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^"+name+"$")
 	if err != nil {
 		return false, err
 	}

@@ -40,6 +40,15 @@ func (e *CommandError) Unwrap() error {
 	return e.Err
 }
 
+// cmdNameFromArgs extracts the command name from a slice of arguments.
+// Returns empty string if args is empty.
+func cmdNameFromArgs(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return ""
+}
+
 // Run executes a docker CLI command and returns stdout.
 // On error, returns a CommandError containing stderr for debugging.
 func Run(args ...string) (string, error) {
@@ -51,12 +60,8 @@ func Run(args ...string) (string, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		cmdName := ""
-		if len(args) > 0 {
-			cmdName = args[0]
-		}
 		return "", &CommandError{
-			Command: cmdName,
+			Command: cmdNameFromArgs(args),
 			Args:    args,
 			Stderr:  stderr.String(),
 			Err:     err,
@@ -77,14 +82,15 @@ var ErrNoResults = errors.New("no results from docker command")
 // This is designed for commands that output one JSON object per line:
 // docker network ls, docker container ls, docker image ls, etc.
 //
-// If the command returns empty output (no matching objects), the result slice
-// is left unchanged and nil is returned.
+// If strict is false and the command returns empty output (no matching objects),
+// the result slice is left unchanged and nil is returned.
+// If strict is true, empty output returns ErrNoResults.
 //
 // Example:
 //
 //	var networks []NetworkInfo
-//	err := RunJSONLines(&networks, "network", "ls")
-func RunJSONLines[T any](result *[]T, args ...string) error {
+//	err := RunJSONLines(&networks, false, "network", "ls")
+func RunJSONLines[T any](result *[]T, strict bool, args ...string) error {
 	args = append(args, "--format", "{{json .}}")
 	out, err := Run(args...)
 	if err != nil {
@@ -93,6 +99,9 @@ func RunJSONLines[T any](result *[]T, args ...string) error {
 
 	out = strings.TrimSpace(out)
 	if out == "" {
+		if strict {
+			return ErrNoResults
+		}
 		return nil
 	}
 
@@ -101,28 +110,15 @@ func RunJSONLines[T any](result *[]T, args ...string) error {
 
 // RunJSONLinesStrict is like RunJSONLines but returns ErrNoResults when the
 // command produces no output.
+//
+// Deprecated: Use RunJSONLines with strict=true instead.
 func RunJSONLinesStrict[T any](result *[]T, args ...string) error {
-	args = append(args, "--format", "{{json .}}")
-	out, err := Run(args...)
-	if err != nil {
-		return err
-	}
-
-	out = strings.TrimSpace(out)
-	if out == "" {
-		return ErrNoResults
-	}
-
-	return parseJSONLines(result, out, args)
+	return RunJSONLines(result, true, args...)
 }
 
 // parseJSONLines parses newline-separated JSON objects into a slice.
 func parseJSONLines[T any](result *[]T, out string, args []string) error {
-	cmdName := ""
-	if len(args) > 0 {
-		cmdName = args[0]
-	}
-
+	cmdName := cmdNameFromArgs(args)
 	lines := strings.Split(out, "\n")
 	items := make([]T, 0, len(lines))
 
@@ -153,18 +149,19 @@ func parseJSONLines[T any](result *[]T, out string, args []string) error {
 // For commands that output newline-separated JSON (docker network ls, container ls),
 // use RunJSONLines instead.
 //
-// If the command returns empty output (no matching objects), result is left
-// unchanged and nil is returned.
+// If strict is false and the command returns empty output (no matching objects),
+// result is left unchanged and nil is returned.
+// If strict is true, empty output returns ErrNoResults.
 //
 // Example:
 //
 //	var info DockerInfo
-//	err := RunJSON(&info, "info")
+//	err := RunJSON(&info, false, "info")
 //
 //	// For inspect, docker returns an array even for single items
 //	var containers []ContainerInfo
-//	err := RunJSON(&containers, "inspect", containerID)
-func RunJSON(result any, args ...string) error {
+//	err := RunJSON(&containers, false, "inspect", containerID)
+func RunJSON(result any, strict bool, args ...string) error {
 	args = append(args, "--format", "{{json .}}")
 	out, err := Run(args...)
 	if err != nil {
@@ -174,15 +171,14 @@ func RunJSON(result any, args ...string) error {
 	// Handle empty output (no results)
 	out = strings.TrimSpace(out)
 	if out == "" {
+		if strict {
+			return ErrNoResults
+		}
 		return nil
 	}
 
 	if err := json.Unmarshal([]byte(out), result); err != nil {
-		cmdName := ""
-		if len(args) > 0 {
-			cmdName = args[0]
-		}
-		return fmt.Errorf("docker %s: failed to parse JSON output: %w", cmdName, err)
+		return fmt.Errorf("docker %s: failed to parse JSON output: %w", cmdNameFromArgs(args), err)
 	}
 
 	return nil
@@ -191,28 +187,10 @@ func RunJSON(result any, args ...string) error {
 // RunJSONStrict is like RunJSON but returns ErrNoResults when the command
 // produces no output. This is useful when you need to distinguish between
 // "no matching objects" and actual errors.
+//
+// Deprecated: Use RunJSON with strict=true instead.
 func RunJSONStrict(result any, args ...string) error {
-	args = append(args, "--format", "{{json .}}")
-	out, err := Run(args...)
-	if err != nil {
-		return err
-	}
-
-	// Handle empty output (no results)
-	out = strings.TrimSpace(out)
-	if out == "" {
-		return ErrNoResults
-	}
-
-	if err := json.Unmarshal([]byte(out), result); err != nil {
-		cmdName := ""
-		if len(args) > 0 {
-			cmdName = args[0]
-		}
-		return fmt.Errorf("docker %s: failed to parse JSON output: %w", cmdName, err)
-	}
-
-	return nil
+	return RunJSON(result, true, args...)
 }
 
 // CheckDaemon verifies the Docker daemon is running and accessible.

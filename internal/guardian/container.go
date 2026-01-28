@@ -206,7 +206,7 @@ func EnsureRunning() error {
 func getContainerState() (*containerState, error) {
 	var containers []containerState
 
-	err := docker.RunJSONLines(&containers, "ps", "-a", "--filter", "name=^"+ContainerName+"$")
+	err := docker.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^"+ContainerName+"$")
 	if err != nil {
 		return nil, err
 	}
