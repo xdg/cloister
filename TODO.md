@@ -106,10 +106,10 @@ Create shared packages for code duplicated across multiple packages.
 - [x] **Test**: Add unit test for exact-match vs substring behavior
 
 ### Q.2.3 Extract HostDir helper in guardian
-- [ ] In `internal/guardian/container.go`, `HostTokenDir()` and `HostConfigDir()` have identical structure
-- [ ] Extract `hostCloisterPath(subdir string) (string, error)` helper
-- [ ] Both get home dir, join with `.config/cloister/<subdir>`
-- [ ] **Test**: Existing tests pass
+- [x] In `internal/guardian/container.go`, `HostTokenDir()` and `HostConfigDir()` have identical structure
+- [x] Extract `hostCloisterPath(subdir string) (string, error)` helper
+- [x] Both get home dir, join with `.config/cloister/<subdir>`
+- [x] **Test**: Existing tests pass
 
 ---
 

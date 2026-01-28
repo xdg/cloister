@@ -34,24 +34,28 @@ const (
 // ErrGuardianNotRunning indicates the guardian container is not running.
 var ErrGuardianNotRunning = errors.New("guardian container is not running")
 
-// HostTokenDir returns the token directory path on the host.
-// This is ~/.config/cloister/tokens.
-func HostTokenDir() (string, error) {
+// hostCloisterPath returns a path under ~/.config/cloister/<subdir>.
+func hostCloisterPath(subdir string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "cloister", "tokens"), nil
+	if subdir == "" {
+		return filepath.Join(home, ".config", "cloister"), nil
+	}
+	return filepath.Join(home, ".config", "cloister", subdir), nil
+}
+
+// HostTokenDir returns the token directory path on the host.
+// This is ~/.config/cloister/tokens.
+func HostTokenDir() (string, error) {
+	return hostCloisterPath("tokens")
 }
 
 // HostConfigDir returns the config directory path on the host.
 // This is ~/.config/cloister.
 func HostConfigDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", "cloister"), nil
+	return hostCloisterPath("")
 }
 
 // ErrGuardianAlreadyRunning indicates the guardian container is already running.
