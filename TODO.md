@@ -90,11 +90,11 @@ Extract helpers from duplicated code patterns. No API changes.
 Create shared packages for code duplicated across multiple packages.
 
 ### Q.2.1 Create internal/pathutil package
-- [ ] Create `internal/pathutil/home.go`
-- [ ] Move `expandHome()` from `internal/config/paths.go` (lines 46-64)
-- [ ] Remove duplicate from `internal/project/registry.go` (lines 97-115)
-- [ ] Update both packages to import from pathutil
-- [ ] **Test**: Add unit tests for expandHome edge cases
+- [x] Create `internal/pathutil/home.go`
+- [x] Move `expandHome()` from `internal/config/paths.go` (lines 46-64)
+- [x] Remove duplicate from `internal/project/registry.go` (lines 97-115)
+- [x] Update both packages to import from pathutil
+- [x] **Test**: Add unit tests for expandHome edge cases
 
 ### Q.2.2 Extract docker exact-match filtering
 - [ ] In `internal/docker/docker.go`, add `FindContainerByExactName(name string) (*ContainerInfo, error)`

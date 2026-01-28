@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+
+	"github.com/xdg/cloister/internal/pathutil"
 )
 
 // LoadGlobalConfig loads the global configuration from the default config path.
@@ -82,18 +84,18 @@ func LoadProjectConfig(name string) (*ProjectConfig, error) {
 // of the global configuration.
 func expandGlobalPaths(cfg *GlobalConfig) {
 	// Expand log paths
-	cfg.Log.File = expandHome(cfg.Log.File)
-	cfg.Log.PerCloisterDir = expandHome(cfg.Log.PerCloisterDir)
+	cfg.Log.File = pathutil.ExpandHome(cfg.Log.File)
+	cfg.Log.PerCloisterDir = pathutil.ExpandHome(cfg.Log.PerCloisterDir)
 
 	// Expand agent config mount paths
 	for name, agent := range cfg.Agents {
-		agent.ConfigMount = expandHome(agent.ConfigMount)
+		agent.ConfigMount = pathutil.ExpandHome(agent.ConfigMount)
 		cfg.Agents[name] = agent
 	}
 
 	// Expand blocked mount paths
 	for i, mount := range cfg.Devcontainer.BlockedMounts {
-		cfg.Devcontainer.BlockedMounts[i] = expandHome(mount)
+		cfg.Devcontainer.BlockedMounts[i] = pathutil.ExpandHome(mount)
 	}
 }
 
@@ -101,10 +103,10 @@ func expandGlobalPaths(cfg *GlobalConfig) {
 // of the project configuration.
 func expandProjectPaths(cfg *ProjectConfig) {
 	// Expand root path
-	cfg.Root = expandHome(cfg.Root)
+	cfg.Root = pathutil.ExpandHome(cfg.Root)
 
 	// Expand refs paths
 	for i, ref := range cfg.Refs {
-		cfg.Refs[i] = expandHome(ref)
+		cfg.Refs[i] = pathutil.ExpandHome(ref)
 	}
 }

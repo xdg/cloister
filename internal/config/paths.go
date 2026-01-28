@@ -2,8 +2,8 @@ package config
 
 import (
 	"os"
-	"path/filepath"
-	"strings"
+
+	"github.com/xdg/cloister/internal/pathutil"
 )
 
 // ConfigDir returns the cloister configuration directory path.
@@ -15,7 +15,7 @@ func ConfigDir() string {
 	if base == "" {
 		base = "~/.config"
 	}
-	return expandHome(base) + "/cloister/"
+	return pathutil.ExpandHome(base) + "/cloister/"
 }
 
 // EnsureConfigDir creates the cloister configuration directory if it
@@ -41,24 +41,4 @@ func ProjectsDir() string {
 // The returned path is ProjectsDir() + name + ".yaml".
 func ProjectConfigPath(name string) string {
 	return ProjectsDir() + name + ".yaml"
-}
-
-// expandHome replaces a leading ~ in path with the user's home directory.
-// If the home directory cannot be determined, the path is returned unchanged.
-func expandHome(path string) string {
-	if path == "~" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return path
-		}
-		return home
-	}
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return path
-		}
-		return filepath.Join(home, path[2:])
-	}
-	return path
 }

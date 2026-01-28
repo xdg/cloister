@@ -13,6 +13,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/xdg/cloister/internal/config"
+	"github.com/xdg/cloister/internal/pathutil"
 )
 
 // ErrProjectNotFound indicates that a project was not found in the registry.
@@ -72,7 +73,7 @@ func LoadRegistry() (*Registry, error) {
 
 	// Expand ~ in Root paths
 	for i := range reg.Projects {
-		reg.Projects[i].Root = expandHome(reg.Projects[i].Root)
+		reg.Projects[i].Root = pathutil.ExpandHome(reg.Projects[i].Root)
 	}
 
 	return &reg, nil
@@ -92,26 +93,6 @@ func SaveRegistry(r *Registry) error {
 	}
 
 	return os.WriteFile(RegistryPath(), data, 0600)
-}
-
-// expandHome replaces a leading ~ in path with the user's home directory.
-// If the home directory cannot be determined, the path is returned unchanged.
-func expandHome(path string) string {
-	if path == "~" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return path
-		}
-		return home
-	}
-	if strings.HasPrefix(path, "~/") {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return path
-		}
-		return filepath.Join(home, path[2:])
-	}
-	return path
 }
 
 // Register adds or updates a project in the registry based on ProjectInfo.
@@ -191,7 +172,7 @@ func (r *Registry) UpdateLastUsed(name string) error {
 // handled. Returns nil if no match is found.
 func (r *Registry) FindByPath(path string) *RegistryEntry {
 	// Expand ~ in the input path
-	path = expandHome(path)
+	path = pathutil.ExpandHome(path)
 
 	// Clean the path to normalize it
 	path = filepath.Clean(path)

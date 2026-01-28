@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -87,59 +86,6 @@ func TestEnsureConfigDir(t *testing.T) {
 	// Calling again should succeed (idempotent)
 	if err := EnsureConfigDir(); err != nil {
 		t.Errorf("EnsureConfigDir() second call error = %v", err)
-	}
-}
-
-func TestExpandHome(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("os.UserHomeDir() error = %v", err)
-	}
-
-	tests := []struct {
-		name  string
-		input string
-		want  string
-	}{
-		{
-			name:  "tilde only",
-			input: "~",
-			want:  home,
-		},
-		{
-			name:  "tilde with path",
-			input: "~/foo/bar",
-			want:  filepath.Join(home, "foo/bar"),
-		},
-		{
-			name:  "absolute path unchanged",
-			input: "/usr/local/bin",
-			want:  "/usr/local/bin",
-		},
-		{
-			name:  "relative path unchanged",
-			input: "relative/path",
-			want:  "relative/path",
-		},
-		{
-			name:  "tilde in middle unchanged",
-			input: "/home/~user",
-			want:  "/home/~user",
-		},
-		{
-			name:  "empty string",
-			input: "",
-			want:  "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := expandHome(tt.input)
-			if got != tt.want {
-				t.Errorf("expandHome(%q) = %q, want %q", tt.input, got, tt.want)
-			}
-		})
 	}
 }
 
