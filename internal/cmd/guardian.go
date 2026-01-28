@@ -41,7 +41,7 @@ var guardianStartCmd = &cobra.Command{
 		// Check if Docker is running
 		if err := docker.CheckDaemon(); err != nil {
 			if errors.Is(err, docker.ErrDockerNotRunning) {
-				return fmt.Errorf("Docker is not running; please start Docker and try again")
+				return dockerNotRunningError()
 			}
 			return fmt.Errorf("docker is not available: %w", err)
 		}
@@ -81,7 +81,7 @@ Warns if there are running cloister containers that depend on the guardian.`,
 		// Check if Docker is running
 		if err := docker.CheckDaemon(); err != nil {
 			if errors.Is(err, docker.ErrDockerNotRunning) {
-				return fmt.Errorf("Docker is not running; please start Docker and try again")
+				return dockerNotRunningError()
 			}
 			return fmt.Errorf("docker is not available: %w", err)
 		}
@@ -138,7 +138,7 @@ var guardianStatusCmd = &cobra.Command{
 		// Check if Docker is running
 		if err := docker.CheckDaemon(); err != nil {
 			if errors.Is(err, docker.ErrDockerNotRunning) {
-				return fmt.Errorf("Docker is not running; please start Docker and try again")
+				return dockerNotRunningError()
 			}
 			return fmt.Errorf("docker is not available: %w", err)
 		}

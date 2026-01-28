@@ -52,7 +52,7 @@ func runStop(cmd *cobra.Command, args []string) error {
 	err := cloister.Stop(containerName, token)
 	if err != nil {
 		if errors.Is(err, docker.ErrDockerNotRunning) {
-			return fmt.Errorf("Docker is not running; please start Docker and try again")
+			return dockerNotRunningError()
 		}
 		if errors.Is(err, container.ErrContainerNotFound) {
 			return fmt.Errorf("cloister %q not found", cloisterName)
@@ -74,11 +74,8 @@ func detectCloisterName() (string, error) {
 	// Detect git root from current directory
 	gitRoot, err := project.DetectGitRoot(".")
 	if err != nil {
-		if errors.Is(err, project.ErrNotGitRepo) {
-			return "", fmt.Errorf("not in a git repository; specify cloister name or run from within a git project")
-		}
-		if errors.Is(err, project.ErrGitNotInstalled) {
-			return "", fmt.Errorf("git is not installed or not in PATH")
+		if gitErr := gitDetectionErrorWithHint(err, "specify cloister name or run from within a git project"); gitErr != nil {
+			return "", gitErr
 		}
 		return "", fmt.Errorf("failed to detect git repository: %w", err)
 	}

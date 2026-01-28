@@ -65,11 +65,11 @@ Extract helpers from duplicated code patterns. No API changes.
 - [x] **Test**: Existing cloister tests pass
 
 ### Q.1.4 Extract cmd error helpers
-- [ ] Create `internal/cmd/errors.go`
-- [ ] Extract `dockerNotRunningError()` — used in 6 locations across start.go, stop.go, list.go, guardian.go
-- [ ] Extract `gitDetectionError(err error) error` — handles ErrNotGitRepo/ErrGitNotInstalled consistently
-- [ ] Update all call sites to use helpers
-- [ ] **Test**: Add unit tests for error helpers
+- [x] Create `internal/cmd/errors.go`
+- [x] Extract `dockerNotRunningError()` — used in 6 locations across start.go, stop.go, list.go, guardian.go
+- [x] Extract `gitDetectionError(err error) error` — handles ErrNotGitRepo/ErrGitNotInstalled consistently
+- [x] Update all call sites to use helpers
+- [x] **Test**: Add unit tests for error helpers
 
 ### Q.1.5 Extract guardian client HTTP helper
 - [ ] In `internal/guardian/client.go`, extract shared HTTP request execution

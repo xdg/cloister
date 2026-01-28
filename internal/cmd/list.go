@@ -32,7 +32,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	containers, err := mgr.List()
 	if err != nil {
 		if errors.Is(err, docker.ErrDockerNotRunning) {
-			return fmt.Errorf("Docker is not running; please start Docker and try again")
+			return dockerNotRunningError()
 		}
 		return fmt.Errorf("failed to list containers: %w", err)
 	}
