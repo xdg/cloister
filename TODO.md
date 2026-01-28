@@ -127,11 +127,11 @@ Consolidate redundant API methods. May require updating callers.
 - [x] **Test**: Update tests to use new signatures
 
 ### Q.3.2 Consolidate config merge functions
-- [ ] In `internal/config/merge.go`, extract generic merge helper
-- [ ] `MergeAllowlists()` and `MergeCommandPatterns()` have identical dedup logic
-- [ ] Create generic `mergeSlice[T comparable](a, b []T, key func(T) string) []T`
-- [ ] Or use simpler approach: extract dedup logic to helper
-- [ ] **Test**: Existing merge tests pass
+- [x] In `internal/config/merge.go`, extract generic merge helper
+- [x] `MergeAllowlists()` and `MergeCommandPatterns()` have identical dedup logic
+- [x] Create generic `mergeSlice[T comparable](a, b []T, key func(T) string) []T`
+- [x] Or use simpler approach: extract dedup logic to helper
+- [x] **Test**: Existing merge tests pass
 
 ### Q.3.3 Consolidate container existence checks
 - [ ] In `internal/container/manager.go`, consolidate `containerExists()` and `IsRunning()`

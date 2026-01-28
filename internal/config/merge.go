@@ -35,66 +35,48 @@ type EffectiveConfig struct {
 	ProjectRefs   []string
 }
 
-// MergeAllowlists combines global and project allowlist entries.
-// Project entries ADD to global (don't replace).
-// Entries are deduplicated by domain.
-func MergeAllowlists(global, project []AllowEntry) []AllowEntry {
+// mergeSlices combines two slices, deduplicating by a key function.
+// Items from the first slice take precedence. The key function extracts
+// the string used for deduplication.
+func mergeSlices[T any](global, project []T, key func(T) string) []T {
 	if len(global) == 0 && len(project) == 0 {
 		return nil
 	}
 
-	// Use a map to track seen domains for deduplication
 	seen := make(map[string]bool, len(global)+len(project))
-	result := make([]AllowEntry, 0, len(global)+len(project))
+	result := make([]T, 0, len(global)+len(project))
 
-	// Add global entries first
-	for _, entry := range global {
-		if !seen[entry.Domain] {
-			seen[entry.Domain] = true
-			result = append(result, entry)
+	for _, item := range global {
+		k := key(item)
+		if !seen[k] {
+			seen[k] = true
+			result = append(result, item)
 		}
 	}
 
-	// Add project entries, skipping duplicates
-	for _, entry := range project {
-		if !seen[entry.Domain] {
-			seen[entry.Domain] = true
-			result = append(result, entry)
+	for _, item := range project {
+		k := key(item)
+		if !seen[k] {
+			seen[k] = true
+			result = append(result, item)
 		}
 	}
 
 	return result
 }
 
+// MergeAllowlists combines global and project allowlist entries.
+// Project entries ADD to global (don't replace).
+// Entries are deduplicated by domain.
+func MergeAllowlists(global, project []AllowEntry) []AllowEntry {
+	return mergeSlices(global, project, func(e AllowEntry) string { return e.Domain })
+}
+
 // MergeCommandPatterns combines global and project command patterns.
 // Project patterns ADD to global (don't replace).
 // Patterns are deduplicated by pattern string.
 func MergeCommandPatterns(global, project []CommandPattern) []CommandPattern {
-	if len(global) == 0 && len(project) == 0 {
-		return nil
-	}
-
-	// Use a map to track seen patterns for deduplication
-	seen := make(map[string]bool, len(global)+len(project))
-	result := make([]CommandPattern, 0, len(global)+len(project))
-
-	// Add global patterns first
-	for _, pattern := range global {
-		if !seen[pattern.Pattern] {
-			seen[pattern.Pattern] = true
-			result = append(result, pattern)
-		}
-	}
-
-	// Add project patterns, skipping duplicates
-	for _, pattern := range project {
-		if !seen[pattern.Pattern] {
-			seen[pattern.Pattern] = true
-			result = append(result, pattern)
-		}
-	}
-
-	return result
+	return mergeSlices(global, project, func(p CommandPattern) string { return p.Pattern })
 }
 
 // ResolveConfig loads and merges global and project configurations into an
