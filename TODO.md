@@ -152,10 +152,10 @@ Add interfaces and injection points to enable unit testing without Docker.
 - [x] **Test**: Add unit test using mock Manager
 
 ### Q.4.2 Add DockerRunner interface in container
-- [ ] In `internal/container/manager.go`, define `DockerRunner` interface
-- [ ] Interface wraps `docker.Run`, `docker.RunJSONLines` calls
-- [ ] Add `Runner` field to `Manager` struct, default to real implementation
-- [ ] **Test**: Add unit test using mock DockerRunner
+- [x] In `internal/container/manager.go`, define `DockerRunner` interface
+- [x] Interface wraps `docker.Run`, `docker.RunJSONLines` calls
+- [x] Add `Runner` field to `Manager` struct, default to real implementation
+- [x] **Test**: Add unit test using mock DockerRunner
 
 ### Q.4.3 Add Clock interface in project.Registry
 - [ ] In `internal/project/registry.go`, inject time source

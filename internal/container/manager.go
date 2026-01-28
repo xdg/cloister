@@ -27,12 +27,57 @@ type ContainerInfo struct {
 	RunningFor string `json:"RunningFor"`
 }
 
-// Manager handles cloister container lifecycle operations.
-type Manager struct{}
+// DockerRunner abstracts Docker CLI operations for testing.
+type DockerRunner interface {
+	// Run executes a docker CLI command and returns stdout.
+	Run(args ...string) (string, error)
+	// RunJSONLines executes a docker CLI command with JSON output format and
+	// unmarshals newline-separated JSON objects into the provided slice.
+	RunJSONLines(result any, strict bool, args ...string) error
+	// FindContainerByExactName finds a container with the exact name specified.
+	FindContainerByExactName(name string) (*docker.ContainerInfo, error)
+	// StartContainer starts a created container.
+	StartContainer(name string) error
+}
 
-// NewManager creates a new container Manager.
+// defaultDockerRunner implements DockerRunner using the real docker package.
+type defaultDockerRunner struct{}
+
+func (d defaultDockerRunner) Run(args ...string) (string, error) {
+	return docker.Run(args...)
+}
+
+func (d defaultDockerRunner) RunJSONLines(result any, strict bool, args ...string) error {
+	// Type assert to the expected slice type and call the generic function.
+	// We only use this with []ContainerInfo in this package.
+	if containers, ok := result.(*[]ContainerInfo); ok {
+		return docker.RunJSONLines(containers, strict, args...)
+	}
+	// Fallback: this should not happen in practice within this package.
+	return errors.New("unsupported result type for RunJSONLines")
+}
+
+func (d defaultDockerRunner) FindContainerByExactName(name string) (*docker.ContainerInfo, error) {
+	return docker.FindContainerByExactName(name)
+}
+
+func (d defaultDockerRunner) StartContainer(name string) error {
+	return docker.StartContainer(name)
+}
+
+// Manager handles cloister container lifecycle operations.
+type Manager struct {
+	runner DockerRunner
+}
+
+// NewManager creates a new container Manager with the default Docker runner.
 func NewManager() *Manager {
-	return &Manager{}
+	return &Manager{runner: defaultDockerRunner{}}
+}
+
+// NewManagerWithRunner creates a Manager with a custom DockerRunner for testing.
+func NewManagerWithRunner(runner DockerRunner) *Manager {
+	return &Manager{runner: runner}
 }
 
 // Start creates and starts a new cloister container using the provided configuration.
@@ -79,7 +124,7 @@ func (m *Manager) createContainer(cfg *Config, dockerCmd string, extraArgs ...st
 	args = append(args, "sleep", "infinity")
 
 	// Execute the docker command
-	output, err := docker.Run(args...)
+	output, err := m.runner.Run(args...)
 	if err != nil {
 		// Check if the error is due to container already existing (race condition)
 		var cmdErr *docker.CommandError
@@ -106,7 +151,7 @@ func (m *Manager) StartContainer(containerName string) error {
 		return ErrContainerNotFound
 	}
 
-	return docker.StartContainer(containerName)
+	return m.runner.StartContainer(containerName)
 }
 
 // Stop stops and removes a cloister container by name.
@@ -123,7 +168,7 @@ func (m *Manager) Stop(containerName string) error {
 
 	// Stop the container with short timeout (1s grace period)
 	// Containers with tini will exit immediately on SIGTERM; others hit the timeout
-	_, err = docker.Run("stop", "-t", "1", containerName)
+	_, err = m.runner.Run("stop", "-t", "1", containerName)
 	if err != nil {
 		// If container is not running, that's okay - continue to removal
 		var cmdErr *docker.CommandError
@@ -137,7 +182,7 @@ func (m *Manager) Stop(containerName string) error {
 	}
 
 	// Remove the container
-	_, err = docker.Run("rm", containerName)
+	_, err = m.runner.Run("rm", containerName)
 	if err != nil {
 		return err
 	}
@@ -150,7 +195,7 @@ func (m *Manager) Stop(containerName string) error {
 func (m *Manager) List() ([]ContainerInfo, error) {
 	var containers []ContainerInfo
 
-	err := docker.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^cloister-")
+	err := m.runner.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^cloister-")
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +265,7 @@ func (m *Manager) Attach(containerName string) (int, error) {
 // Returns (exists, running, error). If exists is false, running is always false.
 // This performs a single Docker call to retrieve both pieces of information.
 func (m *Manager) ContainerStatus(name string) (exists bool, running bool, err error) {
-	info, err := docker.FindContainerByExactName(name)
+	info, err := m.runner.FindContainerByExactName(name)
 	if err != nil {
 		return false, false, err
 	}
