@@ -246,50 +246,54 @@ func removeContainer() error {
 // DefaultAPIAddr is the address where the guardian API is exposed to the host.
 const DefaultAPIAddr = "localhost:9997"
 
+// withGuardianClient checks if the guardian is running and returns a client.
+// Returns ErrGuardianNotRunning if the guardian is not running.
+func withGuardianClient() (*Client, error) {
+	running, err := IsRunning()
+	if err != nil {
+		return nil, fmt.Errorf("failed to check guardian status: %w", err)
+	}
+	if !running {
+		return nil, ErrGuardianNotRunning
+	}
+	return NewClient(DefaultAPIAddr), nil
+}
+
 // RegisterToken registers a token with the guardian for a cloister.
 // The guardian must be running before calling this function.
 // The projectName is used for per-project allowlist lookups.
 func RegisterToken(token, cloisterName, projectName string) error {
-	running, err := IsRunning()
+	client, err := withGuardianClient()
 	if err != nil {
-		return fmt.Errorf("failed to check guardian status: %w", err)
+		return err
 	}
-	if !running {
-		return ErrGuardianNotRunning
-	}
-
-	client := NewClient(DefaultAPIAddr)
 	return client.RegisterToken(token, cloisterName, projectName)
 }
 
 // RevokeToken revokes a token from the guardian.
 // Returns nil if the guardian is not running or if the token doesn't exist.
 func RevokeToken(token string) error {
-	running, err := IsRunning()
-	if err != nil {
-		return fmt.Errorf("failed to check guardian status: %w", err)
-	}
-	if !running {
+	client, err := withGuardianClient()
+	if errors.Is(err, ErrGuardianNotRunning) {
 		// Guardian not running, nothing to revoke
 		return nil
 	}
-
-	client := NewClient(DefaultAPIAddr)
+	if err != nil {
+		return err
+	}
 	return client.RevokeToken(token)
 }
 
 // ListTokens returns a map of all registered tokens to their cloister names.
 // Returns an empty map if the guardian is not running.
 func ListTokens() (map[string]string, error) {
-	running, err := IsRunning()
-	if err != nil {
-		return nil, fmt.Errorf("failed to check guardian status: %w", err)
-	}
-	if !running {
+	client, err := withGuardianClient()
+	if errors.Is(err, ErrGuardianNotRunning) {
 		// Guardian not running, return empty map
 		return make(map[string]string), nil
 	}
-
-	client := NewClient(DefaultAPIAddr)
+	if err != nil {
+		return nil, err
+	}
 	return client.ListTokens()
 }

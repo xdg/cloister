@@ -78,10 +78,10 @@ Extract helpers from duplicated code patterns. No API changes.
 - [x] **Test**: Existing client tests pass
 
 ### Q.1.6 Extract guardian container call pattern
-- [ ] In `internal/guardian/container.go`, extract guardian client call pattern
-- [ ] `RegisterToken`, `RevokeToken`, `ListTokens` all: check IsRunning(), create client, call method
-- [ ] Create helper that handles IsRunning check and client creation
-- [ ] **Test**: Existing guardian tests pass
+- [x] In `internal/guardian/container.go`, extract guardian client call pattern
+- [x] `RegisterToken`, `RevokeToken`, `ListTokens` all: check IsRunning(), create client, call method
+- [x] Create helper that handles IsRunning check and client creation
+- [x] **Test**: Existing guardian tests pass
 
 ---
 
