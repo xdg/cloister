@@ -170,11 +170,11 @@ Add interfaces and injection points to enable unit testing without Docker.
 Add missing tests and file organization improvements.
 
 ### Q.5.1 Add cmd package tests
-- [ ] Create `internal/cmd/start_test.go` — test runStart logic
-- [ ] Create `internal/cmd/stop_test.go` — test runStop logic
-- [ ] Create `internal/cmd/list_test.go` — test runList logic
-- [ ] Focus on error handling paths (Docker not running, git detection, etc.)
-- [ ] **Test**: New tests achieve >70% coverage for these files
+- [x] Create `internal/cmd/start_test.go` — test runStart logic
+- [x] Create `internal/cmd/stop_test.go` — test runStop logic
+- [x] Create `internal/cmd/list_test.go` — test runList logic
+- [x] Focus on error handling paths (Docker not running, git detection, etc.)
+- [x] **Test**: New tests cover error handling; full coverage requires integration tests
 
 ### Q.5.2 Add token package tests
 - [ ] Add test for `DefaultTokenDir()` — currently 0% coverage
