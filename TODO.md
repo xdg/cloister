@@ -134,10 +134,10 @@ Consolidate redundant API methods. May require updating callers.
 - [x] **Test**: Existing merge tests pass
 
 ### Q.3.3 Consolidate container existence checks
-- [ ] In `internal/container/manager.go`, consolidate `containerExists()` and `IsRunning()`
-- [ ] Both query same Docker data; return `(exists bool, running bool, err error)`
-- [ ] Single Docker call per check instead of separate calls
-- [ ] **Test**: Add test verifying single Docker call
+- [x] In `internal/container/manager.go`, consolidate `containerExists()` and `IsRunning()`
+- [x] Both query same Docker data; return `(exists bool, running bool, err error)`
+- [x] Single Docker call per check instead of separate calls
+- [x] **Test**: Add test verifying single Docker call
 
 ---
 

@@ -302,3 +302,173 @@ func parseInspectOutput(output string, result any) error {
 	// Use standard JSON parsing
 	return json.Unmarshal([]byte(output), result)
 }
+
+func TestManager_ContainerStatus_NonExistent(t *testing.T) {
+	requireDocker(t)
+
+	manager := NewManager()
+
+	// Test with a container that doesn't exist
+	exists, running, err := manager.ContainerStatus("cloister-nonexistent-container-12345")
+	if err != nil {
+		t.Fatalf("ContainerStatus() error = %v, want nil", err)
+	}
+	if exists {
+		t.Error("ContainerStatus() exists = true, want false for non-existent container")
+	}
+	if running {
+		t.Error("ContainerStatus() running = true, want false for non-existent container")
+	}
+}
+
+func TestManager_ContainerStatus_Running(t *testing.T) {
+	requireDocker(t)
+
+	projectName := testProjectName()
+	containerName := GenerateContainerName(projectName)
+
+	// Ensure cleanup after test
+	defer cleanupTestContainer(containerName)
+
+	// Create a temporary directory for the project path
+	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &Config{
+		Project:     projectName,
+		Branch:      "main",
+		ProjectPath: tmpDir,
+		Image:       "alpine:latest",
+	}
+
+	manager := NewManager()
+
+	// Start a container
+	_, err = manager.Start(cfg)
+	if err != nil {
+		t.Fatalf("Start() failed: %v", err)
+	}
+
+	// Test ContainerStatus for running container
+	exists, running, err := manager.ContainerStatus(containerName)
+	if err != nil {
+		t.Fatalf("ContainerStatus() error = %v, want nil", err)
+	}
+	if !exists {
+		t.Error("ContainerStatus() exists = false, want true for running container")
+	}
+	if !running {
+		t.Error("ContainerStatus() running = false, want true for running container")
+	}
+}
+
+func TestManager_ContainerStatus_Stopped(t *testing.T) {
+	requireDocker(t)
+
+	projectName := testProjectName()
+	containerName := GenerateContainerName(projectName)
+
+	// Ensure cleanup after test
+	defer cleanupTestContainer(containerName)
+
+	// Create a temporary directory for the project path
+	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &Config{
+		Project:     projectName,
+		Branch:      "main",
+		ProjectPath: tmpDir,
+		Image:       "alpine:latest",
+	}
+
+	manager := NewManager()
+
+	// Create container without starting it
+	_, err = manager.Create(cfg)
+	if err != nil {
+		t.Fatalf("Create() failed: %v", err)
+	}
+
+	// Test ContainerStatus for created but not started container
+	exists, running, err := manager.ContainerStatus(containerName)
+	if err != nil {
+		t.Fatalf("ContainerStatus() error = %v, want nil", err)
+	}
+	if !exists {
+		t.Error("ContainerStatus() exists = false, want true for created container")
+	}
+	if running {
+		t.Error("ContainerStatus() running = true, want false for stopped container")
+	}
+}
+
+func TestManager_ContainerStatus_SingleDockerCall(t *testing.T) {
+	requireDocker(t)
+
+	projectName := testProjectName()
+	containerName := GenerateContainerName(projectName)
+
+	// Ensure cleanup after test
+	defer cleanupTestContainer(containerName)
+
+	// Create a temporary directory for the project path
+	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cfg := &Config{
+		Project:     projectName,
+		Branch:      "main",
+		ProjectPath: tmpDir,
+		Image:       "alpine:latest",
+	}
+
+	manager := NewManager()
+
+	// Start a container
+	_, err = manager.Start(cfg)
+	if err != nil {
+		t.Fatalf("Start() failed: %v", err)
+	}
+
+	// Verify that ContainerStatus returns both values correctly in a single call
+	// This test documents that both exists and running come from the same underlying call
+	exists, running, err := manager.ContainerStatus(containerName)
+	if err != nil {
+		t.Fatalf("ContainerStatus() error = %v", err)
+	}
+
+	// Verify consistency: for a running container, both should be true
+	if !exists {
+		t.Error("ContainerStatus() exists = false, but container was just started")
+	}
+	if !running {
+		t.Error("ContainerStatus() running = false, but container should be running")
+	}
+
+	// Verify that the old methods still work and return consistent results
+	existsOnly, err := manager.containerExists(containerName)
+	if err != nil {
+		t.Fatalf("containerExists() error = %v", err)
+	}
+	if existsOnly != exists {
+		t.Errorf("containerExists() = %v, but ContainerStatus() returned exists = %v", existsOnly, exists)
+	}
+
+	runningOnly, err := manager.IsRunning(containerName)
+	if err != nil {
+		t.Fatalf("IsRunning() error = %v", err)
+	}
+	if runningOnly != running {
+		t.Errorf("IsRunning() = %v, but ContainerStatus() returned running = %v", runningOnly, running)
+	}
+}

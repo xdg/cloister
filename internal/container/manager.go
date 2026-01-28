@@ -216,22 +216,30 @@ func (m *Manager) Attach(containerName string) (int, error) {
 	return 0, nil
 }
 
-// containerExists checks if a container with the given name exists (running or stopped).
-func (m *Manager) containerExists(name string) (bool, error) {
+// ContainerStatus checks if a container with the given name exists and whether it's running.
+// Returns (exists, running, error). If exists is false, running is always false.
+// This performs a single Docker call to retrieve both pieces of information.
+func (m *Manager) ContainerStatus(name string) (exists bool, running bool, err error) {
 	info, err := docker.FindContainerByExactName(name)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return info != nil, nil
+	if info == nil {
+		return false, false, nil
+	}
+	return true, info.State == "running", nil
+}
+
+// containerExists checks if a container with the given name exists (running or stopped).
+func (m *Manager) containerExists(name string) (bool, error) {
+	exists, _, err := m.ContainerStatus(name)
+	return exists, err
 }
 
 // IsRunning checks if a container with the given name exists and is running.
 // Returns (true, nil) if running, (false, nil) if exists but not running or doesn't exist,
 // and (false, err) if there was an error checking.
 func (m *Manager) IsRunning(name string) (bool, error) {
-	info, err := docker.FindContainerByExactName(name)
-	if err != nil {
-		return false, err
-	}
-	return info != nil && info.State == "running", nil
+	_, running, err := m.ContainerStatus(name)
+	return running, err
 }
