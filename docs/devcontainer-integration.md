@@ -26,6 +26,20 @@ The launcher searches for devcontainer configuration in order:
 
 ---
 
+## Signal Handling and Container Shutdown
+
+User-provided devcontainer images may not include an init process (like tini) to handle signals. Without proper signal handling, `docker stop` sends SIGTERM which is often ignored, causing a 10-second delay before Docker force-kills the container.
+
+Cloister mitigates this by:
+1. Using a 1-second stop timeout (`docker stop -t 1`) as a fallback
+2. Optionally adding `--init` to container run arguments (uses Docker's built-in tini)
+
+For fastest shutdown, devcontainer images should either:
+- Install tini and use it as ENTRYPOINT: `ENTRYPOINT ["/usr/bin/tini", "--"]`
+- Or rely on cloister's `--init` flag injection
+
+---
+
 ## Security Overrides
 
 Regardless of what devcontainer.json requests, the launcher enforces:

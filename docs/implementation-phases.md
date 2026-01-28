@@ -171,6 +171,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - Security overrides (blocked mounts, network, capabilities)
 - Lifecycle command execution (postCreateCommand, etc.)
 - Build caching by config hash
+- Signal handling: inject `--init` flag for images without tini (ensures fast shutdown)
 
 **Verification:**
 - Project with devcontainer.json uses custom image

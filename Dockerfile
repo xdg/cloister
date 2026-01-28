@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y \
     jq \
     build-essential \
     ca-certificates \
+    tini \
     && rm -rf /var/lib/apt/lists/*
 
 # Go (latest stable)
@@ -77,4 +78,6 @@ WORKDIR /work
 
 # Proxy and guardian env vars are set at runtime by cloister
 
+# Use tini as init to handle signals properly (enables fast container shutdown)
+ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["/bin/bash"]

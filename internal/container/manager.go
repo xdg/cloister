@@ -145,8 +145,9 @@ func (m *Manager) Stop(containerName string) error {
 		return ErrContainerNotFound
 	}
 
-	// Stop the container (graceful shutdown)
-	_, err = docker.Run("stop", containerName)
+	// Stop the container with short timeout (1s grace period)
+	// Containers with tini will exit immediately on SIGTERM; others hit the timeout
+	_, err = docker.Run("stop", "-t", "1", containerName)
 	if err != nil {
 		// If container is not running, that's okay - continue to removal
 		var cmdErr *docker.CommandError
