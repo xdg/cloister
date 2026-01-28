@@ -41,9 +41,29 @@ type RegistryEntry struct {
 	LastUsed time.Time `yaml:"last_used"` // Last time a cloister was started
 }
 
+// Clock provides the current time. This interface enables testing with controlled time.
+type Clock interface {
+	Now() time.Time
+}
+
 // Registry contains the list of known projects.
 type Registry struct {
 	Projects []RegistryEntry `yaml:"projects"`
+	clock    Clock           `yaml:"-"` // not serialized
+}
+
+// SetClock sets a custom clock for testing. If not called, uses real time.
+func (r *Registry) SetClock(c Clock) {
+	r.clock = c
+}
+
+// now returns the current time using the registry's clock.
+// If no clock is set, it falls back to time.Now().
+func (r *Registry) now() time.Time {
+	if r.clock == nil {
+		return time.Now()
+	}
+	return r.clock.Now()
 }
 
 // RegistryPath returns the path to the project registry file.
@@ -101,7 +121,7 @@ func SaveRegistry(r *Registry) error {
 // Otherwise, it appends a new entry.
 // This method modifies the registry in-memory; the caller must call SaveRegistry to persist.
 func (r *Registry) Register(info *ProjectInfo) error {
-	now := time.Now()
+	now := r.now()
 
 	// Check for existing project with the same name
 	for i, entry := range r.Projects {
@@ -159,7 +179,7 @@ func (r *Registry) FindByRemote(remote string) *RegistryEntry {
 func (r *Registry) UpdateLastUsed(name string) error {
 	for i := range r.Projects {
 		if r.Projects[i].Name == name {
-			r.Projects[i].LastUsed = time.Now()
+			r.Projects[i].LastUsed = r.now()
 			return nil
 		}
 	}

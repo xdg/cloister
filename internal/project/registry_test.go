@@ -1001,6 +1001,79 @@ func TestRegistry_Remove_FirstProject(t *testing.T) {
 	}
 }
 
+// mockClock is a test Clock that returns a fixed time.
+type mockClock struct {
+	now time.Time
+}
+
+func (m *mockClock) Now() time.Time {
+	return m.now
+}
+
+func TestRegistry_Register_WithClock(t *testing.T) {
+	fixedTime := time.Date(2025, 3, 15, 14, 30, 0, 0, time.UTC)
+	clock := &mockClock{now: fixedTime}
+
+	reg := &Registry{}
+	reg.SetClock(clock)
+
+	info := &ProjectInfo{
+		Name:   "clock-test-project",
+		Root:   "/home/user/repos/clock-test",
+		Remote: "git@github.com:user/clock-test.git",
+		Branch: "main",
+	}
+
+	err := reg.Register(info)
+	if err != nil {
+		t.Fatalf("Register() error = %v", err)
+	}
+
+	if len(reg.Projects) != 1 {
+		t.Fatalf("expected 1 project, got %d", len(reg.Projects))
+	}
+
+	// Verify that the LastUsed timestamp matches our mock clock
+	if !reg.Projects[0].LastUsed.Equal(fixedTime) {
+		t.Errorf("LastUsed = %v, want %v", reg.Projects[0].LastUsed, fixedTime)
+	}
+}
+
+func TestRegistry_UpdateLastUsed_WithClock(t *testing.T) {
+	originalTime := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	updatedTime := time.Date(2025, 6, 20, 10, 0, 0, 0, time.UTC)
+
+	reg := &Registry{
+		Projects: []RegistryEntry{
+			{
+				Name:     "test-project",
+				Root:     "/home/user/repos/test",
+				Remote:   "git@github.com:user/test.git",
+				LastUsed: originalTime,
+			},
+		},
+	}
+
+	// Set mock clock before updating
+	clock := &mockClock{now: updatedTime}
+	reg.SetClock(clock)
+
+	err := reg.UpdateLastUsed("test-project")
+	if err != nil {
+		t.Fatalf("UpdateLastUsed() error = %v", err)
+	}
+
+	entry := reg.FindByName("test-project")
+	if entry == nil {
+		t.Fatal("expected to find test-project")
+	}
+
+	// Verify that the LastUsed timestamp matches our mock clock exactly
+	if !entry.LastUsed.Equal(updatedTime) {
+		t.Errorf("LastUsed = %v, want %v", entry.LastUsed, updatedTime)
+	}
+}
+
 func TestLookupByPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)

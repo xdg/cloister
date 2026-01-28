@@ -158,10 +158,10 @@ Add interfaces and injection points to enable unit testing without Docker.
 - [x] **Test**: Add unit test using mock DockerRunner
 
 ### Q.4.3 Add Clock interface in project.Registry
-- [ ] In `internal/project/registry.go`, inject time source
-- [ ] Replace direct `time.Now()` calls (lines 123, 181) with clock interface
-- [ ] Default to real time when not injected
-- [ ] **Test**: Add test verifying LastUsed timestamp updates
+- [x] In `internal/project/registry.go`, inject time source
+- [x] Replace direct `time.Now()` calls (lines 123, 181) with clock interface
+- [x] Default to real time when not injected
+- [x] **Test**: Add test verifying LastUsed timestamp updates
 
 ---
 
