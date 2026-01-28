@@ -43,38 +43,7 @@ func NewManager() *Manager {
 // perform operations between creation and start (e.g., copying files), use
 // Create() followed by StartContainer() instead.
 func (m *Manager) Start(cfg *Config) (string, error) {
-	containerName := cfg.ContainerName()
-
-	// Check if container already exists
-	exists, err := m.containerExists(containerName)
-	if err != nil {
-		return "", err
-	}
-	if exists {
-		return "", ErrContainerExists
-	}
-
-	// Build docker run arguments
-	args := []string{"run", "-d"}
-	args = append(args, cfg.BuildRunArgs()...)
-
-	// Add a command that keeps the container running (sleep infinity)
-	args = append(args, "sleep", "infinity")
-
-	// Run the container
-	output, err := docker.Run(args...)
-	if err != nil {
-		// Check if the error is due to container already existing (race condition)
-		var cmdErr *docker.CommandError
-		if errors.As(err, &cmdErr) && strings.Contains(cmdErr.Stderr, "already in use") {
-			return "", ErrContainerExists
-		}
-		return "", err
-	}
-
-	// Return container ID (docker run -d outputs the container ID)
-	containerID := strings.TrimSpace(output)
-	return containerID, nil
+	return m.createContainer(cfg, "run", "-d")
 }
 
 // Create creates a new cloister container without starting it.
@@ -84,6 +53,12 @@ func (m *Manager) Start(cfg *Config) (string, error) {
 // Use this with StartContainer() when you need to perform operations
 // (like copying files) between creation and start.
 func (m *Manager) Create(cfg *Config) (string, error) {
+	return m.createContainer(cfg, "create")
+}
+
+// createContainer is a shared helper that creates a container using the specified
+// docker command ("run" or "create") with optional extra arguments.
+func (m *Manager) createContainer(cfg *Config, dockerCmd string, extraArgs ...string) (string, error) {
 	containerName := cfg.ContainerName()
 
 	// Check if container already exists
@@ -95,14 +70,15 @@ func (m *Manager) Create(cfg *Config) (string, error) {
 		return "", ErrContainerExists
 	}
 
-	// Build docker create arguments
-	args := []string{"create"}
+	// Build docker arguments
+	args := []string{dockerCmd}
+	args = append(args, extraArgs...)
 	args = append(args, cfg.BuildRunArgs()...)
 
 	// Add a command that keeps the container running (sleep infinity)
 	args = append(args, "sleep", "infinity")
 
-	// Create the container
+	// Execute the docker command
 	output, err := docker.Run(args...)
 	if err != nil {
 		// Check if the error is due to container already existing (race condition)
@@ -113,7 +89,7 @@ func (m *Manager) Create(cfg *Config) (string, error) {
 		return "", err
 	}
 
-	// Return container ID (docker create outputs the container ID)
+	// Return container ID
 	containerID := strings.TrimSpace(output)
 	return containerID, nil
 }

@@ -53,10 +53,10 @@ Extract helpers from duplicated code patterns. No API changes.
 - [x] **Test**: Existing tests pass; add test for strict vs non-strict behavior
 
 ### Q.1.2 Extract container creation helper
-- [ ] In `internal/container/manager.go`, extract shared logic from `Start()` and `Create()`
-- [ ] Lines 45-78 and 86-119 are 95% identical
-- [ ] Create private `createContainer()` helper
-- [ ] **Test**: Existing container tests pass
+- [x] In `internal/container/manager.go`, extract shared logic from `Start()` and `Create()`
+- [x] Lines 45-78 and 86-119 are 95% identical
+- [x] Create private `createContainer()` helper
+- [x] **Test**: Existing container tests pass
 
 ### Q.1.3 Extract token store helper in cloister
 - [ ] In `internal/cloister/cloister.go`, extract token store creation pattern
