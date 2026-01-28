@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
@@ -216,8 +217,8 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			log.Printf("Warning: failed to load tokens: %v", err)
 		} else {
-			for tok, name := range tokens {
-				registry.Register(tok, name)
+			for tok, info := range tokens {
+				registry.RegisterWithProject(tok, info.CloisterName, info.ProjectName)
 			}
 			if len(tokens) > 0 {
 				log.Printf("Recovered %d tokens from disk", len(tokens))
@@ -225,11 +226,69 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Create the proxy server
+	// Load config and create allowlist
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		log.Printf("Warning: failed to load config, using defaults: %v", err)
+		cfg = config.DefaultGlobalConfig()
+	}
+	globalAllowlist := guardian.NewAllowlistFromConfig(cfg.Proxy.Allow)
+	log.Printf("Loaded global allowlist with %d domains", len(globalAllowlist.Domains()))
+
+	// Create allowlist cache for per-project allowlists
+	allowlistCache := guardian.NewAllowlistCache(globalAllowlist)
+
+	// Create the proxy server with config-derived allowlist
 	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)
-	proxy := guardian.NewProxyServer(proxyAddr)
+	proxy := guardian.NewProxyServerWithConfig(proxyAddr, globalAllowlist)
 	proxy.TokenValidator = registry
 	proxy.Logger = log.New(os.Stderr, "[guardian] ", log.LstdFlags)
+
+	// Set up per-project allowlist support
+	proxy.AllowlistCache = allowlistCache
+	proxy.TokenLookup = registry.LookupProject
+
+	// Create project allowlist loader that merges project config with global
+	loadProjectAllowlist := func(projectName string) *guardian.Allowlist {
+		projectCfg, err := config.LoadProjectConfig(projectName)
+		if err != nil {
+			log.Printf("Warning: failed to load project config for %s: %v", projectName, err)
+			return nil
+		}
+		if len(projectCfg.Proxy.Allow) == 0 {
+			return nil
+		}
+		// Merge global + project allowlists
+		merged := config.MergeAllowlists(cfg.Proxy.Allow, projectCfg.Proxy.Allow)
+		allowlist := guardian.NewAllowlistFromConfig(merged)
+		log.Printf("Loaded allowlist for project %s (%d domains)", projectName, len(allowlist.Domains()))
+		return allowlist
+	}
+
+	// Set the project loader for lazy loading
+	allowlistCache.SetProjectLoader(loadProjectAllowlist)
+
+	// Set up config reloader for SIGHUP
+	proxy.SetConfigReloader(func() (*guardian.Allowlist, error) {
+		newCfg, err := config.LoadGlobalConfig()
+		if err != nil {
+			return nil, err
+		}
+		// Update the cached global config for project merging
+		cfg = newCfg
+		newGlobal := guardian.NewAllowlistFromConfig(newCfg.Proxy.Allow)
+		allowlistCache.SetGlobal(newGlobal)
+		// Clear project cache so they get reloaded with new global
+		allowlistCache.Clear()
+		// Reload all project allowlists
+		for _, info := range registry.ListInfo() {
+			if info.ProjectName != "" {
+				allowlist := loadProjectAllowlist(info.ProjectName)
+				allowlistCache.SetProject(info.ProjectName, allowlist)
+			}
+		}
+		return newGlobal, nil
+	})
 
 	// Create the API server
 	apiAddr := fmt.Sprintf(":%d", guardian.DefaultAPIPort)

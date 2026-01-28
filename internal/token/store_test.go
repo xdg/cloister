@@ -20,7 +20,7 @@ func TestStore_SaveLoadRemove(t *testing.T) {
 	}
 
 	// Test Save
-	if err := store.Save("cloister-test-main", "abc123"); err != nil {
+	if err := store.Save("cloister-test-main", "abc123", "test-project"); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
@@ -42,12 +42,16 @@ func TestStore_SaveLoadRemove(t *testing.T) {
 	if len(tokens) != 1 {
 		t.Errorf("Load returned %d tokens, want 1", len(tokens))
 	}
-	if tokens["abc123"] != "cloister-test-main" {
-		t.Errorf("Load returned wrong mapping: %v", tokens)
+	tokenInfo := tokens["abc123"]
+	if tokenInfo.CloisterName != "cloister-test-main" {
+		t.Errorf("Load returned wrong cloister name: %s", tokenInfo.CloisterName)
+	}
+	if tokenInfo.ProjectName != "test-project" {
+		t.Errorf("Load returned wrong project name: %s", tokenInfo.ProjectName)
 	}
 
 	// Save another token
-	if err := store.Save("cloister-other-dev", "def456"); err != nil {
+	if err := store.Save("cloister-other-dev", "def456", "other-project"); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 

@@ -295,29 +295,29 @@ Implement configuration and project management commands.
 End-to-end testing and documentation.
 
 ### 2.8.1 End-to-end integration
-- [ ] **Test**: Fresh install → default config created → cloister starts
-- [ ] **Test**: Add domain to project config → restart cloister → domain allowed
-- [ ] **Test**: Same domain denied for different project
-- [ ] **Test**: `project list` → `project show` → `project edit` workflow
-- [ ] **Test**: Config validation errors shown clearly
+- [x] **Test**: Fresh install → default config created → cloister starts
+- [x] **Test**: Add domain to project config → restart cloister → domain allowed
+- [x] **Test**: Same domain denied for different project
+- [x] **Test**: `project list` → `project show` → `project edit` workflow
+- [x] **Test**: Config validation errors shown clearly
 
 ### 2.8.2 Migration from Phase 1
-- [ ] Existing cloisters continue to work (backward compatible)
-- [ ] First run after upgrade creates default config
-- [ ] Token persistence (Phase 1.8.2) continues to work with config
-- [ ] Document upgrade path (none needed, automatic)
+- [x] Existing cloisters continue to work (backward compatible)
+- [x] First run after upgrade creates default config
+- [x] Token persistence (Phase 1.8.2) continues to work with config
+- [x] Document upgrade path (none needed, automatic)
 
 ### 2.8.3 Error handling improvements
-- [ ] Clear error when config file has syntax errors
-- [ ] Clear error when project not found in registry
-- [ ] Suggest `project list` when project lookup fails
-- [ ] Warn when config has unknown fields (typo detection)
+- [x] Clear error when config file has syntax errors
+- [x] Clear error when project not found in registry
+- [x] Suggest `project list` when project lookup fails
+- [x] Warn when config has unknown fields (typo detection)
 
 ### 2.8.4 Documentation
-- [ ] Update README with config system overview
-- [ ] Update config-reference.md with any schema changes
-- [ ] Add examples for common configurations
-- [ ] Document allowlist best practices
+- [x] Update README with config system overview
+- [x] Update config-reference.md with any schema changes (no changes needed)
+- [x] Add examples for common configurations (in README)
+- [x] Document allowlist best practices (default config includes best practices)
 
 ---
 
@@ -347,6 +347,9 @@ End-to-end testing and documentation.
 - Read-only reference mounts
 - Audit logging
 - Detached mode, non-git support
+- `project show` and `project edit` should infer project name from current directory
+- Suppress log output in user-facing commands (or redirect to stderr with --verbose flag)
+- Don't show usage on config load errors (just show error message)
 
 ### Future: Devcontainer Integration
 - Devcontainer.json discovery and image building

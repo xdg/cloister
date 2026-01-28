@@ -23,6 +23,7 @@ const DefaultAPIPort = 9997
 type TokenRegistry interface {
 	TokenValidator
 	Register(token, cloisterName string)
+	RegisterWithProject(token, cloisterName, projectName string)
 	Revoke(token string) bool
 	List() map[string]string
 	Count() int
@@ -119,12 +120,14 @@ func (a *APIServer) ListenAddr() string {
 type registerTokenRequest struct {
 	Token    string `json:"token"`
 	Cloister string `json:"cloister"`
+	Project  string `json:"project,omitempty"`
 }
 
 // tokenInfo represents a single token in the list response.
 type tokenInfo struct {
 	Token    string `json:"token"`
 	Cloister string `json:"cloister"`
+	Project  string `json:"project,omitempty"`
 }
 
 // listTokensResponse is the response body for GET /tokens.
@@ -160,7 +163,7 @@ func (a *APIServer) handleRegisterToken(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	a.Registry.Register(req.Token, req.Cloister)
+	a.Registry.RegisterWithProject(req.Token, req.Cloister, req.Project)
 
 	a.writeJSON(w, http.StatusCreated, statusResponse{Status: "registered"})
 }

@@ -25,6 +25,10 @@ const (
 
 	// ContainerTokenDir is the path inside the guardian container where tokens are mounted.
 	ContainerTokenDir = "/var/lib/cloister/tokens"
+
+	// ContainerConfigDir is the path inside the guardian container where config is mounted.
+	// We set XDG_CONFIG_HOME=/etc so ConfigDir() returns /etc/cloister/.
+	ContainerConfigDir = "/etc/cloister"
 )
 
 // ErrGuardianNotRunning indicates the guardian container is not running.
@@ -38,6 +42,16 @@ func HostTokenDir() (string, error) {
 		return "", fmt.Errorf("failed to get home directory: %w", err)
 	}
 	return filepath.Join(home, ".config", "cloister", "tokens"), nil
+}
+
+// HostConfigDir returns the config directory path on the host.
+// This is ~/.config/cloister.
+func HostConfigDir() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	return filepath.Join(home, ".config", "cloister"), nil
 }
 
 // ErrGuardianAlreadyRunning indicates the guardian container is already running.
@@ -109,16 +123,31 @@ func Start() error {
 		return fmt.Errorf("failed to create token directory: %w", err)
 	}
 
+	// Get the host config directory for mounting
+	hostConfigDir, err := HostConfigDir()
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+
+	// Ensure config directory exists (creates with 0700 permissions)
+	if err := os.MkdirAll(hostConfigDir, 0700); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
 	// Build docker run arguments
 	// Port 9997 is exposed to the host for the token management API
 	// (used by CLI to register/revoke tokens)
 	// Token directory is mounted read-only for recovery on restart
+	// Config directory is mounted read-only for allowlist configuration
+	// XDG_CONFIG_HOME=/etc so ConfigDir() returns /etc/cloister/
 	args := []string{
 		"run", "-d",
 		"--name", ContainerName,
 		"--network", docker.CloisterNetworkName,
 		"-p", "127.0.0.1:9997:9997",
+		"-e", "XDG_CONFIG_HOME=/etc",
 		"-v", hostTokenDir + ":" + ContainerTokenDir + ":ro",
+		"-v", hostConfigDir + ":" + ContainerConfigDir + ":ro",
 		DefaultImage,
 		"cloister", "guardian", "run",
 	}
@@ -219,7 +248,8 @@ const DefaultAPIAddr = "localhost:9997"
 
 // RegisterToken registers a token with the guardian for a cloister.
 // The guardian must be running before calling this function.
-func RegisterToken(token, cloisterName string) error {
+// The projectName is used for per-project allowlist lookups.
+func RegisterToken(token, cloisterName, projectName string) error {
 	running, err := IsRunning()
 	if err != nil {
 		return fmt.Errorf("failed to check guardian status: %w", err)
@@ -229,7 +259,7 @@ func RegisterToken(token, cloisterName string) error {
 	}
 
 	client := NewClient(DefaultAPIAddr)
-	return client.RegisterToken(token, cloisterName)
+	return client.RegisterToken(token, cloisterName, projectName)
 }
 
 // RevokeToken revokes a token from the guardian.

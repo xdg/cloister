@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,7 +77,7 @@ func TestProjectList_WithProjects(t *testing.T) {
 	}
 }
 
-func TestProjectShow_NotFound(t *testing.T) {
+func TestProjectShow_NotFound_SuggestsProjectList(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -84,6 +85,15 @@ func TestProjectShow_NotFound(t *testing.T) {
 	err := runProjectShow(cmd, []string{"non-existent"})
 	if err == nil {
 		t.Fatal("expected error for non-existent project")
+	}
+
+	// Verify error message includes hint
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "not found in registry") {
+		t.Errorf("error should mention 'not found in registry', got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "cloister project list") {
+		t.Errorf("error should suggest 'cloister project list', got: %s", errMsg)
 	}
 }
 
@@ -113,7 +123,7 @@ func TestProjectShow_Found(t *testing.T) {
 	}
 }
 
-func TestProjectRemove_NotFound(t *testing.T) {
+func TestProjectRemove_NotFound_SuggestsProjectList(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
@@ -121,6 +131,15 @@ func TestProjectRemove_NotFound(t *testing.T) {
 	err := runProjectRemove(cmd, []string{"non-existent"})
 	if err == nil {
 		t.Fatal("expected error for non-existent project")
+	}
+
+	// Verify error message includes hint
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "not found in registry") {
+		t.Errorf("error should mention 'not found in registry', got: %s", errMsg)
+	}
+	if !strings.Contains(errMsg, "cloister project list") {
+		t.Errorf("error should suggest 'cloister project list', got: %s", errMsg)
 	}
 }
 

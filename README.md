@@ -59,6 +59,16 @@ cloister list            # List running cloisters
 cloister stop            # Stop the cloister for the current repo
 cloister guardian status # Check guardian proxy status
 cloister guardian stop   # Stop the guardian (warns if cloisters are running)
+
+# Configuration management
+cloister config show     # Show current global configuration
+cloister config edit     # Edit global config in $EDITOR
+cloister config init     # Create default config file
+
+# Project management
+cloister project list    # List registered projects
+cloister project show    # Show project details and allowlist
+cloister project edit    # Edit project-specific config
 ```
 
 ## Features
@@ -105,16 +115,29 @@ Some sandboxes use **action control**: enumerate what the agent can do, then all
 
 Cloister works out of the box with sensible defaults. See [docs/config-reference.md](docs/config-reference.md) for details.
 
+## Configuration
+
+Cloister uses a layered configuration system:
+
+1. **Global config** (`~/.config/cloister/config.yaml`) — Default allowlist, timeouts, logging
+2. **Project config** (`~/.config/cloister/projects/<name>.yaml`) — Per-project allowlist additions
+
+The default configuration includes allowlists for:
+- AI provider APIs (Anthropic, OpenAI, Google)
+- Package registries (npm, PyPI, Go modules, crates.io)
+- Documentation sites (MDN, Stack Overflow, language docs)
+
+To add domains for a specific project:
+```bash
+cloister project edit my-project
+# Add domains under proxy.allow
+```
+
+See [docs/config-reference.md](docs/config-reference.md) for the full schema.
+
 ## Current Limitations
 
-Cloister is in active development (Phase 1). Current limitations include:
-
-**Hardcoded network allowlist** — The proxy currently permits only these domains:
-- `api.anthropic.com` (Claude API)
-- `api.openai.com` (OpenAI API)
-- `generativelanguage.googleapis.com` (Google Gemini API)
-
-Package registries (npm, PyPI, Go modules), documentation sites, and other domains are not yet permitted. Custom domain configuration will be available in Phase 2.
+Cloister is in active development (Phase 2 complete). Current limitations include:
 
 **Manual credential setup** — Claude Code credentials must be set via environment variables (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`). A setup wizard will be added in Phase 3.
 

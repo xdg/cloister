@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/xdg/cloister/internal/cloister"
+	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/project"
@@ -33,6 +34,13 @@ func init() {
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
+	// Step 0: Ensure config exists (creates default if missing)
+	// This must happen before starting the guardian so the config file
+	// exists when mounted into the container.
+	if _, err := config.LoadGlobalConfig(); err != nil {
+		return fmt.Errorf("failed to load config: %w", err)
+	}
+
 	// Step 1: Detect git root from current directory
 	gitRoot, err := project.DetectGitRoot(".")
 	if err != nil {

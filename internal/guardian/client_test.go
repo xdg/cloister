@@ -21,7 +21,7 @@ func TestClient_RegisterToken(t *testing.T) {
 	client := NewClient(api.ListenAddr())
 
 	// Test successful registration
-	err := client.RegisterToken("test-token-123", "my-cloister")
+	err := client.RegisterToken("test-token-123", "my-cloister", "my-project")
 	if err != nil {
 		t.Fatalf("failed to register token: %v", err)
 	}
@@ -49,13 +49,13 @@ func TestClient_RegisterTokenErrors(t *testing.T) {
 	client := NewClient(api.ListenAddr())
 
 	// Test empty token
-	err := client.RegisterToken("", "my-cloister")
+	err := client.RegisterToken("", "my-cloister", "my-project")
 	if err == nil {
 		t.Error("expected error for empty token")
 	}
 
 	// Test empty cloister
-	err = client.RegisterToken("test-token", "")
+	err = client.RegisterToken("test-token", "", "my-project")
 	if err == nil {
 		t.Error("expected error for empty cloister")
 	}
@@ -158,7 +158,7 @@ func TestClient_ConnectionError(t *testing.T) {
 	// Test with a non-existent server
 	client := NewClient("localhost:59999")
 
-	err := client.RegisterToken("test", "test")
+	err := client.RegisterToken("test", "test", "test-project")
 	if err == nil {
 		t.Error("expected connection error")
 	}

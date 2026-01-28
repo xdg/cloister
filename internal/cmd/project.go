@@ -135,7 +135,7 @@ func runProjectShow(cmd *cobra.Command, args []string) error {
 
 	entry := reg.FindByName(name)
 	if entry == nil {
-		return fmt.Errorf("project %q not found in registry", name)
+		return fmt.Errorf("project %q not found in registry\n\nHint: Use 'cloister project list' to see registered projects", name)
 	}
 
 	// Load project config (may not exist, use defaults)
@@ -199,6 +199,7 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 	entry := reg.FindByName(name)
 	if entry == nil {
 		fmt.Fprintf(os.Stderr, "Warning: project %q not found in registry\n", name)
+		fmt.Fprintf(os.Stderr, "Use 'cloister project list' to see registered projects.\n")
 		fmt.Fprintf(os.Stderr, "Creating config file anyway. Register with 'cloister start' from the project directory.\n\n")
 	}
 
@@ -221,7 +222,7 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 	// Check if project exists
 	entry := reg.FindByName(name)
 	if entry == nil {
-		return fmt.Errorf("project %q not found in registry", name)
+		return fmt.Errorf("project %q not found in registry\n\nHint: Use 'cloister project list' to see registered projects", name)
 	}
 
 	// Check for running cloisters for this project

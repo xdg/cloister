@@ -62,12 +62,12 @@ func Start(opts StartOptions) (containerID string, tok string, err error) {
 	if err != nil {
 		return "", "", err
 	}
-	if err := store.Save(containerName, tok); err != nil {
+	if err := store.Save(containerName, tok, opts.ProjectName); err != nil {
 		return "", "", err
 	}
 
-	// Step 5: Register the token with guardian
-	if err := guardian.RegisterToken(tok, containerName); err != nil {
+	// Step 5: Register the token with guardian (with project name for per-project allowlist)
+	if err := guardian.RegisterToken(tok, containerName, opts.ProjectName); err != nil {
 		// Clean up persisted token on failure
 		_ = store.Remove(containerName)
 		return "", "", err

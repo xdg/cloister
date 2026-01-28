@@ -22,6 +22,10 @@ func (r *mockRegistry) Register(token, cloisterName string) {
 	r.tokens[token] = cloisterName
 }
 
+func (r *mockRegistry) RegisterWithProject(token, cloisterName, projectName string) {
+	r.tokens[token] = cloisterName
+}
+
 func (r *mockRegistry) Validate(token string) bool {
 	_, ok := r.tokens[token]
 	return ok

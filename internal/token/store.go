@@ -2,11 +2,18 @@
 package token
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// tokenFile is the JSON structure for persisted tokens.
+type tokenFile struct {
+	Token   string `json:"token"`
+	Project string `json:"project,omitempty"`
+}
 
 // DefaultTokenDir returns the default directory for token storage.
 // This is ~/.config/cloister/tokens on the host.
@@ -35,9 +42,13 @@ func NewStore(dir string) (*Store, error) {
 
 // Save persists a token for a cloister.
 // Overwrites any existing token for the same cloister name.
-func (s *Store) Save(cloisterName, token string) error {
+func (s *Store) Save(cloisterName, token, projectName string) error {
 	path := filepath.Join(s.dir, cloisterName)
-	if err := os.WriteFile(path, []byte(token), 0600); err != nil {
+	data, err := json.Marshal(tokenFile{Token: token, Project: projectName})
+	if err != nil {
+		return fmt.Errorf("failed to marshal token: %w", err)
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 	return nil
@@ -54,17 +65,18 @@ func (s *Store) Remove(cloisterName string) error {
 }
 
 // Load reads all persisted tokens.
-// Returns a map of token -> cloister name.
-func (s *Store) Load() (map[string]string, error) {
+// Returns a map of token -> TokenInfo (cloister name and project name).
+// Backward compatible: plain text files are treated as token-only (no project).
+func (s *Store) Load() (map[string]TokenInfo, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return make(map[string]string), nil
+			return make(map[string]TokenInfo), nil
 		}
 		return nil, fmt.Errorf("failed to read token directory: %w", err)
 	}
 
-	tokens := make(map[string]string)
+	tokens := make(map[string]TokenInfo)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -79,9 +91,20 @@ func (s *Store) Load() (map[string]string, error) {
 			continue
 		}
 
+		// Try to parse as JSON first (new format)
+		var tf tokenFile
+		if err := json.Unmarshal(data, &tf); err == nil && tf.Token != "" {
+			tokens[tf.Token] = TokenInfo{
+				CloisterName: cloisterName,
+				ProjectName:  tf.Project,
+			}
+			continue
+		}
+
+		// Fall back to plain text (old format: file contains just the token)
 		token := strings.TrimSpace(string(data))
 		if token != "" {
-			tokens[token] = cloisterName
+			tokens[token] = TokenInfo{CloisterName: cloisterName}
 		}
 	}
 

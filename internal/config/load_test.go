@@ -29,6 +29,12 @@ func TestLoadGlobalConfig_Missing(t *testing.T) {
 	if cfg.Defaults.Agent != "claude" {
 		t.Errorf("cfg.Defaults.Agent = %q, want %q", cfg.Defaults.Agent, "claude")
 	}
+
+	// Verify default config file was created
+	configPath := filepath.Join(tmpDir, "cloister", "config.yaml")
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		t.Error("LoadGlobalConfig() should create default config file when missing")
+	}
 }
 
 func TestLoadGlobalConfig_Valid(t *testing.T) {

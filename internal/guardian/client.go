@@ -33,11 +33,12 @@ func NewClient(guardianAddr string) *Client {
 }
 
 // RegisterToken registers a new token with the guardian.
-// The token will be associated with the given cloister name.
-func (c *Client) RegisterToken(token, cloisterName string) error {
+// The token will be associated with the given cloister and project names.
+func (c *Client) RegisterToken(token, cloisterName, projectName string) error {
 	body := registerTokenRequest{
 		Token:    token,
 		Cloister: cloisterName,
+		Project:  projectName,
 	}
 
 	data, err := json.Marshal(body)

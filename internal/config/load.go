@@ -18,7 +18,10 @@ func LoadGlobalConfig() (*GlobalConfig, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Printf("config: file not found, using defaults")
+			log.Printf("config: file not found, creating defaults")
+			if writeErr := WriteDefaultConfig(); writeErr != nil {
+				log.Printf("config: warning: failed to create default config: %v", writeErr)
+			}
 			cfg := DefaultGlobalConfig()
 			expandGlobalPaths(cfg)
 			return cfg, nil
