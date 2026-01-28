@@ -59,10 +59,10 @@ Extract helpers from duplicated code patterns. No API changes.
 - [x] **Test**: Existing container tests pass
 
 ### Q.1.3 Extract token store helper in cloister
-- [ ] In `internal/cloister/cloister.go`, extract token store creation pattern
-- [ ] `Start()` (lines 57-67) and `Stop()` (lines 189-195) both create tokenDir/store
-- [ ] Create `getTokenStore() (*token.Store, error)` helper
-- [ ] **Test**: Existing cloister tests pass
+- [x] In `internal/cloister/cloister.go`, extract token store creation pattern
+- [x] `Start()` (lines 57-67) and `Stop()` (lines 189-195) both create tokenDir/store
+- [x] Create `getTokenStore() (*token.Store, error)` helper
+- [x] **Test**: Existing cloister tests pass
 
 ### Q.1.4 Extract cmd error helpers
 - [ ] Create `internal/cmd/errors.go`

@@ -16,6 +16,17 @@ import (
 // containerHomeDir is the home directory for the cloister user inside containers.
 const containerHomeDir = "/home/cloister"
 
+// getTokenStore creates a token store using the default token directory.
+// This helper consolidates the repeated pattern of getting the token directory
+// and creating a store from it.
+func getTokenStore() (*token.Store, error) {
+	tokenDir, err := token.DefaultTokenDir()
+	if err != nil {
+		return nil, err
+	}
+	return token.NewStore(tokenDir)
+}
+
 // StartOptions contains the configuration for starting a cloister container.
 type StartOptions struct {
 	// ProjectPath is the absolute path to the project directory on the host.
@@ -54,11 +65,7 @@ func Start(opts StartOptions) (containerID string, tok string, err error) {
 	containerName := container.GenerateContainerName(opts.ProjectName)
 
 	// Step 4: Persist token to disk (for recovery after guardian restart)
-	tokenDir, err := token.DefaultTokenDir()
-	if err != nil {
-		return "", "", err
-	}
-	store, err := token.NewStore(tokenDir)
+	store, err := getTokenStore()
 	if err != nil {
 		return "", "", err
 	}
@@ -186,12 +193,8 @@ func Stop(containerName string, tok string) error {
 	}
 
 	// Step 2: Remove the token from disk (best effort)
-	tokenDir, err := token.DefaultTokenDir()
-	if err == nil {
-		store, err := token.NewStore(tokenDir)
-		if err == nil {
-			_ = store.Remove(containerName)
-		}
+	if store, err := getTokenStore(); err == nil {
+		_ = store.Remove(containerName)
 	}
 
 	// Step 3: Stop and remove the container
