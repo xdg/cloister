@@ -151,12 +151,14 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - `cloister start -d` (detached mode)
 - Non-git directory support with `--allow-no-git`
 - Guardian API versioning (CLI checks compatibility with container image)
+- Multi-arch container images: GitHub Action builds linux/amd64 + linux/arm64 on tagged commits, pushes to ghcr.io
 
 **Verification:**
 - Tab completion works for commands, cloister names, project names
 - Project with refs config → ref directories mounted read-only at `/refs/`
 - Logs capture all proxy and hostexec events
 - Clear error when starting from non-git directory without flag
+- Tagged release triggers GH Action → multi-arch image appears in ghcr.io
 
 ---
 
