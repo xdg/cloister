@@ -18,6 +18,13 @@ import (
 // This API is exposed only to the host, not to cloister containers.
 const DefaultAPIPort = 9997
 
+// TokenInfo mirrors token.TokenInfo for the interface.
+// This avoids an import cycle between guardian and token packages.
+type TokenInfo struct {
+	CloisterName string
+	ProjectName  string
+}
+
 // TokenRegistry defines the interface for token management operations.
 // This is implemented by token.Registry.
 type TokenRegistry interface {
@@ -25,7 +32,7 @@ type TokenRegistry interface {
 	Register(token, cloisterName string)
 	RegisterWithProject(token, cloisterName, projectName string)
 	Revoke(token string) bool
-	List() map[string]string
+	List() map[string]TokenInfo
 	Count() int
 }
 
@@ -196,8 +203,12 @@ func (a *APIServer) handleListTokens(w http.ResponseWriter, _ *http.Request) {
 		Tokens: make([]tokenInfo, 0, len(tokens)),
 	}
 
-	for t, c := range tokens {
-		resp.Tokens = append(resp.Tokens, tokenInfo{Token: t, Cloister: c})
+	for t, info := range tokens {
+		resp.Tokens = append(resp.Tokens, tokenInfo{
+			Token:    t,
+			Cloister: info.CloisterName,
+			Project:  info.ProjectName,
+		})
 	}
 
 	a.writeJSON(w, http.StatusOK, resp)

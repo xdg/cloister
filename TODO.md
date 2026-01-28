@@ -118,13 +118,13 @@ Create shared packages for code duplicated across multiple packages.
 Consolidate redundant API methods. May require updating callers.
 
 ### Q.3.1 Consolidate token.Registry methods
-- [ ] In `internal/token/registry.go`, consolidate lookup methods
-- [ ] Replace `Lookup()`, `LookupProject()`, `LookupInfo()` with single `Lookup() (TokenInfo, bool)`
-- [ ] Callers use only the fields they need from TokenInfo
-- [ ] Consolidate `List()` and `ListInfo()` into single `List() map[string]TokenInfo`
-- [ ] Mark old `Register()` as deprecated, prefer `RegisterWithProject()`
-- [ ] Update callers in `internal/guardian/` and `internal/cmd/`
-- [ ] **Test**: Update tests to use new signatures
+- [x] In `internal/token/registry.go`, consolidate lookup methods
+- [x] Replace `Lookup()`, `LookupProject()`, `LookupInfo()` with single `Lookup() (TokenInfo, bool)`
+- [x] Callers use only the fields they need from TokenInfo
+- [x] Consolidate `List()` and `ListInfo()` into single `List() map[string]TokenInfo`
+- [x] Mark old `Register()` as deprecated, prefer `RegisterWithProject()`
+- [x] Update callers in `internal/guardian/` and `internal/cmd/`
+- [x] **Test**: Update tests to use new signatures
 
 ### Q.3.2 Consolidate config merge functions
 - [ ] In `internal/config/merge.go`, extract generic merge helper

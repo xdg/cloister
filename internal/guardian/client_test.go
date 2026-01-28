@@ -27,10 +27,10 @@ func TestClient_RegisterToken(t *testing.T) {
 	}
 
 	// Verify token was registered
-	if name, ok := registry.tokens["test-token-123"]; !ok {
+	if info, ok := registry.tokens["test-token-123"]; !ok {
 		t.Error("token was not registered")
-	} else if name != "my-cloister" {
-		t.Errorf("expected cloister name my-cloister, got %s", name)
+	} else if info.CloisterName != "my-cloister" {
+		t.Errorf("expected cloister name my-cloister, got %s", info.CloisterName)
 	}
 }
 
@@ -63,7 +63,7 @@ func TestClient_RegisterTokenErrors(t *testing.T) {
 
 func TestClient_RevokeToken(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["token-to-revoke"] = "test-cloister"
+	registry.tokens["token-to-revoke"] = TokenInfo{CloisterName: "test-cloister"}
 
 	api := NewAPIServer(":0", registry)
 	if err := api.Start(); err != nil {
@@ -97,8 +97,8 @@ func TestClient_RevokeToken(t *testing.T) {
 
 func TestClient_ListTokens(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["token-a"] = "cloister-a"
-	registry.tokens["token-b"] = "cloister-b"
+	registry.tokens["token-a"] = TokenInfo{CloisterName: "cloister-a"}
+	registry.tokens["token-b"] = TokenInfo{CloisterName: "cloister-b"}
 
 	api := NewAPIServer(":0", registry)
 	if err := api.Start(); err != nil {

@@ -11,19 +11,19 @@ import (
 
 // mockRegistry implements TokenRegistry for testing.
 type mockRegistry struct {
-	tokens map[string]string
+	tokens map[string]TokenInfo
 }
 
 func newMockRegistry() *mockRegistry {
-	return &mockRegistry{tokens: make(map[string]string)}
+	return &mockRegistry{tokens: make(map[string]TokenInfo)}
 }
 
 func (r *mockRegistry) Register(token, cloisterName string) {
-	r.tokens[token] = cloisterName
+	r.tokens[token] = TokenInfo{CloisterName: cloisterName}
 }
 
 func (r *mockRegistry) RegisterWithProject(token, cloisterName, projectName string) {
-	r.tokens[token] = cloisterName
+	r.tokens[token] = TokenInfo{CloisterName: cloisterName, ProjectName: projectName}
 }
 
 func (r *mockRegistry) Validate(token string) bool {
@@ -39,8 +39,8 @@ func (r *mockRegistry) Revoke(token string) bool {
 	return false
 }
 
-func (r *mockRegistry) List() map[string]string {
-	result := make(map[string]string, len(r.tokens))
+func (r *mockRegistry) List() map[string]TokenInfo {
+	result := make(map[string]TokenInfo, len(r.tokens))
 	for k, v := range r.tokens {
 		result[k] = v
 	}
@@ -167,16 +167,16 @@ func TestAPIServer_RegisterToken(t *testing.T) {
 	}
 
 	// Verify token was actually registered
-	if name, ok := registry.tokens["abc123"]; !ok {
+	if info, ok := registry.tokens["abc123"]; !ok {
 		t.Error("token abc123 was not registered")
-	} else if name != "my-project-main" {
-		t.Errorf("expected cloister name my-project-main, got %s", name)
+	} else if info.CloisterName != "my-project-main" {
+		t.Errorf("expected cloister name my-project-main, got %s", info.CloisterName)
 	}
 }
 
 func TestAPIServer_RevokeToken(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["existing-token"] = "test-cloister"
+	registry.tokens["existing-token"] = TokenInfo{CloisterName: "test-cloister"}
 
 	api := NewAPIServer(":0", registry)
 	if err := api.Start(); err != nil {
@@ -234,8 +234,8 @@ func TestAPIServer_RevokeToken(t *testing.T) {
 
 func TestAPIServer_ListTokens(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["token1"] = "cloister1"
-	registry.tokens["token2"] = "cloister2"
+	registry.tokens["token1"] = TokenInfo{CloisterName: "cloister1"}
+	registry.tokens["token2"] = TokenInfo{CloisterName: "cloister2"}
 
 	api := NewAPIServer(":0", registry)
 	if err := api.Start(); err != nil {

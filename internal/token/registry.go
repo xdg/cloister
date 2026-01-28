@@ -24,9 +24,9 @@ func NewRegistry() *Registry {
 	}
 }
 
-// Register adds a token with its associated cloister name (without project).
+// Deprecated: Register adds a token with its associated cloister name (without project).
 // If the token already exists, its info is updated.
-// This method is kept for backward compatibility.
+// Prefer RegisterWithProject which includes the project name for per-project allowlists.
 func (r *Registry) Register(token, cloisterName string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -51,37 +51,14 @@ func (r *Registry) Validate(token string) bool {
 	return valid
 }
 
-// Lookup checks if a token is valid and returns the associated cloister name.
-// Returns the cloister name and true if valid, empty string and false if invalid.
-func (r *Registry) Lookup(token string) (cloisterName string, valid bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	info, ok := r.tokens[token]
-	if !ok {
-		return "", false
-	}
-	return info.CloisterName, true
-}
-
-// LookupInfo checks if a token is valid and returns the full TokenInfo.
+// Lookup checks if a token is valid and returns the full TokenInfo.
 // Returns the TokenInfo and true if valid, zero value and false if invalid.
-func (r *Registry) LookupInfo(token string) (TokenInfo, bool) {
+// Callers can access info.CloisterName or info.ProjectName as needed.
+func (r *Registry) Lookup(token string) (TokenInfo, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	info, ok := r.tokens[token]
 	return info, ok
-}
-
-// LookupProject checks if a token is valid and returns the associated project name.
-// Returns the project name and true if valid, empty string and false if invalid.
-func (r *Registry) LookupProject(token string) (projectName string, valid bool) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	info, ok := r.tokens[token]
-	if !ok {
-		return "", false
-	}
-	return info.ProjectName, true
 }
 
 // Revoke removes a token from the registry.
@@ -104,22 +81,10 @@ func (r *Registry) Count() int {
 	return len(r.tokens)
 }
 
-// List returns a map of all registered tokens to their cloister names.
+// List returns a map of all registered tokens to their full TokenInfo.
 // The returned map is a copy and can be safely modified.
-// This method is kept for backward compatibility.
-func (r *Registry) List() map[string]string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	result := make(map[string]string, len(r.tokens))
-	for k, v := range r.tokens {
-		result[k] = v.CloisterName
-	}
-	return result
-}
-
-// ListInfo returns a map of all registered tokens to their full TokenInfo.
-// The returned map is a copy and can be safely modified.
-func (r *Registry) ListInfo() map[string]TokenInfo {
+// Callers can access info.CloisterName or info.ProjectName as needed.
+func (r *Registry) List() map[string]TokenInfo {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	result := make(map[string]TokenInfo, len(r.tokens))

@@ -246,7 +246,10 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	// Set up per-project allowlist support
 	proxy.AllowlistCache = allowlistCache
-	proxy.TokenLookup = registry.LookupProject
+	proxy.TokenLookup = func(token string) (string, bool) {
+		info, ok := registry.Lookup(token)
+		return info.ProjectName, ok
+	}
 
 	// Create project allowlist loader that merges project config with global
 	loadProjectAllowlist := func(projectName string) *guardian.Allowlist {
@@ -281,7 +284,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		// Clear project cache so they get reloaded with new global
 		allowlistCache.Clear()
 		// Reload all project allowlists
-		for _, info := range registry.ListInfo() {
+		for _, info := range registry.List() {
 			if info.ProjectName != "" {
 				allowlist := loadProjectAllowlist(info.ProjectName)
 				allowlistCache.SetProject(info.ProjectName, allowlist)
@@ -292,7 +295,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	// Create the API server
 	apiAddr := fmt.Sprintf(":%d", guardian.DefaultAPIPort)
-	api := guardian.NewAPIServer(apiAddr, registry)
+	api := guardian.NewAPIServer(apiAddr, &registryAdapter{registry})
 
 	// Start the proxy server
 	if err := proxy.Start(); err != nil {
@@ -384,6 +387,25 @@ func getGuardianUptime() (string, error) {
 
 	// Format as human-readable duration
 	return formatDuration(uptime), nil
+}
+
+// registryAdapter wraps token.Registry to implement guardian.TokenRegistry.
+// This is needed because token.TokenInfo and guardian.TokenInfo are structurally
+// identical but Go considers them different types.
+type registryAdapter struct {
+	*token.Registry
+}
+
+func (r *registryAdapter) List() map[string]guardian.TokenInfo {
+	tokens := r.Registry.List()
+	result := make(map[string]guardian.TokenInfo, len(tokens))
+	for k, v := range tokens {
+		result[k] = guardian.TokenInfo{
+			CloisterName: v.CloisterName,
+			ProjectName:  v.ProjectName,
+		}
+	}
+	return result
 }
 
 // formatDuration formats a duration in a human-readable way.
