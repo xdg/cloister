@@ -60,6 +60,22 @@ This is a greenfield Go project. Primary components:
 - Approval web UI uses [htmx](https://htmx.org/) (~14kb) with SSE for real-time updates
 - All assets (HTML templates, htmx, CSS) embedded via `go:embed` for single-binary distribution
 
+## Testing
+
+Tests are split into two tiers based on what they require:
+
+| Command | What it runs | Requirements |
+|---------|--------------|--------------|
+| `make test` | Unit tests + sandbox-safe integration tests | None (runs in any sandbox) |
+| `make test-integration` | All tests including Docker | Docker daemon running |
+
+**For coding agents:** Use `make test` for fast iteration — it covers ~90% of the test suite and runs without Docker. Use `make test-integration` only when changing Docker/container code or before final commit, because it will require either human approval or for a human to run it outside a sandbox.
+
+**Build tags:**
+- Tests in `*_integration_test.go` files use `//go:build integration`
+- These tests create real Docker containers/networks and require the daemon
+- All other tests are sandbox-safe (use httptest, t.TempDir(), mock interfaces)
+
 ## Internal Packages
 
 | Package | Purpose |

@@ -26,11 +26,40 @@ type ContainerManager interface {
 	Attach(containerName string) (int, error)
 }
 
+// GuardianManager is the interface for guardian operations.
+// This allows injecting mock implementations for testing.
+type GuardianManager interface {
+	// EnsureRunning ensures the guardian container is running.
+	EnsureRunning() error
+
+	// RegisterToken registers a token with the guardian for a cloister.
+	RegisterToken(token, cloisterName, projectName string) error
+
+	// RevokeToken revokes a token from the guardian.
+	RevokeToken(token string) error
+}
+
+// defaultGuardianManager implements GuardianManager using the real guardian package.
+type defaultGuardianManager struct{}
+
+func (defaultGuardianManager) EnsureRunning() error {
+	return guardian.EnsureRunning()
+}
+
+func (defaultGuardianManager) RegisterToken(token, cloisterName, projectName string) error {
+	return guardian.RegisterToken(token, cloisterName, projectName)
+}
+
+func (defaultGuardianManager) RevokeToken(token string) error {
+	return guardian.RevokeToken(token)
+}
+
 // Option configures cloister operations.
 type Option func(*options)
 
 type options struct {
-	manager ContainerManager
+	manager  ContainerManager
+	guardian GuardianManager
 }
 
 // WithManager sets a custom container manager for dependency injection.
@@ -41,16 +70,27 @@ func WithManager(m ContainerManager) Option {
 	}
 }
 
-// getManager returns the configured manager or creates a default one.
-func getManager(opts ...Option) ContainerManager {
+// WithGuardian sets a custom guardian manager for dependency injection.
+// If not set, the real guardian package functions are used.
+func WithGuardian(g GuardianManager) Option {
+	return func(o *options) {
+		o.guardian = g
+	}
+}
+
+// applyOptions applies options and returns resolved dependencies.
+func applyOptions(opts ...Option) *options {
 	o := &options{}
 	for _, opt := range opts {
 		opt(o)
 	}
 	if o.manager == nil {
-		return container.NewManager()
+		o.manager = container.NewManager()
 	}
-	return o.manager
+	if o.guardian == nil {
+		o.guardian = defaultGuardianManager{}
+	}
+	return o
 }
 
 // getTokenStore creates a token store using the default token directory.
@@ -92,11 +132,11 @@ type StartOptions struct {
 //
 // Options can be used to inject dependencies for testing:
 //
-//	Start(opts, WithManager(mockManager))
+//	Start(opts, WithManager(mockManager), WithGuardian(mockGuardian))
 func Start(opts StartOptions, options ...Option) (containerID string, tok string, err error) {
-	mgr := getManager(options...)
+	deps := applyOptions(options...)
 	// Step 1: Ensure guardian is running
-	if err := guardian.EnsureRunning(); err != nil {
+	if err := deps.guardian.EnsureRunning(); err != nil {
 		return "", "", fmt.Errorf("guardian failed to start: %w", err)
 	}
 
@@ -116,7 +156,7 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	}
 
 	// Step 5: Register the token with guardian (with project name for per-project allowlist)
-	if err := guardian.RegisterToken(tok, containerName, opts.ProjectName); err != nil {
+	if err := deps.guardian.RegisterToken(tok, containerName, opts.ProjectName); err != nil {
 		// Clean up persisted token on failure
 		_ = store.Remove(containerName)
 		return "", "", err
@@ -126,12 +166,12 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	defer func() {
 		if err != nil {
 			// Best effort cleanup - ignore revocation errors
-			_ = guardian.RevokeToken(tok)
+			_ = deps.guardian.RevokeToken(tok)
 			_ = store.Remove(containerName)
 		}
 	}()
 
-	// Step 5: Create container config with token, proxy env vars, and credentials
+	// Step 6: Create container config with token, proxy env vars, and credentials
 	// Combine proxy env vars with any credential env vars from the host.
 	// TEMPORARY: Credential passthrough is a Phase 1 workaround. In Phase 3,
 	// credentials will be managed via `cloister setup claude` instead.
@@ -147,8 +187,8 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		EnvVars:     envVars,
 	}
 
-	// Step 6: Create the container (without starting)
-	containerID, err = mgr.Create(cfg)
+	// Step 7: Create the container (without starting)
+	containerID, err = deps.manager.Create(cfg)
 	if err != nil {
 		return "", "", err
 	}
@@ -157,11 +197,11 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	defer func() {
 		if err != nil {
 			// Best effort cleanup - ignore removal errors
-			_ = mgr.Stop(containerName)
+			_ = deps.manager.Stop(containerName)
 		}
 	}()
 
-	// Step 7: Inject user settings (~/.claude/) into the container
+	// Step 8: Inject user settings (~/.claude/) into the container
 	// This is a one-way snapshot - writes inside container are isolated
 	if copyErr := injectUserSettings(containerName); copyErr != nil {
 		// Log but don't fail - missing settings is not fatal
@@ -169,8 +209,8 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		_ = copyErr
 	}
 
-	// Step 8: Start the container
-	err = mgr.StartContainer(containerName)
+	// Step 9: Start the container
+	err = deps.manager.StartContainer(containerName)
 	if err != nil {
 		return "", "", err
 	}
@@ -227,15 +267,15 @@ func injectUserSettings(containerName string) error {
 //
 // Options can be used to inject dependencies for testing:
 //
-//	Stop(containerName, tok, WithManager(mockManager))
+//	Stop(containerName, tok, WithManager(mockManager), WithGuardian(mockGuardian))
 func Stop(containerName string, tok string, options ...Option) error {
-	mgr := getManager(options...)
+	deps := applyOptions(options...)
 	// Step 1: Revoke the token from guardian (if provided)
 	// We ignore revocation errors and continue with container stop.
 	// The token will become orphaned but won't cause security issues
 	// since the container will no longer exist.
 	if tok != "" {
-		_ = guardian.RevokeToken(tok)
+		_ = deps.guardian.RevokeToken(tok)
 	}
 
 	// Step 2: Remove the token from disk (best effort)
@@ -244,7 +284,7 @@ func Stop(containerName string, tok string, options ...Option) error {
 	}
 
 	// Step 3: Stop and remove the container
-	return mgr.Stop(containerName)
+	return deps.manager.Stop(containerName)
 }
 
 // Attach attaches an interactive shell to a running cloister container.
@@ -263,6 +303,6 @@ func Stop(containerName string, tok string, options ...Option) error {
 //
 //	Attach(containerID, WithManager(mockManager))
 func Attach(containerID string, options ...Option) (exitCode int, err error) {
-	mgr := getManager(options...)
-	return mgr.Attach(containerID)
+	deps := applyOptions(options...)
+	return deps.manager.Attach(containerID)
 }

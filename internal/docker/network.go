@@ -9,6 +9,48 @@ import (
 // All cloister containers connect to this network to reach the guardian proxy.
 const CloisterNetworkName = "cloister-net"
 
+// NetworkOps abstracts Docker network operations for testing.
+type NetworkOps interface {
+	// EnsureNetwork creates a Docker network if it doesn't exist.
+	// Returns ErrNetworkConfigMismatch if the network exists with different settings.
+	EnsureNetwork(name string, internal bool) error
+
+	// NetworkExists checks if a Docker network with the given name exists.
+	NetworkExists(name string) (bool, error)
+
+	// InspectNetwork retrieves detailed information about a Docker network.
+	InspectNetwork(name string) (*NetworkInspectInfo, error)
+
+	// EnsureCloisterNetwork creates the standard cloister network if it doesn't exist.
+	EnsureCloisterNetwork() error
+}
+
+// DefaultNetworkOps implements NetworkOps using the real Docker CLI.
+type DefaultNetworkOps struct{}
+
+// Compile-time interface check
+var _ NetworkOps = DefaultNetworkOps{}
+
+// EnsureNetwork implements NetworkOps.
+func (DefaultNetworkOps) EnsureNetwork(name string, internal bool) error {
+	return EnsureNetwork(name, internal)
+}
+
+// NetworkExists implements NetworkOps.
+func (DefaultNetworkOps) NetworkExists(name string) (bool, error) {
+	return NetworkExists(name)
+}
+
+// InspectNetwork implements NetworkOps.
+func (DefaultNetworkOps) InspectNetwork(name string) (*NetworkInspectInfo, error) {
+	return InspectNetwork(name)
+}
+
+// EnsureCloisterNetwork implements NetworkOps.
+func (DefaultNetworkOps) EnsureCloisterNetwork() error {
+	return EnsureCloisterNetwork()
+}
+
 // ErrNetworkConfigMismatch indicates the network exists but has different settings than requested.
 var ErrNetworkConfigMismatch = errors.New("network exists with different configuration")
 

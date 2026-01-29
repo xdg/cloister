@@ -14,6 +14,62 @@ import (
 	"github.com/xdg/cloister/internal/docker"
 )
 
+// DockerOps abstracts Docker operations for testing guardian container management.
+// This interface covers all Docker CLI operations needed by the guardian package.
+type DockerOps interface {
+	// CheckDaemon verifies the Docker daemon is running and accessible.
+	CheckDaemon() error
+
+	// EnsureCloisterNetwork creates the standard cloister network if it doesn't exist.
+	EnsureCloisterNetwork() error
+
+	// Run executes a docker CLI command and returns stdout.
+	Run(args ...string) (string, error)
+
+	// FindContainerByExactName finds a container with the exact name specified.
+	FindContainerByExactName(name string) (*docker.ContainerInfo, error)
+}
+
+// DefaultDockerOps implements DockerOps using the real Docker CLI.
+type DefaultDockerOps struct{}
+
+// Compile-time interface check
+var _ DockerOps = DefaultDockerOps{}
+
+// CheckDaemon implements DockerOps.
+func (DefaultDockerOps) CheckDaemon() error {
+	return docker.CheckDaemon()
+}
+
+// EnsureCloisterNetwork implements DockerOps.
+func (DefaultDockerOps) EnsureCloisterNetwork() error {
+	return docker.EnsureCloisterNetwork()
+}
+
+// Run implements DockerOps.
+func (DefaultDockerOps) Run(args ...string) (string, error) {
+	return docker.Run(args...)
+}
+
+// FindContainerByExactName implements DockerOps.
+func (DefaultDockerOps) FindContainerByExactName(name string) (*docker.ContainerInfo, error) {
+	return docker.FindContainerByExactName(name)
+}
+
+// defaultDockerOps is the package-level default Docker operations implementation.
+// It can be replaced via SetDockerOps for testing.
+var defaultDockerOps DockerOps = DefaultDockerOps{}
+
+// SetDockerOps sets the Docker operations implementation used by this package.
+// This is intended for testing purposes. Pass nil to restore the default.
+func SetDockerOps(ops DockerOps) {
+	if ops == nil {
+		defaultDockerOps = DefaultDockerOps{}
+	} else {
+		defaultDockerOps = ops
+	}
+}
+
 // Container constants for the guardian service.
 const (
 	// ContainerName is the name of the guardian container.
@@ -77,7 +133,7 @@ type containerState struct {
 // Returns docker.ErrDockerNotRunning if the Docker daemon is not accessible.
 func IsRunning() (bool, error) {
 	// Check Docker daemon availability first
-	if err := docker.CheckDaemon(); err != nil {
+	if err := defaultDockerOps.CheckDaemon(); err != nil {
 		return false, err
 	}
 
@@ -114,7 +170,7 @@ func Start() error {
 	}
 
 	// Ensure cloister-net exists
-	if err := docker.EnsureCloisterNetwork(); err != nil {
+	if err := defaultDockerOps.EnsureCloisterNetwork(); err != nil {
 		return fmt.Errorf("failed to create cloister network: %w", err)
 	}
 
@@ -159,13 +215,13 @@ func Start() error {
 	}
 
 	// Create and start the container
-	_, err = docker.Run(args...)
+	_, err = defaultDockerOps.Run(args...)
 	if err != nil {
 		return fmt.Errorf("failed to start guardian container: %w", err)
 	}
 
 	// Connect to bridge network for external access to upstream servers
-	_, err = docker.Run("network", "connect", BridgeNetwork, ContainerName)
+	_, err = defaultDockerOps.Run("network", "connect", BridgeNetwork, ContainerName)
 	if err != nil {
 		// If connecting to bridge fails, clean up the container
 		_ = removeContainer()
@@ -242,7 +298,7 @@ func WaitReady(timeout time.Duration) error {
 // getContainerState retrieves the current state of the guardian container.
 // Returns nil if the container doesn't exist.
 func getContainerState() (*containerState, error) {
-	info, err := docker.FindContainerByExactName(ContainerName)
+	info, err := defaultDockerOps.FindContainerByExactName(ContainerName)
 	if err != nil {
 		return nil, err
 	}
@@ -260,10 +316,10 @@ func getContainerState() (*containerState, error) {
 // removeContainer stops and removes the guardian container.
 func removeContainer() error {
 	// Stop the container (ignore errors if already stopped)
-	_, _ = docker.Run("stop", ContainerName)
+	_, _ = defaultDockerOps.Run("stop", ContainerName)
 
 	// Remove the container
-	_, err := docker.Run("rm", ContainerName)
+	_, err := defaultDockerOps.Run("rm", ContainerName)
 	if err != nil {
 		var cmdErr *docker.CommandError
 		if errors.As(err, &cmdErr) {

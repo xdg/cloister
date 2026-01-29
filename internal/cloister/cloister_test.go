@@ -168,16 +168,26 @@ func TestStop_WithMockManager_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestGetManager_DefaultsToRealManager(t *testing.T) {
-	// Test that getManager returns a real manager when no option is provided
-	mgr := getManager()
-	if mgr == nil {
-		t.Fatal("getManager() returned nil")
+func TestApplyOptions_DefaultsToRealImplementations(t *testing.T) {
+	// Test that applyOptions returns real implementations when no options are provided
+	deps := applyOptions()
+
+	if deps.manager == nil {
+		t.Fatal("applyOptions().manager is nil")
+	}
+	if deps.guardian == nil {
+		t.Fatal("applyOptions().guardian is nil")
 	}
 
-	// Verify it's the concrete type (not nil interface)
-	_, ok := mgr.(*container.Manager)
+	// Verify manager is the concrete type
+	_, ok := deps.manager.(*container.Manager)
 	if !ok {
-		t.Errorf("getManager() returned %T, want *container.Manager", mgr)
+		t.Errorf("applyOptions().manager is %T, want *container.Manager", deps.manager)
+	}
+
+	// Verify guardian is the default implementation
+	_, ok = deps.guardian.(defaultGuardianManager)
+	if !ok {
+		t.Errorf("applyOptions().guardian is %T, want defaultGuardianManager", deps.guardian)
 	}
 }
