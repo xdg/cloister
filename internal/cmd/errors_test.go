@@ -8,6 +8,53 @@ import (
 	"github.com/xdg/cloister/internal/project"
 )
 
+func TestExitCodeError(t *testing.T) {
+	t.Run("NewExitCodeError creates error with code", func(t *testing.T) {
+		err := NewExitCodeError(42)
+		if err.Code != 42 {
+			t.Errorf("Code = %d, want 42", err.Code)
+		}
+	})
+
+	t.Run("Error returns formatted message", func(t *testing.T) {
+		err := NewExitCodeError(42)
+		want := "exit code 42"
+		if err.Error() != want {
+			t.Errorf("Error() = %q, want %q", err.Error(), want)
+		}
+	})
+
+	t.Run("implements error interface", func(t *testing.T) {
+		var e error = NewExitCodeError(1)
+		if e.Error() != "exit code 1" {
+			t.Errorf("Error() = %q, want %q", e.Error(), "exit code 1")
+		}
+	})
+
+	t.Run("errors.As matches ExitCodeError", func(t *testing.T) {
+		err := NewExitCodeError(127)
+		var exitErr *ExitCodeError
+		if !errors.As(err, &exitErr) {
+			t.Error("errors.As failed to match ExitCodeError")
+		}
+		if exitErr.Code != 127 {
+			t.Errorf("Code = %d, want 127", exitErr.Code)
+		}
+	})
+
+	t.Run("errors.As matches wrapped ExitCodeError", func(t *testing.T) {
+		inner := NewExitCodeError(5)
+		wrapped := errors.Join(errors.New("wrapper"), inner)
+		var exitErr *ExitCodeError
+		if !errors.As(wrapped, &exitErr) {
+			t.Error("errors.As failed to match wrapped ExitCodeError")
+		}
+		if exitErr.Code != 5 {
+			t.Errorf("Code = %d, want 5", exitErr.Code)
+		}
+	})
+}
+
 func TestDockerNotRunningError(t *testing.T) {
 	err := dockerNotRunningError()
 	if err == nil {

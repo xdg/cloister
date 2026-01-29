@@ -146,7 +146,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 
 	// Step 8: Propagate shell exit code
 	if exitCode != 0 {
-		os.Exit(exitCode)
+		return NewExitCodeError(exitCode)
 	}
 
 	return nil
@@ -190,7 +190,7 @@ func attachToExisting(containerName string) error {
 
 	// Propagate shell exit code
 	if exitCode != 0 {
-		os.Exit(exitCode)
+		return NewExitCodeError(exitCode)
 	}
 
 	return nil

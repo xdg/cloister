@@ -7,6 +7,23 @@ import (
 	"github.com/xdg/cloister/internal/project"
 )
 
+// ExitCodeError represents an error that should cause the process to exit
+// with a specific exit code. This allows command handlers to signal non-zero
+// exit codes without calling os.Exit directly, improving testability.
+type ExitCodeError struct {
+	Code int
+}
+
+// Error implements the error interface.
+func (e *ExitCodeError) Error() string {
+	return fmt.Sprintf("exit code %d", e.Code)
+}
+
+// NewExitCodeError creates an ExitCodeError with the given code.
+func NewExitCodeError(code int) *ExitCodeError {
+	return &ExitCodeError{Code: code}
+}
+
 // dockerNotRunningError returns a user-friendly error when Docker is not running.
 func dockerNotRunningError() error {
 	return fmt.Errorf("Docker is not running; please start Docker and try again")

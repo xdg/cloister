@@ -182,10 +182,10 @@ Add missing tests and file organization improvements.
 - [x] **Test**: Token package coverage increases to >90%
 
 ### Q.5.3 Refactor os.Exit in cmd handlers
-- [ ] In `internal/cmd/start.go`, replace `os.Exit(exitCode)` (lines 152, 196) with typed error
-- [ ] Define `ExitCodeError` type that carries exit code
-- [ ] Handle in root command to call `os.Exit` with code
-- [ ] **Test**: Test that exit code propagates correctly
+- [x] In `internal/cmd/start.go`, replace `os.Exit(exitCode)` (lines 152, 196) with typed error
+- [x] Define `ExitCodeError` type that carries exit code
+- [x] Handle in root command to call `os.Exit` with code
+- [x] **Test**: Test that exit code propagates correctly
 
 ### Q.5.4 File organization
 - [ ] Move name generation functions from `internal/container/config.go` to `internal/container/names.go`
