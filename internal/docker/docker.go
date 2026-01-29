@@ -18,8 +18,15 @@ import (
 	"strings"
 )
 
-// ErrDockerNotRunning indicates the Docker daemon is not running or accessible.
-var ErrDockerNotRunning = errors.New("docker daemon is not running")
+// Sentinel errors for docker operations.
+var (
+	// ErrDockerNotRunning indicates the Docker daemon is not running or accessible.
+	ErrDockerNotRunning = errors.New("docker daemon is not running")
+
+	// ErrNoResults indicates the docker command returned no results.
+	// This is not necessarily an error - it may just mean no matching objects were found.
+	ErrNoResults = errors.New("no results from docker command")
+)
 
 // CommandError represents a failed Docker command with stderr output.
 type CommandError struct {
@@ -70,10 +77,6 @@ func Run(args ...string) (string, error) {
 
 	return stdout.String(), nil
 }
-
-// ErrNoResults indicates the docker command returned no results.
-// This is not necessarily an error - it may just mean no matching objects were found.
-var ErrNoResults = errors.New("no results from docker command")
 
 // RunJSONLines executes a docker CLI command with JSON output format and
 // unmarshals newline-separated JSON objects (JSONL) into the provided slice.

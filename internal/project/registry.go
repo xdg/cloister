@@ -67,9 +67,9 @@ func (r *Registry) now() time.Time {
 }
 
 // RegistryPath returns the path to the project registry file.
-// This is ConfigDir() + "projects.yaml".
+// This is filepath.Join(ConfigDir(), "projects.yaml").
 func RegistryPath() string {
-	return config.ConfigDir() + "projects.yaml"
+	return filepath.Join(config.ConfigDir(), "projects.yaml")
 }
 
 // LoadRegistry loads the project registry from disk.

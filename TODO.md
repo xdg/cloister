@@ -194,10 +194,10 @@ Add missing tests and file organization improvements.
 - [x] **Test**: No behavior change, existing tests pass
 
 ### Q.5.5 Code style consistency
-- [ ] Use `filepath.Join` consistently instead of string concatenation in `internal/project/registry.go`
-- [ ] Rename shadowing variable in `internal/cmd/list.go` line 86 (`project` shadows package)
-- [ ] Group sentinel errors together in `internal/docker/docker.go`
-- [ ] **Test**: `make lint` passes
+- [x] Use `filepath.Join` consistently instead of string concatenation in `internal/project/registry.go`
+- [x] Rename shadowing variable in `internal/cmd/list.go` line 86 (`project` shadows package) — N/A: no `project` import exists; no shadowing issue
+- [x] Group sentinel errors together in `internal/docker/docker.go`
+- [x] **Test**: `make lint` passes
 
 ---
 
