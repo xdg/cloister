@@ -177,9 +177,9 @@ Add missing tests and file organization improvements.
 - [x] **Test**: New tests cover error handling; full coverage requires integration tests
 
 ### Q.5.2 Add token package tests
-- [ ] Add test for `DefaultTokenDir()` — currently 0% coverage
-- [ ] Add test for `Store.Dir()` — currently 0% coverage
-- [ ] **Test**: Token package coverage increases to >90%
+- [x] Add test for `DefaultTokenDir()` — currently 0% coverage
+- [x] Add test for `Store.Dir()` — currently 0% coverage
+- [x] **Test**: Token package coverage increases to >90%
 
 ### Q.5.3 Refactor os.Exit in cmd handlers
 - [ ] In `internal/cmd/start.go`, replace `os.Exit(exitCode)` (lines 152, 196) with typed error
