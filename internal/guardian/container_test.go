@@ -22,108 +22,86 @@ func cleanupGuardian() {
 	_, _ = docker.Run("rm", ContainerName)
 }
 
-func TestIsRunning_WhenNotExists(t *testing.T) {
+// requireCleanGuardianState ensures no guardian is running and registers cleanup.
+// Skips the test if guardian is unexpectedly running (another package may be using it).
+func requireCleanGuardianState(t *testing.T) {
+	t.Helper()
 	requireDocker(t)
-
-	// Ensure guardian is not running
-	cleanupGuardian()
-
 	running, err := IsRunning()
 	if err != nil {
 		t.Fatalf("IsRunning() error: %v", err)
 	}
 	if running {
-		t.Error("IsRunning() = true, want false when container doesn't exist")
+		t.Skip("Skipping: guardian is already running (parallel test conflict)")
 	}
+	t.Cleanup(cleanupGuardian)
 }
 
-func TestEnsureRunning_Idempotent(t *testing.T) {
-	requireDocker(t)
+// TestGuardian_WhenNotRunning tests guardian behavior when no container exists.
+func TestGuardian_WhenNotRunning(t *testing.T) {
+	requireCleanGuardianState(t)
 
-	// Ensure clean state
-	cleanupGuardian()
-	defer cleanupGuardian()
+	t.Run("IsRunning_ReturnsFalse", func(t *testing.T) {
+		running, err := IsRunning()
+		if err != nil {
+			t.Fatalf("IsRunning() error: %v", err)
+		}
+		if running {
+			t.Error("IsRunning() = true, want false when container doesn't exist")
+		}
+	})
 
-	// First call should start the guardian
-	// Note: This test requires the cloister:latest image to exist.
-	// For testing purposes, we only check the logic works, not that
-	// the image actually runs correctly.
+	t.Run("GetContainerState_ReturnsNil", func(t *testing.T) {
+		state, err := getContainerState()
+		if err != nil {
+			t.Fatalf("getContainerState() error: %v", err)
+		}
+		if state != nil {
+			t.Error("getContainerState() should return nil when container doesn't exist")
+		}
+	})
+
+	t.Run("Stop_IsIdempotent", func(t *testing.T) {
+		if err := Stop(); err != nil {
+			t.Fatalf("Stop() error when not running: %v", err)
+		}
+	})
+}
+
+// TestGuardian_Lifecycle tests guardian start/stop behavior.
+func TestGuardian_Lifecycle(t *testing.T) {
+	requireCleanGuardianState(t)
+
+	// Start the guardian (required for all subtests)
 	err := EnsureRunning()
 	if err != nil {
-		// If the image doesn't exist, skip this test
 		var cmdErr *docker.CommandError
 		if errors.As(err, &cmdErr) {
 			t.Skipf("Test requires cloister:latest image: %v", err)
 		}
-		t.Fatalf("First EnsureRunning() error: %v", err)
+		t.Fatalf("EnsureRunning() error: %v", err)
 	}
 
-	// Second call should be a no-op
-	err = EnsureRunning()
-	if err != nil {
-		t.Fatalf("Second EnsureRunning() error: %v", err)
-	}
-
-	// Guardian should be running
-	running, err := IsRunning()
-	if err != nil {
-		t.Fatalf("IsRunning() error: %v", err)
-	}
-	if !running {
-		t.Error("Guardian should be running after EnsureRunning()")
-	}
-}
-
-func TestStop_WhenNotRunning(t *testing.T) {
-	requireDocker(t)
-
-	// Ensure guardian is not running
-	cleanupGuardian()
-
-	// Stop should be idempotent
-	err := Stop()
-	if err != nil {
-		t.Fatalf("Stop() error when not running: %v", err)
-	}
-}
-
-func TestStart_ReturnsErrorWhenAlreadyRunning(t *testing.T) {
-	requireDocker(t)
-
-	// Ensure clean state
-	cleanupGuardian()
-	defer cleanupGuardian()
-
-	// Start the guardian
-	err := Start()
-	if err != nil {
-		// If the image doesn't exist, skip this test
-		var cmdErr *docker.CommandError
-		if errors.As(err, &cmdErr) {
-			t.Skipf("Test requires cloister:latest image: %v", err)
+	t.Run("IsRunning_ReturnsTrue", func(t *testing.T) {
+		running, err := IsRunning()
+		if err != nil {
+			t.Fatalf("IsRunning() error: %v", err)
 		}
-		t.Fatalf("First Start() error: %v", err)
-	}
+		if !running {
+			t.Error("Guardian should be running after EnsureRunning()")
+		}
+	})
 
-	// Second start should return error
-	err = Start()
-	if !errors.Is(err, ErrGuardianAlreadyRunning) {
-		t.Errorf("Second Start() = %v, want ErrGuardianAlreadyRunning", err)
-	}
-}
+	t.Run("EnsureRunning_IsIdempotent", func(t *testing.T) {
+		if err := EnsureRunning(); err != nil {
+			t.Fatalf("Second EnsureRunning() error: %v", err)
+		}
+	})
 
-func TestGetContainerState(t *testing.T) {
-	requireDocker(t)
-
-	// Ensure guardian is not running
-	cleanupGuardian()
-
-	// Should return nil when container doesn't exist
-	state, err := getContainerState()
-	if err != nil {
-		t.Fatalf("getContainerState() error: %v", err)
-	}
-	if state != nil {
-		t.Error("getContainerState() should return nil when container doesn't exist")
-	}
+	t.Run("Start_ReturnsErrorWhenRunning", func(t *testing.T) {
+		err := Start()
+		if !errors.Is(err, ErrGuardianAlreadyRunning) {
+			t.Errorf("Start() = %v, want ErrGuardianAlreadyRunning", err)
+		}
+	})
 }

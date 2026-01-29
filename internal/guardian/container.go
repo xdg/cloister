@@ -5,9 +5,11 @@ package guardian
 import (
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/xdg/cloister/internal/docker"
 )
@@ -189,9 +191,9 @@ func Stop() error {
 	return removeContainer()
 }
 
-// EnsureRunning ensures the guardian container is running.
+// EnsureRunning ensures the guardian container is running and the API is ready.
 // If the container is already running, this is a no-op.
-// If the container is not running, it starts it.
+// If the container is not running, it starts it and waits for API readiness.
 func EnsureRunning() error {
 	running, err := IsRunning()
 	if err != nil {
@@ -202,7 +204,39 @@ func EnsureRunning() error {
 		return nil
 	}
 
-	return Start()
+	if err := Start(); err != nil {
+		return err
+	}
+
+	// Wait for API to be ready after fresh start
+	return WaitReady(5 * time.Second)
+}
+
+// WaitReady polls the guardian API until it responds or timeout is reached.
+// This ensures the API server inside the container has started accepting connections.
+func WaitReady(timeout time.Duration) error {
+	client := &http.Client{Timeout: 500 * time.Millisecond}
+	url := fmt.Sprintf("http://%s/tokens", DefaultAPIAddr)
+
+	deadline := time.Now().Add(timeout)
+	var lastErr error
+
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(url)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		lastErr = err
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	if lastErr != nil {
+		return fmt.Errorf("guardian API not ready after %v: %w", timeout, lastErr)
+	}
+	return fmt.Errorf("guardian API not ready after %v", timeout)
 }
 
 // getContainerState retrieves the current state of the guardian container.
