@@ -37,7 +37,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 
 ---
 
-## Phase 2: Configuration System
+## Phase 2: Configuration System (COMPLETE)
 
 **Goal:** Global and per-project config controls allowlists.
 
