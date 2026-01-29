@@ -188,10 +188,10 @@ Add missing tests and file organization improvements.
 - [x] **Test**: Test that exit code propagates correctly
 
 ### Q.5.4 File organization
-- [ ] Move name generation functions from `internal/container/config.go` to `internal/container/names.go`
-- [ ] Move `AllowlistCache` from `internal/guardian/proxy.go` to `internal/guardian/allowlist_cache.go`
-- [ ] Move credential env var logic from `internal/token/env.go` to `internal/token/credentials.go`
-- [ ] **Test**: No behavior change, existing tests pass
+- [x] Move name generation functions from `internal/container/config.go` to `internal/container/names.go`
+- [x] Move `AllowlistCache` from `internal/guardian/proxy.go` to `internal/guardian/allowlist_cache.go`
+- [x] Move credential env var logic from `internal/token/env.go` to `internal/token/credentials.go`
+- [x] **Test**: No behavior change, existing tests pass
 
 ### Q.5.5 Code style consistency
 - [ ] Use `filepath.Join` consistently instead of string concatenation in `internal/project/registry.go`
