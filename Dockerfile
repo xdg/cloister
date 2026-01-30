@@ -9,16 +9,36 @@ RUN echo 'Acquire::ForceIPv4 "true";' > /etc/apt/apt.conf.d/99force-ipv4
 
 # Core tools
 RUN apt-get update && apt-get install -y \
-    git \
-    curl \
-    wget \
-    ripgrep \
-    fd-find \
-    jq \
     build-essential \
     ca-certificates \
+    cmake \
+    curl \
+    dnsutils \
+    fd-find \
+    file \
+    git \
+    htop \
+    jq \
+    less \
+    locales \
+    man-db \
+    nano \
+    openssh-client \
+    pkg-config \
+    procps \
+    ripgrep \
+    sqlite3 \
     tini \
+    tree \
+    unzip \
+    vim \
+    wget \
+    xz-utils \
+    zip \
+    && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8
 
 # Go (latest stable)
 RUN set -eux; \
@@ -47,10 +67,14 @@ RUN apt-get update && apt-get install -y \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
 
-# Create unprivileged user (UID 1000)
+# Create unprivileged user (UID 1000) with passwordless sudo
 # Remove existing user with UID 1000 if present (ubuntu base image has 'ubuntu' user)
-RUN if id -u 1000 >/dev/null 2>&1; then userdel -r $(getent passwd 1000 | cut -d: -f1); fi \
-    && useradd -m -s /bin/bash -u 1000 cloister
+RUN apt-get update && apt-get install -y sudo \
+    && rm -rf /var/lib/apt/lists/* \
+    && if id -u 1000 >/dev/null 2>&1; then userdel -r $(getent passwd 1000 | cut -d: -f1); fi \
+    && useradd -m -s /bin/bash -u 1000 cloister \
+    && echo 'cloister ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cloister \
+    && chmod 0440 /etc/sudoers.d/cloister
 
 # Build cloister binary from source (for guardian mode inside the container)
 WORKDIR /tmp/cloister-build
