@@ -174,6 +174,22 @@ func TestDefaultGlobalConfig_AllFields(t *testing.T) {
 	}
 }
 
+func TestDefaultGlobalConfig_ClaudeSkipPerms(t *testing.T) {
+	cfg := DefaultGlobalConfig()
+
+	claude, ok := cfg.Agents["claude"]
+	if !ok {
+		t.Fatal("DefaultGlobalConfig() missing claude agent")
+	}
+
+	if claude.SkipPerms == nil {
+		t.Fatal("DefaultGlobalConfig() claude.SkipPerms is nil, expected true")
+	}
+	if !*claude.SkipPerms {
+		t.Error("DefaultGlobalConfig() claude.SkipPerms is false, expected true")
+	}
+}
+
 func TestDefaultProjectConfig(t *testing.T) {
 	cfg := DefaultProjectConfig()
 

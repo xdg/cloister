@@ -66,6 +66,10 @@ type AgentConfig struct {
 	Command     string   `yaml:"command,omitempty"`
 	ConfigMount string   `yaml:"config_mount,omitempty"`
 	Env         []string `yaml:"env,omitempty"`
+	AuthMethod  string   `yaml:"auth_method,omitempty"`      // "existing", "token", or "api_key"
+	Token       string   `yaml:"token,omitempty"`            // long-lived OAuth token
+	APIKey      string   `yaml:"api_key,omitempty"`          // Anthropic API key
+	SkipPerms   *bool    `yaml:"skip_permissions,omitempty"` // default true
 }
 
 // DefaultsConfig specifies default settings for new cloisters.

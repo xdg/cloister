@@ -1,6 +1,7 @@
 package config
 
 import (
+	"strings"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -302,6 +303,213 @@ func TestGlobalConfigRoundTrip(t *testing.T) {
 	}
 	if agent.Command != "test-cmd" {
 		t.Errorf("Agents[\"test-agent\"].Command = %q, want %q", agent.Command, "test-cmd")
+	}
+}
+
+func TestAgentConfigCredentialFieldsRoundTrip(t *testing.T) {
+	// Test YAML round-trip for AgentConfig credential fields (Phase 3.1.1)
+	skipPerms := true
+
+	tests := []struct {
+		name   string
+		agent  AgentConfig
+		verify func(t *testing.T, got AgentConfig)
+	}{
+		{
+			name: "all_credential_fields",
+			agent: AgentConfig{
+				Command:     "claude",
+				ConfigMount: "~/.claude",
+				Env:         []string{"ANTHROPIC_*"},
+				AuthMethod:  "token",
+				Token:       "oauth-token-value",
+				APIKey:      "sk-ant-api-key",
+				SkipPerms:   &skipPerms,
+			},
+			verify: func(t *testing.T, got AgentConfig) {
+				if got.AuthMethod != "token" {
+					t.Errorf("AuthMethod = %q, want %q", got.AuthMethod, "token")
+				}
+				if got.Token != "oauth-token-value" {
+					t.Errorf("Token = %q, want %q", got.Token, "oauth-token-value")
+				}
+				if got.APIKey != "sk-ant-api-key" {
+					t.Errorf("APIKey = %q, want %q", got.APIKey, "sk-ant-api-key")
+				}
+				if got.SkipPerms == nil || *got.SkipPerms != true {
+					t.Errorf("SkipPerms = %v, want ptr to true", got.SkipPerms)
+				}
+			},
+		},
+		{
+			name: "auth_method_existing",
+			agent: AgentConfig{
+				AuthMethod: "existing",
+			},
+			verify: func(t *testing.T, got AgentConfig) {
+				if got.AuthMethod != "existing" {
+					t.Errorf("AuthMethod = %q, want %q", got.AuthMethod, "existing")
+				}
+			},
+		},
+		{
+			name: "auth_method_api_key",
+			agent: AgentConfig{
+				AuthMethod: "api_key",
+				APIKey:     "sk-ant-test-key",
+			},
+			verify: func(t *testing.T, got AgentConfig) {
+				if got.AuthMethod != "api_key" {
+					t.Errorf("AuthMethod = %q, want %q", got.AuthMethod, "api_key")
+				}
+				if got.APIKey != "sk-ant-test-key" {
+					t.Errorf("APIKey = %q, want %q", got.APIKey, "sk-ant-test-key")
+				}
+			},
+		},
+		{
+			name: "skip_perms_false",
+			agent: AgentConfig{
+				SkipPerms: func() *bool { b := false; return &b }(),
+			},
+			verify: func(t *testing.T, got AgentConfig) {
+				if got.SkipPerms == nil || *got.SkipPerms != false {
+					t.Errorf("SkipPerms = %v, want ptr to false", got.SkipPerms)
+				}
+			},
+		},
+		{
+			name: "skip_perms_nil",
+			agent: AgentConfig{
+				AuthMethod: "token",
+				SkipPerms:  nil,
+			},
+			verify: func(t *testing.T, got AgentConfig) {
+				if got.SkipPerms != nil {
+					t.Errorf("SkipPerms = %v, want nil", got.SkipPerms)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			data, err := yaml.Marshal(&tc.agent)
+			if err != nil {
+				t.Fatalf("failed to marshal: %v", err)
+			}
+
+			var roundTripped AgentConfig
+			if err := yaml.Unmarshal(data, &roundTripped); err != nil {
+				t.Fatalf("failed to unmarshal: %v", err)
+			}
+
+			tc.verify(t, roundTripped)
+		})
+	}
+}
+
+func TestAgentConfigYAMLFieldNames(t *testing.T) {
+	// Verify yaml tags produce correct snake_case field names
+	skipPerms := true
+	agent := AgentConfig{
+		AuthMethod: "token",
+		Token:      "test-token",
+		APIKey:     "test-key",
+		SkipPerms:  &skipPerms,
+	}
+
+	data, err := yaml.Marshal(&agent)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	yamlStr := string(data)
+
+	// Verify snake_case field names in YAML output
+	expectedFields := []string{
+		"auth_method:",
+		"token:",
+		"api_key:",
+		"skip_permissions:",
+	}
+
+	for _, field := range expectedFields {
+		if !strings.Contains(yamlStr, field) {
+			t.Errorf("YAML output missing field %q\nGot:\n%s", field, yamlStr)
+		}
+	}
+
+	// Verify camelCase is NOT used
+	unexpectedFields := []string{
+		"authMethod:",
+		"apiKey:",
+		"skipPerms:",
+		"skipPermissions:", // should be skip_permissions
+	}
+
+	for _, field := range unexpectedFields {
+		if strings.Contains(yamlStr, field) {
+			t.Errorf("YAML output should not contain %q\nGot:\n%s", field, yamlStr)
+		}
+	}
+}
+
+func TestAgentConfigInGlobalConfigRoundTrip(t *testing.T) {
+	// Test credential fields work correctly when nested in GlobalConfig
+	skipPerms := true
+	original := GlobalConfig{
+		Agents: map[string]AgentConfig{
+			"claude": {
+				Command:     "claude",
+				ConfigMount: "~/.claude",
+				AuthMethod:  "token",
+				Token:       "my-oauth-token",
+				SkipPerms:   &skipPerms,
+			},
+			"codex": {
+				Command:    "codex",
+				AuthMethod: "api_key",
+				APIKey:     "sk-openai-key",
+			},
+		},
+	}
+
+	data, err := yaml.Marshal(&original)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var roundTripped GlobalConfig
+	if err := yaml.Unmarshal(data, &roundTripped); err != nil {
+		t.Fatalf("failed to unmarshal: %v", err)
+	}
+
+	// Verify claude agent
+	claude, ok := roundTripped.Agents["claude"]
+	if !ok {
+		t.Fatal("Agents[\"claude\"] not found")
+	}
+	if claude.AuthMethod != "token" {
+		t.Errorf("claude.AuthMethod = %q, want %q", claude.AuthMethod, "token")
+	}
+	if claude.Token != "my-oauth-token" {
+		t.Errorf("claude.Token = %q, want %q", claude.Token, "my-oauth-token")
+	}
+	if claude.SkipPerms == nil || *claude.SkipPerms != true {
+		t.Errorf("claude.SkipPerms = %v, want ptr to true", claude.SkipPerms)
+	}
+
+	// Verify codex agent
+	codex, ok := roundTripped.Agents["codex"]
+	if !ok {
+		t.Fatal("Agents[\"codex\"] not found")
+	}
+	if codex.AuthMethod != "api_key" {
+		t.Errorf("codex.AuthMethod = %q, want %q", codex.AuthMethod, "api_key")
+	}
+	if codex.APIKey != "sk-openai-key" {
+		t.Errorf("codex.APIKey = %q, want %q", codex.APIKey, "sk-openai-key")
 	}
 }
 

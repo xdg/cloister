@@ -1,5 +1,10 @@
 package config
 
+// boolPtr returns a pointer to a bool value.
+func boolPtr(b bool) *bool {
+	return &b
+}
+
 // DefaultGlobalConfig returns a GlobalConfig with all defaults populated.
 // These defaults provide a secure baseline configuration for cloister.
 func DefaultGlobalConfig() *GlobalConfig {
@@ -87,6 +92,7 @@ func DefaultGlobalConfig() *GlobalConfig {
 					"ANTHROPIC_*",
 					"CLAUDE_*",
 				},
+				SkipPerms: boolPtr(true),
 			},
 			"codex": {
 				Command:     "codex",

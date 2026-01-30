@@ -90,7 +90,7 @@ Phase 7 (Polish)
 Extend the configuration types to support credential storage. **All tests sandbox-safe.**
 
 ### 3.1.1 Add credential fields to AgentConfig
-- [ ] In `internal/config/types.go`, extend `AgentConfig` with credential fields:
+- [x] In `internal/config/types.go`, extend `AgentConfig` with credential fields:
   ```go
   type AgentConfig struct {
       Command     string   `yaml:"command,omitempty"`
@@ -102,12 +102,12 @@ Extend the configuration types to support credential storage. **All tests sandbo
       SkipPerms   *bool    `yaml:"skip_permissions,omitempty"` // default true
   }
   ```
-- [ ] **Test (unit)**: YAML round-trip: marshal config with new fields, unmarshal, verify values
+- [x] **Test (unit)**: YAML round-trip: marshal config with new fields, unmarshal, verify values
 
 ### 3.1.2 Add defaults for agents.claude in default config
-- [ ] In `internal/config/defaults.go`, add default `agents.claude` entry with `skip_permissions: true`
-- [ ] Ensure default config creates agents map if missing
-- [ ] **Test (unit)**: `DefaultGlobalConfig()` returns config with `agents["claude"].SkipPerms == true`
+- [x] In `internal/config/defaults.go`, add default `agents.claude` entry with `skip_permissions: true`
+- [x] Ensure default config creates agents map if missing
+- [x] **Test (unit)**: `DefaultGlobalConfig()` returns config with `agents["claude"].SkipPerms == true`
 
 ### 3.1.3 Add config validation for agent credentials
 - [ ] In `internal/config/validate.go`, add validation:
