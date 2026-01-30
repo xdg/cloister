@@ -288,7 +288,7 @@ func CopyToContainerWithOwner(srcPath, containerName, destDir, uid, gid string) 
 		return fmt.Errorf("failed to start tar: %w", err)
 	}
 	if err := dockerCmd.Start(); err != nil {
-		tarCmd.Process.Kill()
+		_ = tarCmd.Process.Kill()
 		return fmt.Errorf("failed to start docker exec: %w", err)
 	}
 
@@ -360,7 +360,7 @@ func WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid st
 		return fmt.Errorf("failed to start tar: %w", err)
 	}
 	if err := dockerCmd.Start(); err != nil {
-		tarCmd.Process.Kill()
+		_ = tarCmd.Process.Kill()
 		return fmt.Errorf("failed to start docker exec: %w", err)
 	}
 
