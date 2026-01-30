@@ -194,48 +194,48 @@ Create the interactive setup wizard for Claude credentials.
 Platform-aware credential injection into containers.
 
 ### 3.3.1 Create credential injection interface
-- [ ] In `internal/claude/inject.go`, define credential injection logic
-- [ ] Three injection modes based on `auth_method`:
+- [x] In `internal/claude/inject.go`, define credential injection logic
+- [x] Three injection modes based on `auth_method`:
   - `"existing"`: Write `.credentials.json` file to container
   - `"token"`: Set `CLAUDE_CODE_OAUTH_TOKEN` env var
   - `"api_key"`: Set `ANTHROPIC_API_KEY` env var
-- [ ] **Test (unit)**: Each mode produces correct injection config
+- [x] **Test (unit)**: Each mode produces correct injection config
 
 ### 3.3.2 Implement "existing login" injection
-- [ ] **macOS:** Re-extract from Keychain at container start (credentials may have refreshed)
-- [ ] **Linux:** Read `~/.claude/.credentials.json` from host
-- [ ] Write credentials to container at `/home/cloister/.claude/.credentials.json`
-- [ ] Use Docker copy or volume mount (prefer copy to avoid host file mutation issues)
-- [ ] **Test (unit)**: Mock keychain/filesystem, verify correct JSON produced
+- [x] **macOS:** Re-extract from Keychain at container start (credentials may have refreshed)
+- [x] **Linux:** Read `~/.claude/.credentials.json` from host
+- [x] Write credentials to container at `/home/cloister/.claude/.credentials.json`
+- [x] Use Docker copy or volume mount (prefer copy to avoid host file mutation issues)
+- [x] **Test (unit)**: Mock keychain/filesystem, verify correct JSON produced
 - [ ] **Test (integration)**: Container has valid `.credentials.json`
 
 ### 3.3.3 Implement token/API key injection
-- [ ] For token: set `CLAUDE_CODE_OAUTH_TOKEN` env var on container
-- [ ] For API key: set `ANTHROPIC_API_KEY` env var on container
-- [ ] **Test (unit)**: Verify correct env vars passed to container.Manager
+- [x] For token: set `CLAUDE_CODE_OAUTH_TOKEN` env var on container
+- [x] For API key: set `ANTHROPIC_API_KEY` env var on container
+- [x] **Test (unit)**: Verify correct env vars passed to container.Manager
 - [ ] **Test (integration)**: `printenv` inside container shows expected var
 
 ### 3.3.4 Update container start to use new injection
-- [ ] In `internal/cloister/cloister.go`, load global config
-- [ ] Call `claude.InjectCredentials()` to get injection config
-- [ ] Pass to container manager (env vars and/or files to create)
-- [ ] **Test (unit)**: Mock `container.Manager`, verify correct injection config passed
+- [x] In `internal/cloister/cloister.go`, load global config
+- [x] Call `claude.InjectCredentials()` to get injection config
+- [x] Pass to container manager (env vars and/or files to create)
+- [x] **Test (unit)**: Mock `container.Manager`, verify correct injection config passed
 
 ### 3.3.5 Deprecate host env var passthrough
-- [ ] If no config credentials and host env vars present, use as fallback
-- [ ] Print deprecation warning:
+- [x] If no config credentials and host env vars present, use as fallback
+- [x] Print deprecation warning:
   ```
   Warning: Using ANTHROPIC_API_KEY from environment.
   Run 'cloister setup claude' to store credentials in config.
   ```
-- [ ] Only warn once per `cloister start` invocation
-- [ ] **Test (unit)**: Capture stderr, verify warning present when using env fallback
+- [x] Only warn once per `cloister start` invocation
+- [x] **Test (unit)**: Capture stderr, verify warning present when using env fallback
 
 ### 3.3.6 Handle credential refresh errors
-- [ ] If macOS keychain extraction fails at start, error with clear message
-- [ ] If Linux `.credentials.json` missing, error with clear message
-- [ ] Suggest running `claude login` or `cloister setup claude` again
-- [ ] **Test (unit)**: Verify error messages for each failure mode
+- [x] If macOS keychain extraction fails at start, error with clear message
+- [x] If Linux `.credentials.json` missing, error with clear message
+- [x] Suggest running `claude login` or `cloister setup claude` again
+- [x] **Test (unit)**: Verify error messages for each failure mode
 
 ---
 
@@ -285,6 +285,17 @@ Ensure Claude Code works correctly inside the container. **All tests require Doc
 - [ ] **Test (manual)**: Run `claude "say hello"` → API call succeeds, response shown
 - [ ] **Test (manual)**: Verify user settings from host `~/.claude/` are respected
 
+### 3.4.6 Generate cloister rules file for Claude
+- [ ] After copying `~/.claude/`, write `/home/cloister/.claude/rules/cloister.md`
+- [ ] Content explains cloister environment to Claude:
+  - Running in sandboxed container with `/work` as project directory
+  - No direct network access; proxy allowlists documentation + package registries
+  - `hostexec <command>` for operations requiring host access (git push, docker, etc.)
+  - Common patterns: `hostexec git push`, `hostexec docker build`
+- [ ] Create `rules/` directory if it doesn't exist
+- [ ] Overwrites any existing `cloister.md` (cloister-controlled file)
+- [ ] **Test (integration)**: Start container, verify `/home/cloister/.claude/rules/cloister.md` exists with expected content
+
 ---
 
 ## Phase 3.5: Documentation and Cleanup
@@ -318,6 +329,7 @@ Ensure Claude Code works correctly inside the container. **All tests require Doc
 - Request server (:9998) and approval server (:9999)
 - Approval web UI with htmx
 - Auto-approve and manual-approve pattern execution
+- Review and update `~/.claude/rules/cloister.md` content (from 3.4.6) with accurate hostexec usage
 
 ### Phase 5: Worktree Support
 - `cloister start -b <branch>` creates managed worktrees
