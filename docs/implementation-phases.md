@@ -63,19 +63,29 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 **Goal:** Claude Code works inside cloister with no manual setup.
 
 **Delivers:**
-- `cloister setup claude` wizard (OAuth token or API key)
-- Credential storage in config (`agents.claude.token` or `agents.claude.api_key`)
-- Credential injection into container environment from config
+- `cloister setup claude` wizard with three auth options:
+  1. **Existing login** — extracts from macOS Keychain or verifies Linux `~/.claude/.credentials.json`
+  2. **Long-lived OAuth token** — user runs `claude setup-token`, pastes result
+  3. **API key** — user pastes key from console.anthropic.com
+- Platform-aware credential injection:
+  - macOS: extract from Keychain (`security find-generic-password`), write `.credentials.json` to container
+  - Linux: copy existing `~/.claude/.credentials.json` to container
+  - Token/API key: inject via environment variable
+- Copy host `~/.claude/` settings (excluding `.credentials.json` on macOS) into container
+- Generate `~/.claude.json` in container (onboarding skip, bypass-permissions acceptance)
 - Remove reliance on host env vars for credentials (Phase 1 workaround)
 
 **Supersedes from Phase 1:**
 - Host env var pass-through (`CLAUDE_CODE_OAUTH_TOKEN`, `ANTHROPIC_API_KEY`) replaced by config-based credential injection
+- Hardcoded `~/.claude.json` creation in Phase 1 replaced by config-driven generation
 
 **Verification:**
-- Run `cloister setup claude`, provide token
-- `cloister start` → `claude` command works
+- Run `cloister setup claude`, select "existing login" → credentials extracted/verified
+- `cloister start` → `claude` command works without additional auth
 - Claude can reach api.anthropic.com, edit files in `/work`
-- Credentials not visible in container filesystem
+- User settings from host `~/.claude/` available in container
+- `~/.claude.json` contains onboarding skip flags
+- Token refresh works (for existing login method)
 
 ---
 

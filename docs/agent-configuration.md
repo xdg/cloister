@@ -10,7 +10,7 @@ Each agent has its own authentication mechanism and configuration requirements. 
 
 ### Authentication
 
-Claude Code supports two authentication modes. The `cloister setup claude` command handles both interactively.
+Claude Code supports three authentication methods. The `cloister setup claude` command handles all interactively.
 
 #### Interactive Setup
 
@@ -18,42 +18,70 @@ Claude Code supports two authentication modes. The `cloister setup claude` comma
 $ cloister setup claude
 # Prompts for:
 #   1. Authentication method:
-#      - OAuth token (default) — For Claude Pro/Max subscriptions
+#      - Use existing Claude login (recommended) — Reuses your host login
+#      - Long-lived OAuth token — From `claude setup-token`
 #      - API key — For pay-per-use via Anthropic API
-#   2. Credentials (hidden input)
+#   2. Credentials (extracted automatically or hidden input)
 #   3. Whether to skip Claude's permission system (default: yes)
 ```
 
-#### OAuth Token (Recommended for Pro/Max users)
+#### Option 1: Use Existing Login (Recommended)
 
-For users with Claude Pro or Max subscriptions:
+If you've already run `claude login` on your host machine, cloister can reuse those credentials:
 
-1. Run `claude setup-token` on host to start OAuth flow
-2. Copy the token (valid for 1 year)
-3. Run `cloister setup claude` and select OAuth (default)
-4. Paste the token when prompted
+**macOS:**
+- Credentials are extracted from the system Keychain (service: `Claude Code-credentials`)
+- Extracted at container start, so token refreshes are picked up automatically
+- If extraction fails, you'll be prompted to run `claude login` first
 
-Token is stored in `~/.config/cloister/config.yaml` under `agents.claude.token`.
+**Linux:**
+- Credentials are read from `~/.claude/.credentials.json`
+- File is copied into the container at start
+- If file is missing, you'll be prompted to run `claude login` first
 
-#### API Key
+This is the recommended method because it requires no additional setup if you're already using Claude Code on your host.
 
-For users paying via Anthropic API:
+#### Option 2: Long-lived OAuth Token
+
+For users who prefer explicit token management or CI/CD scenarios:
+
+1. Run `claude setup-token` on host to generate a long-lived token (valid for 1 year)
+2. Run `cloister setup claude` and select "Long-lived OAuth token"
+3. Paste the token when prompted
+
+Token is stored in `~/.config/cloister/config.yaml` under `agents.claude.token` and injected via `CLAUDE_CODE_OAUTH_TOKEN` env var.
+
+#### Option 3: API Key
+
+For users paying via Anthropic API (not Pro/Max subscription):
 
 1. Get your API key from console.anthropic.com
-2. Run `cloister setup claude` and select API key
+2. Run `cloister setup claude` and select "API key"
 3. Paste the key when prompted
 
-Alternatively, set `ANTHROPIC_API_KEY` in your host environment — cloister will pass it through to the container.
+Key is stored in `~/.config/cloister/config.yaml` under `agents.claude.api_key` and injected via `ANTHROPIC_API_KEY` env var.
+
+#### Legacy: Environment Variable Fallback
+
+If no credentials are configured via `cloister setup claude`, cloister will fall back to host environment variables (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`). This is deprecated and will show a warning. Run `cloister setup claude` to migrate.
 
 ### Container Configuration
 
 **What cloister does at container launch:**
 
-1. **Injects authentication:**
-   - OAuth: Sets `CLAUDE_CODE_OAUTH_TOKEN=<token>` in container environment
-   - API key: Sets `ANTHROPIC_API_KEY=<key>` in container environment
+1. **Injects authentication (based on configured method):**
+   - *Existing login:* Writes `~/.claude/.credentials.json` to container
+     - macOS: Extracted fresh from Keychain (picks up token refreshes)
+     - Linux: Copied from host `~/.claude/.credentials.json`
+   - *Long-lived token:* Sets `CLAUDE_CODE_OAUTH_TOKEN` env var
+   - *API key:* Sets `ANTHROPIC_API_KEY` env var
 
-2. **Creates `~/.claude.json` inside the container:**
+2. **Copies `~/.claude/` settings from host:**
+   - Contains user settings (but NOT `.credentials.json` on macOS—see note below)
+   - One-way copy (host → container); changes don't persist back to host
+   - Missing directory is handled gracefully (first-time users)
+
+3. **Generates `~/.claude.json` inside the container:**
    ```json
    {
      "hasCompletedOnboarding": true,
@@ -61,8 +89,9 @@ Alternatively, set `ANTHROPIC_API_KEY` in your host environment — cloister wil
    }
    ```
    This skips Claude's interactive onboarding flow and accepts bypass-permissions mode.
+   Note: This file is *generated*, not copied from host, so cloister controls onboarding behavior.
 
-3. **If permission skipping is enabled, creates a shell alias:**
+4. **If permission skipping is enabled, creates a shell alias:**
    ```bash
    alias claude='claude --dangerously-skip-permissions'
    ```
@@ -74,11 +103,47 @@ Claude Code has its own permission system that prompts before file edits, shell 
 
 There is no config file option for `--dangerously-skip-permissions`, so we use a shell alias.
 
+**Important: macOS credential handling**
+
+On macOS, Claude Code stores credentials in the system Keychain, not on disk. The `~/.claude/.credentials.json` file doesn't exist (or is deleted by Claude Code if created). Therefore:
+
+- Don't bind-mount `~/.claude/` directly from macOS host to container
+- Instead, cloister extracts credentials from Keychain and writes them to the container
+- User settings from `~/.claude/` are copied separately (excluding `.credentials.json`)
+
+**Technical details: Keychain extraction**
+
+Keychain entry:
+- **Service name**: `Claude Code-credentials`
+- **Account**: User's macOS username (e.g., `xdg`)
+
+Extraction command:
+```bash
+security find-generic-password -s 'Claude Code-credentials' -a "$(whoami)" -w
+```
+
+The command outputs a JSON blob that cloister writes to `~/.claude/.credentials.json` in the container:
+
+```json
+{
+  "claudeAiOauth": {
+    "accessToken": "sk-ant-oat01-...",
+    "refreshToken": "sk-ant-ort01-...",
+    "expiresAt": 1769753311584,
+    "scopes": ["user:inference", "user:profile", "..."],
+    "subscriptionType": "max"
+  }
+}
+```
+
+Note: The `accessToken` is short-lived, but Claude Code auto-refreshes using the `refreshToken`. By extracting fresh from Keychain at each container start, cloister picks up any token refreshes that occurred on the host.
+
 **Implementation notes:**
 
-- Credentials stored on host in `~/.config/cloister/config.yaml` under `agents.claude.*`
-- The `~/.claude.json` is created fresh in each container (not bind-mounted from host)
-- The `~/.claude/` directory (Claude Code's working state) is separate from `~/.claude.json` (config)
+- Auth method stored in `~/.config/cloister/config.yaml` under `agents.claude.auth_method`
+- For token/API key methods, credentials stored under `agents.claude.token` or `agents.claude.api_key`
+- `~/.claude/` settings copied from host (path from `agents.claude.config_mount`)
+- `~/.claude.json` generated fresh in each container (cloister controls onboarding flags)
 
 ---
 
@@ -97,10 +162,8 @@ TODO: Document as we add support.
 
 ## Open Questions
 
-1. **Token rotation:** OAuth tokens expire after 1 year. How do we remind users to refresh? Detect expiry and prompt?
+1. **Token rotation:** Long-lived OAuth tokens (from `claude setup-token`) expire after 1 year. How do we remind users to refresh? Detect expiry and prompt? (Note: "existing login" method auto-refreshes, so this only affects option 2.)
 
-2. **Multiple auth methods:** What if a user has both API key and OAuth token? Which takes precedence?
-
-3. **Copilot CLI:** Uses GitHub's OAuth via `gh auth`. May need to pass through auth tokens or handle differently.
+2. **Copilot CLI:** Uses GitHub's OAuth via `gh auth`. May need to pass through auth tokens or handle differently.
 
 ---

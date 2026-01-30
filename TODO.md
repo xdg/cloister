@@ -1,212 +1,317 @@
-# Cloister Quality Improvements
+# Phase 3: Claude Code Integration
 
-Code quality refactoring following Phase 2 completion. Eliminates duplication, improves testability, and simplifies APIs without changing external behavior.
+Goal: Claude Code works inside cloister with no manual setup. A wizard handles credential configuration, and credentials are injected from config rather than host environment variables.
 
 ## Testing Philosophy
 
-- **Unit tests for refactored code**: All extracted helpers must have unit tests
-- **Regression tests**: Existing tests must continue passing after each change
-- **No behavior changes**: These are internal refactors; external APIs remain stable
-- **Go tests**: Use `testing` package; verify coverage doesn't decrease
-- **Incremental commits**: One logical change per commit for easy bisection
+Tests are split into tiers based on what they require:
+
+| Tier | Command | What it tests | Requirements |
+|------|---------|---------------|--------------|
+| **Unit** | `make test` | Pure logic, mocked I/O, config parsing | None (sandbox-safe) |
+| **Integration** | `make test-integration` | Container creation, env var injection | Docker daemon |
+| **Manual** | Human verification | Real TTY input, actual Claude API calls | Human + credentials |
+
+**Design for testability:**
+- Factor interactive I/O through interfaces (`io.Reader`/`io.Writer`) for unit testing
+- Use `t.TempDir()` for config file tests (avoids touching real `~/.config`)
+- Mock `container.Manager` interface to verify env vars without Docker
+- Integration tests use `//go:build integration` tag
 
 ## Verification Checklist
 
-Before marking Quality phase complete:
+Before marking Phase 3 complete:
 
-1. `make test` passes
+**Automated (`make test`):**
+1. All unit tests pass
 2. `make build` produces working binary
 3. `make lint` passes
-4. `make test-race` passes (no race conditions)
-5. Code coverage does not decrease from baseline
-6. Manual smoke test: `cloister start` / `cloister stop` workflow works
+4. `make test-race` passes
+
+**Automated (`make test-integration`):**
+5. Integration tests pass (credential injection, file creation, ~/.claude/ settings copy)
+
+**Manual — test each auth method:**
+
+*Option 1: Existing login (macOS):*
+6. Run `cloister setup claude`, select "Use existing Claude login"
+7. Verify keychain extraction succeeds (or errors clearly if not logged in)
+8. `cloister start` → `cat /home/cloister/.claude/.credentials.json` → credentials present
+9. Run `claude` command → API call succeeds (token refresh works)
+
+*Option 1: Existing login (Linux):*
+10. Verify setup detects `~/.claude/.credentials.json` (or errors if missing)
+11. `cloister start` → credentials file copied to container
+
+*Option 2: Long-lived OAuth token:*
+12. Run `cloister setup claude`, select "Long-lived OAuth token"
+13. Paste token from `claude setup-token` (verify hidden input)
+14. `cloister start` → `echo $CLAUDE_CODE_OAUTH_TOKEN` → token visible
+15. Run `claude` command → API call succeeds
+
+*Option 3: API key:*
+16. Run `cloister setup claude`, select "API key"
+17. Paste API key (verify hidden input)
+18. `cloister start` → `echo $ANTHROPIC_API_KEY` → key visible
+19. Run `claude` command → API call succeeds
+
+*Common verification:*
+20. Run `ls -la /home/cloister/.claude/` → user settings present (minus .credentials.json on macOS)
+21. Run `cat /home/cloister/.claude.json` → onboarding config present (generated)
+22. Run `type claude` → shows alias with `--dangerously-skip-permissions`
 
 ## Dependencies Between Phases
 
 ```
-Q.1 Foundation (Duplicate Code Elimination)
+Phase 1 (MVP + Guardian) ✓
        │
        ▼
-Q.2 Shared Utilities
+Phase 2 (Config) ✓
        │
        ▼
-Q.3 API Simplification
+Phase 3 (Claude Integration) ◄── CURRENT
+       │
+       ├─► Phase 4 (hostexec) [parallel path from Phase 2]
        │
        ▼
-Q.4 Dependency Injection & Testability
+Phase 5 (Worktrees)
        │
        ▼
-Q.5 Testing & Polish
+Phase 6 (Domain Approval)
+       │
+       ▼
+Phase 7 (Polish)
 ```
 
 ---
 
-## Phase Q.1: Foundation — Duplicate Code Elimination
+## Phase 3.1: Config Schema Updates
 
-Extract helpers from duplicated code patterns. No API changes.
+Extend the configuration types to support credential storage. **All tests sandbox-safe.**
 
-### Q.1.1 Consolidate docker strict/non-strict function pairs
-- [x] In `internal/docker/docker.go`, consolidate `RunJSON` and `RunJSONStrict` into single function
-- [x] Add `strict bool` parameter or use options pattern
-- [x] Same for `RunJSONLines` and `RunJSONLinesStrict`
-- [x] Extract repeated `cmdName` extraction (lines 54-57, 121-124, 181-184, 207-210) into helper
-- [x] **Test**: Existing tests pass; add test for strict vs non-strict behavior
+### 3.1.1 Add credential fields to AgentConfig
+- [ ] In `internal/config/types.go`, extend `AgentConfig` with credential fields:
+  ```go
+  type AgentConfig struct {
+      Command     string   `yaml:"command,omitempty"`
+      ConfigMount string   `yaml:"config_mount,omitempty"`
+      Env         []string `yaml:"env,omitempty"`
+      AuthMethod  string   `yaml:"auth_method,omitempty"`  // "existing", "token", or "api_key"
+      Token       string   `yaml:"token,omitempty"`        // long-lived OAuth token
+      APIKey      string   `yaml:"api_key,omitempty"`      // Anthropic API key
+      SkipPerms   *bool    `yaml:"skip_permissions,omitempty"` // default true
+  }
+  ```
+- [ ] **Test (unit)**: YAML round-trip: marshal config with new fields, unmarshal, verify values
 
-### Q.1.2 Extract container creation helper
-- [x] In `internal/container/manager.go`, extract shared logic from `Start()` and `Create()`
-- [x] Lines 45-78 and 86-119 are 95% identical
-- [x] Create private `createContainer()` helper
-- [x] **Test**: Existing container tests pass
+### 3.1.2 Add defaults for agents.claude in default config
+- [ ] In `internal/config/defaults.go`, add default `agents.claude` entry with `skip_permissions: true`
+- [ ] Ensure default config creates agents map if missing
+- [ ] **Test (unit)**: `DefaultGlobalConfig()` returns config with `agents["claude"].SkipPerms == true`
 
-### Q.1.3 Extract token store helper in cloister
-- [x] In `internal/cloister/cloister.go`, extract token store creation pattern
-- [x] `Start()` (lines 57-67) and `Stop()` (lines 189-195) both create tokenDir/store
-- [x] Create `getTokenStore() (*token.Store, error)` helper
-- [x] **Test**: Existing cloister tests pass
-
-### Q.1.4 Extract cmd error helpers
-- [x] Create `internal/cmd/errors.go`
-- [x] Extract `dockerNotRunningError()` — used in 6 locations across start.go, stop.go, list.go, guardian.go
-- [x] Extract `gitDetectionError(err error) error` — handles ErrNotGitRepo/ErrGitNotInstalled consistently
-- [x] Update all call sites to use helpers
-- [x] **Test**: Add unit tests for error helpers
-
-### Q.1.5 Extract guardian client HTTP helper
-- [x] In `internal/guardian/client.go`, extract shared HTTP request execution
-- [x] Lines 55-72, 84-106, 118-135 all repeat: get client, do request, check status, decode error
-- [x] Create private `doRequest(method, path string, body, result any) error` helper
-- [x] **Test**: Existing client tests pass
-
-### Q.1.6 Extract guardian container call pattern
-- [x] In `internal/guardian/container.go`, extract guardian client call pattern
-- [x] `RegisterToken`, `RevokeToken`, `ListTokens` all: check IsRunning(), create client, call method
-- [x] Create helper that handles IsRunning check and client creation
-- [x] **Test**: Existing guardian tests pass
+### 3.1.3 Add config validation for agent credentials
+- [ ] In `internal/config/validate.go`, add validation:
+  - Error if `auth_method` set but required field missing (e.g., `token` for "token" method)
+  - Warn if `auth_method` not set and no host env vars (no auth configured)
+  - Validate `auth_method` is one of: "existing", "token", "api_key"
+- [ ] **Test (unit)**: Validation returns expected errors/warnings for each case
 
 ---
 
-## Phase Q.2: Shared Utilities
+## Phase 3.2: Setup Command
 
-Create shared packages for code duplicated across multiple packages.
+Create the interactive setup wizard for Claude credentials.
 
-### Q.2.1 Create internal/pathutil package
-- [x] Create `internal/pathutil/home.go`
-- [x] Move `expandHome()` from `internal/config/paths.go` (lines 46-64)
-- [x] Remove duplicate from `internal/project/registry.go` (lines 97-115)
-- [x] Update both packages to import from pathutil
-- [x] **Test**: Add unit tests for expandHome edge cases
+### 3.2.1 Create setup command structure
+- [ ] Create `internal/cmd/setup.go` with `setup` parent command
+- [ ] Create `internal/cmd/setup_claude.go` with `setup claude` subcommand
+- [ ] Wire up to root command: `cloister setup claude`
+- [ ] **Test (unit)**: `rootCmd.Commands()` includes setup; setup has claude subcommand
 
-### Q.2.2 Extract docker exact-match filtering
-- [x] In `internal/docker/docker.go`, add `FindContainerByExactName(name string) (*ContainerInfo, error)`
-- [x] Identical filtering pattern exists in:
-  - `internal/container/manager.go` (lines 244-263)
-  - `internal/guardian/container.go` (lines 206-223)
-  - `internal/docker/network.go` (lines 34-51) — network pattern left as-is (different API)
-- [x] Update all three locations to use shared helper
-- [x] **Test**: Add unit test for exact-match vs substring behavior
+### 3.2.2 Implement auth method prompt
+- [ ] Define `Prompter` interface: `Prompt(prompt string, options []string, defaultIdx int) (int, error)`
+- [ ] Implement `StdinPrompter` for real use, `MockPrompter` for tests
+- [ ] Prompt user to select authentication method:
+  ```
+  Select authentication method:
+    1. Use existing Claude login (recommended)
+    2. Long-lived OAuth token (from `claude setup-token`)
+    3. API key (from console.anthropic.com)
+  ```
+- [ ] Default to option 1 if user just presses Enter
+- [ ] **Test (unit)**: Mock prompter returns expected selection; default works
 
-### Q.2.3 Extract HostDir helper in guardian
-- [x] In `internal/guardian/container.go`, `HostTokenDir()` and `HostConfigDir()` have identical structure
-- [x] Extract `hostCloisterPath(subdir string) (string, error)` helper
-- [x] Both get home dir, join with `.config/cloister/<subdir>`
-- [x] **Test**: Existing tests pass
+### 3.2.3 Implement "existing login" option (option 1)
+- [ ] Create `internal/claude/credentials.go` package for credential extraction
+- [ ] Detect platform: `runtime.GOOS`
+- [ ] **macOS path:**
+  - [ ] Run `security find-generic-password -s 'Claude Code-credentials' -a "$(whoami)" -w`
+  - [ ] Parse JSON response to extract credentials
+  - [ ] Store extracted JSON in config at `agents.claude.credentials_json` (or separate file)
+  - [ ] Error if command fails → "Run `claude login` first"
+- [ ] **Linux path:**
+  - [ ] Check if `~/.claude/.credentials.json` exists
+  - [ ] Store path reference in config (will be copied at container start)
+  - [ ] Error if file missing → "Run `claude login` first"
+- [ ] **Test (unit)**: Mock exec.Command for keychain; mock filesystem for Linux
+- [ ] **Test (manual)**: macOS keychain extraction works; Linux file detection works
 
----
+### 3.2.4 Implement token/API key options (options 2 & 3)
+- [ ] Define `CredentialReader` interface: `ReadCredential(prompt string) (string, error)`
+- [ ] Implement `TerminalCredentialReader` using `golang.org/x/term` for hidden input
+- [ ] Implement `MockCredentialReader` that reads from provided string
+- [ ] For OAuth token: "Paste your OAuth token (from `claude setup-token`):"
+- [ ] For API key: "Paste your API key (from console.anthropic.com):"
+- [ ] **Test (unit)**: Mock reader returns provided credential
+- [ ] **Test (manual)**: Real terminal hides input while typing
 
-## Phase Q.3: API Simplification
+### 3.2.5 Implement skip-permissions prompt
+- [ ] Prompt: "Skip Claude's built-in permission prompts? (recommended inside cloister) [Y/n]:"
+- [ ] Default to yes (Y) if user just presses Enter
+- [ ] **Test (unit)**: Empty input → true; "n" → false; "N" → false; "y" → true
 
-Consolidate redundant API methods. May require updating callers.
+### 3.2.6 Save credentials to config
+- [ ] Load existing global config (or create default)
+- [ ] Based on auth method, update appropriate config field:
+  - Option 1: `agents.claude.auth_method: "existing"` (credentials extracted at start)
+  - Option 2: `agents.claude.auth_method: "token"`, `agents.claude.token: "..."`
+  - Option 3: `agents.claude.auth_method: "api_key"`, `agents.claude.api_key: "..."`
+- [ ] Update `agents.claude.skip_permissions`
+- [ ] Write config back with `config.WriteGlobalConfig()`
+- [ ] Print success message with config path
+- [ ] **Test (unit)**: Use `t.TempDir()` for config path; verify YAML contains expected values
 
-### Q.3.1 Consolidate token.Registry methods
-- [x] In `internal/token/registry.go`, consolidate lookup methods
-- [x] Replace `Lookup()`, `LookupProject()`, `LookupInfo()` with single `Lookup() (TokenInfo, bool)`
-- [x] Callers use only the fields they need from TokenInfo
-- [x] Consolidate `List()` and `ListInfo()` into single `List() map[string]TokenInfo`
-- [x] Mark old `Register()` as deprecated, prefer `RegisterWithProject()`
-- [x] Update callers in `internal/guardian/` and `internal/cmd/`
-- [x] **Test**: Update tests to use new signatures
-
-### Q.3.2 Consolidate config merge functions
-- [x] In `internal/config/merge.go`, extract generic merge helper
-- [x] `MergeAllowlists()` and `MergeCommandPatterns()` have identical dedup logic
-- [x] Create generic `mergeSlice[T comparable](a, b []T, key func(T) string) []T`
-- [x] Or use simpler approach: extract dedup logic to helper
-- [x] **Test**: Existing merge tests pass
-
-### Q.3.3 Consolidate container existence checks
-- [x] In `internal/container/manager.go`, consolidate `containerExists()` and `IsRunning()`
-- [x] Both query same Docker data; return `(exists bool, running bool, err error)`
-- [x] Single Docker call per check instead of separate calls
-- [x] **Test**: Add test verifying single Docker call
-
----
-
-## Phase Q.4: Dependency Injection & Testability
-
-Add interfaces and injection points to enable unit testing without Docker.
-
-### Q.4.1 Inject container.Manager in cloister
-- [x] In `internal/cloister/cloister.go`, add `Manager` field to package or use functional options
-- [x] Replace inline `container.NewManager()` calls with injected dependency
-- [x] Default to `container.NewManager()` when not injected
-- [x] **Test**: Add unit test using mock Manager
-
-### Q.4.2 Add DockerRunner interface in container
-- [x] In `internal/container/manager.go`, define `DockerRunner` interface
-- [x] Interface wraps `docker.Run`, `docker.RunJSONLines` calls
-- [x] Add `Runner` field to `Manager` struct, default to real implementation
-- [x] **Test**: Add unit test using mock DockerRunner
-
-### Q.4.3 Add Clock interface in project.Registry
-- [x] In `internal/project/registry.go`, inject time source
-- [x] Replace direct `time.Now()` calls (lines 123, 181) with clock interface
-- [x] Default to real time when not injected
-- [x] **Test**: Add test verifying LastUsed timestamp updates
+### 3.2.7 Handle existing credentials
+- [ ] Check if credentials already exist in config
+- [ ] If yes, prompt: "Credentials already configured. Replace? [y/N]:"
+- [ ] Default to no (N) to prevent accidental overwrite
+- [ ] **Test (unit)**: Existing creds + "N" input → config unchanged; "y" → replaced
 
 ---
 
-## Phase Q.5: Testing & Polish
+## Phase 3.3: Credential Injection
 
-Add missing tests and file organization improvements.
+Platform-aware credential injection into containers.
 
-### Q.5.1 Add cmd package tests
-- [x] Create `internal/cmd/start_test.go` — test runStart logic
-- [x] Create `internal/cmd/stop_test.go` — test runStop logic
-- [x] Create `internal/cmd/list_test.go` — test runList logic
-- [x] Focus on error handling paths (Docker not running, git detection, etc.)
-- [x] **Test**: New tests cover error handling; full coverage requires integration tests
+### 3.3.1 Create credential injection interface
+- [ ] In `internal/claude/inject.go`, define credential injection logic
+- [ ] Three injection modes based on `auth_method`:
+  - `"existing"`: Write `.credentials.json` file to container
+  - `"token"`: Set `CLAUDE_CODE_OAUTH_TOKEN` env var
+  - `"api_key"`: Set `ANTHROPIC_API_KEY` env var
+- [ ] **Test (unit)**: Each mode produces correct injection config
 
-### Q.5.2 Add token package tests
-- [x] Add test for `DefaultTokenDir()` — currently 0% coverage
-- [x] Add test for `Store.Dir()` — currently 0% coverage
-- [x] **Test**: Token package coverage increases to >90%
+### 3.3.2 Implement "existing login" injection
+- [ ] **macOS:** Re-extract from Keychain at container start (credentials may have refreshed)
+- [ ] **Linux:** Read `~/.claude/.credentials.json` from host
+- [ ] Write credentials to container at `/home/cloister/.claude/.credentials.json`
+- [ ] Use Docker copy or volume mount (prefer copy to avoid host file mutation issues)
+- [ ] **Test (unit)**: Mock keychain/filesystem, verify correct JSON produced
+- [ ] **Test (integration)**: Container has valid `.credentials.json`
 
-### Q.5.3 Refactor os.Exit in cmd handlers
-- [x] In `internal/cmd/start.go`, replace `os.Exit(exitCode)` (lines 152, 196) with typed error
-- [x] Define `ExitCodeError` type that carries exit code
-- [x] Handle in root command to call `os.Exit` with code
-- [x] **Test**: Test that exit code propagates correctly
+### 3.3.3 Implement token/API key injection
+- [ ] For token: set `CLAUDE_CODE_OAUTH_TOKEN` env var on container
+- [ ] For API key: set `ANTHROPIC_API_KEY` env var on container
+- [ ] **Test (unit)**: Verify correct env vars passed to container.Manager
+- [ ] **Test (integration)**: `printenv` inside container shows expected var
 
-### Q.5.4 File organization
-- [x] Move name generation functions from `internal/container/config.go` to `internal/container/names.go`
-- [x] Move `AllowlistCache` from `internal/guardian/proxy.go` to `internal/guardian/allowlist_cache.go`
-- [x] Move credential env var logic from `internal/token/env.go` to `internal/token/credentials.go`
-- [x] **Test**: No behavior change, existing tests pass
+### 3.3.4 Update container start to use new injection
+- [ ] In `internal/cloister/cloister.go`, load global config
+- [ ] Call `claude.InjectCredentials()` to get injection config
+- [ ] Pass to container manager (env vars and/or files to create)
+- [ ] **Test (unit)**: Mock `container.Manager`, verify correct injection config passed
 
-### Q.5.5 Code style consistency
-- [x] Use `filepath.Join` consistently instead of string concatenation in `internal/project/registry.go`
-- [x] Rename shadowing variable in `internal/cmd/list.go` line 86 (`project` shadows package) — N/A: no `project` import exists; no shadowing issue
-- [x] Group sentinel errors together in `internal/docker/docker.go`
-- [x] **Test**: `make lint` passes
+### 3.3.5 Deprecate host env var passthrough
+- [ ] If no config credentials and host env vars present, use as fallback
+- [ ] Print deprecation warning:
+  ```
+  Warning: Using ANTHROPIC_API_KEY from environment.
+  Run 'cloister setup claude' to store credentials in config.
+  ```
+- [ ] Only warn once per `cloister start` invocation
+- [ ] **Test (unit)**: Capture stderr, verify warning present when using env fallback
+
+### 3.3.6 Handle credential refresh errors
+- [ ] If macOS keychain extraction fails at start, error with clear message
+- [ ] If Linux `.credentials.json` missing, error with clear message
+- [ ] Suggest running `claude login` or `cloister setup claude` again
+- [ ] **Test (unit)**: Verify error messages for each failure mode
+
+---
+
+## Phase 3.4: Container Configuration
+
+Ensure Claude Code works correctly inside the container. **All tests require Docker.**
+
+### 3.4.1 Copy ~/.claude/ settings from host
+- [ ] Use `config_mount` field from `agents.claude` config (defaults to `~/.claude`)
+- [ ] Copy host directory into container at `/home/cloister/.claude/`
+- [ ] **macOS:** Exclude `.credentials.json` (doesn't exist; credentials come from Keychain)
+- [ ] **Linux:** Include `.credentials.json` only if using "existing login" auth method
+- [ ] Handle missing directory gracefully (first-time users won't have it)
+- [ ] Copy is one-way (host → container); changes inside container don't persist
+- [ ] **Test (integration)**: Create temp `~/.claude/settings.json` on host, start container, verify file present
+- [ ] **Test (integration)**: Verify missing host dir doesn't cause error
+- [ ] **Test (integration)**: macOS - verify `.credentials.json` not expected from host dir
+
+### 3.4.2 Generate ~/.claude.json in container
+- [ ] Generate `/home/cloister/.claude.json` (separate from `.claude/` directory):
+  ```json
+  {
+    "hasCompletedOnboarding": true,
+    "bypassPermissionsModeAccepted": true
+  }
+  ```
+- [ ] File must exist before user shell starts
+- [ ] This is generated, not copied (we control onboarding behavior)
+- [ ] **Test (integration)**: Start container, `cat /home/cloister/.claude.json`, verify JSON content
+
+### 3.4.3 Create claude alias for --dangerously-skip-permissions
+- [ ] Pass `skip_permissions` setting to container (env var or mount)
+- [ ] If enabled (default), entrypoint adds to `/home/cloister/.bashrc`:
+  ```bash
+  alias claude='claude --dangerously-skip-permissions'
+  ```
+- [ ] Only add if not already present (idempotent)
+- [ ] **Test (integration)**: Start container, run `bash -ic 'type claude'`, verify alias shown
+
+### 3.4.4 Handle skip_permissions=false case
+- [ ] If user sets `skip_permissions: false` in config, don't create alias
+- [ ] Claude will use its normal permission prompts
+- [ ] **Test (integration)**: Start container with skip_permissions=false, verify no alias
+
+### 3.4.5 End-to-end Claude verification
+- [ ] **Test (manual)**: Inside container, run `claude --version` → prints version
+- [ ] **Test (manual)**: Run `claude "say hello"` → API call succeeds, response shown
+- [ ] **Test (manual)**: Verify user settings from host `~/.claude/` are respected
+
+---
+
+## Phase 3.5: Documentation and Cleanup
+
+### 3.5.1 Update README with new setup flow
+- [ ] Replace manual env var instructions with `cloister setup claude`
+- [ ] Document both OAuth and API key flows
+- [ ] Remove "Phase 1 limitation" notes about manual credential setup
+
+### 3.5.2 Update docs/agent-configuration.md
+- [ ] Add complete setup wizard documentation
+- [ ] Document credential priority order (config > env vars)
+- [ ] Document skip_permissions option and why it defaults to true
+- [ ] Note env var fallback is deprecated
+
+### 3.5.3 Remove Phase 1 workaround comments
+- [ ] Remove "TEMPORARY: Phase 1 workaround" comments from `internal/token/credentials.go`
+- [ ] Update function docs to reflect new behavior
+- [ ] **Test (unit)**: `make lint` passes
+
+### 3.5.4 Add migration notes to CHANGELOG or docs
+- [ ] Document how to migrate from env vars to config: just run `cloister setup claude`
+- [ ] Note that env vars still work as fallback (deprecated, removal in Phase 7)
 
 ---
 
 ## Not In Scope (Deferred to Later Phases)
-
-### Phase 3: Claude Code Integration
-- `cloister setup claude` wizard
-- Credential storage in config
-- Remove host env var dependency
 
 ### Phase 4: Host Execution
 - hostexec wrapper
@@ -227,11 +332,14 @@ Add missing tests and file organization improvements.
 - Read-only reference mounts
 - Audit logging
 - Detached mode, non-git support
-- `project show` and `project edit` should infer project name from current directory
-- Suppress log output in user-facing commands (or redirect to stderr with --verbose flag)
-- Don't show usage on config load errors (just show error message)
+- Remove env var fallback (require config-based credentials)
 - Multi-arch Docker image builds (linux/amd64, linux/arm64)
 
 ### Future: Devcontainer Integration
 - Devcontainer.json discovery and image building
 - Security overrides for mounts and capabilities
+
+### Other Agents
+- `cloister setup codex` (OpenAI)
+- `cloister setup gemini` (Google)
+- Generic agent credential framework
