@@ -115,20 +115,17 @@ devcontainer:
 agents:
   claude:
     command: "claude"
-    config_mount: "~/.claude"
     env:
       - "ANTHROPIC_*"
       - "CLAUDE_*"
 
   codex:
     command: "codex"
-    config_mount: "~/.codex"
     env:
       - "OPENAI_API_KEY"
 
   gemini:
     command: "gemini"
-    config_mount: "~/.config/gemini"
     env:
       - "GOOGLE_API_KEY"
       - "GEMINI_*"

@@ -152,10 +152,6 @@ func TestLoadGlobalConfig_ExpandsPaths(t *testing.T) {
 log:
   file: "~/logs/cloister.log"
   per_cloister_dir: "~/logs/cloisters/"
-agents:
-  test-agent:
-    command: test
-    config_mount: "~/.test-agent"
 devcontainer:
   blocked_mounts:
     - "~/.secret-dir"
@@ -187,16 +183,6 @@ devcontainer:
 		t.Errorf("cfg.Log.PerCloisterDir = %q, want %q", cfg.Log.PerCloisterDir, wantPerCloisterDir)
 	}
 
-	// Verify agent config mount is expanded
-	agent, ok := cfg.Agents["test-agent"]
-	if !ok {
-		t.Fatal("test-agent not found in cfg.Agents")
-	}
-	wantConfigMount := filepath.Join(home, ".test-agent")
-	if agent.ConfigMount != wantConfigMount {
-		t.Errorf("agent.ConfigMount = %q, want %q", agent.ConfigMount, wantConfigMount)
-	}
-
 	// Verify blocked mounts are expanded (~ paths only)
 	if len(cfg.Devcontainer.BlockedMounts) != 2 {
 		t.Fatalf("len(BlockedMounts) = %d, want 2", len(cfg.Devcontainer.BlockedMounts))
@@ -225,13 +211,6 @@ func TestLoadGlobalConfig_ExpandsDefaultPaths(t *testing.T) {
 	// Default log file should be expanded
 	if strings.HasPrefix(cfg.Log.File, "~") {
 		t.Errorf("cfg.Log.File = %q should not start with ~", cfg.Log.File)
-	}
-
-	// Default agent config mounts should be expanded
-	for name, agent := range cfg.Agents {
-		if strings.HasPrefix(agent.ConfigMount, "~") {
-			t.Errorf("agent %q ConfigMount = %q should not start with ~", name, agent.ConfigMount)
-		}
 	}
 }
 

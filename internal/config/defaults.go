@@ -86,8 +86,7 @@ func DefaultGlobalConfig() *GlobalConfig {
 		},
 		Agents: map[string]AgentConfig{
 			"claude": {
-				Command:     "claude",
-				ConfigMount: "~/.claude",
+				Command: "claude",
 				Env: []string{
 					"ANTHROPIC_*",
 					"CLAUDE_*",
@@ -95,15 +94,13 @@ func DefaultGlobalConfig() *GlobalConfig {
 				SkipPerms: boolPtr(true),
 			},
 			"codex": {
-				Command:     "codex",
-				ConfigMount: "~/.codex",
+				Command: "codex",
 				Env: []string{
 					"OPENAI_API_KEY",
 				},
 			},
 			"gemini": {
-				Command:     "gemini",
-				ConfigMount: "~/.config/gemini",
+				Command: "gemini",
 				Env: []string{
 					"GOOGLE_API_KEY",
 					"GEMINI_*",

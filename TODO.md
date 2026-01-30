@@ -93,13 +93,12 @@ Extend the configuration types to support credential storage. **All tests sandbo
 - [x] In `internal/config/types.go`, extend `AgentConfig` with credential fields:
   ```go
   type AgentConfig struct {
-      Command     string   `yaml:"command,omitempty"`
-      ConfigMount string   `yaml:"config_mount,omitempty"`
-      Env         []string `yaml:"env,omitempty"`
-      AuthMethod  string   `yaml:"auth_method,omitempty"`  // "existing", "token", or "api_key"
-      Token       string   `yaml:"token,omitempty"`        // long-lived OAuth token
-      APIKey      string   `yaml:"api_key,omitempty"`      // Anthropic API key
-      SkipPerms   *bool    `yaml:"skip_permissions,omitempty"` // default true
+      Command    string   `yaml:"command,omitempty"`
+      Env        []string `yaml:"env,omitempty"`
+      AuthMethod string   `yaml:"auth_method,omitempty"`  // "existing", "token", or "api_key"
+      Token      string   `yaml:"token,omitempty"`        // long-lived OAuth token
+      APIKey     string   `yaml:"api_key,omitempty"`      // Anthropic API key
+      SkipPerms  *bool    `yaml:"skip_permissions,omitempty"` // default true
   }
   ```
 - [x] **Test (unit)**: YAML round-trip: marshal config with new fields, unmarshal, verify values
@@ -244,36 +243,33 @@ Platform-aware credential injection into containers.
 Ensure Claude Code works correctly inside the container. **All tests require Docker.**
 
 ### 3.4.1 Copy ~/.claude/ settings from host
-- [ ] Use `config_mount` field from `agents.claude` config (defaults to `~/.claude`)
-- [ ] Copy host directory into container at `/home/cloister/.claude/`
-- [ ] **macOS:** Exclude `.credentials.json` (doesn't exist; credentials come from Keychain)
-- [ ] **Linux:** Include `.credentials.json` only if using "existing login" auth method
-- [ ] Handle missing directory gracefully (first-time users won't have it)
-- [ ] Copy is one-way (host → container); changes inside container don't persist
-- [ ] **Test (integration)**: Create temp `~/.claude/settings.json` on host, start container, verify file present
-- [ ] **Test (integration)**: Verify missing host dir doesn't cause error
-- [ ] **Test (integration)**: macOS - verify `.credentials.json` not expected from host dir
+- [x] Copy host `~/.claude/` directory into container at `/home/cloister/.claude/`
+- [x] Exclude machine-local files (debug/, statsig/, history, etc.) via rsync patterns
+- [x] Handle missing directory gracefully (first-time users won't have it)
+- [x] Copy is one-way (host → container); changes inside container don't persist
+- [x] **Test (unit)**: `TestInjectUserSettings_MissingClaudeDir` verifies nil return when dir missing
+- [x] **Test (integration)**: `TestInjectUserSettings_IntegrationWithContainer` verifies copy and ownership
 
 ### 3.4.2 Generate ~/.claude.json in container
-- [ ] Generate `/home/cloister/.claude.json` (separate from `.claude/` directory):
+- [x] Generate `/home/cloister/.claude.json` (separate from `.claude/` directory):
   ```json
   {
     "hasCompletedOnboarding": true,
     "bypassPermissionsModeAccepted": true
   }
   ```
-- [ ] File must exist before user shell starts
-- [ ] This is generated, not copied (we control onboarding behavior)
-- [ ] **Test (integration)**: Start container, `cat /home/cloister/.claude.json`, verify JSON content
+- [x] File must exist before user shell starts
+- [x] This is generated, not copied (we control onboarding behavior)
+- [x] **Test (integration)**: Start container, `cat /home/cloister/.claude.json`, verify JSON content
 
 ### 3.4.3 Create claude alias for --dangerously-skip-permissions
-- [ ] Pass `skip_permissions` setting to container (env var or mount)
-- [ ] If enabled (default), entrypoint adds to `/home/cloister/.bashrc`:
+- [x] Pass `skip_permissions` setting to container (env var or mount)
+- [x] If enabled (default), entrypoint adds to `/home/cloister/.bashrc`:
   ```bash
   alias claude='claude --dangerously-skip-permissions'
   ```
-- [ ] Only add if not already present (idempotent)
-- [ ] **Test (integration)**: Start container, run `bash -ic 'type claude'`, verify alias shown
+- [x] Only add if not already present (idempotent)
+- [x] **Test (integration)**: Start container, run `bash -ic 'type claude'`, verify alias shown
 
 ### 3.4.4 Handle skip_permissions=false case
 - [ ] If user sets `skip_permissions: false` in config, don't create alias
@@ -281,9 +277,9 @@ Ensure Claude Code works correctly inside the container. **All tests require Doc
 - [ ] **Test (integration)**: Start container with skip_permissions=false, verify no alias
 
 ### 3.4.5 End-to-end Claude verification
-- [ ] **Test (manual)**: Inside container, run `claude --version` → prints version
-- [ ] **Test (manual)**: Run `claude "say hello"` → API call succeeds, response shown
-- [ ] **Test (manual)**: Verify user settings from host `~/.claude/` are respected
+- [x] **Test (manual)**: Inside container, run `claude --version` → prints version
+- [x] **Test (manual)**: Run `claude "say hello"` → API call succeeds, response shown
+- [x] **Test (manual)**: Verify user settings from host `~/.claude/` are respected
 
 ### 3.4.6 Generate cloister rules file for Claude
 - [ ] After copying `~/.claude/`, write `/home/cloister/.claude/rules/cloister.md`

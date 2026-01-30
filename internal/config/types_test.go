@@ -42,7 +42,6 @@ devcontainer:
 agents:
   claude:
     command: "claude"
-    config_mount: "~/.claude"
     env:
       - "ANTHROPIC_*"
       - "CLAUDE_*"
@@ -148,9 +147,6 @@ func TestGlobalConfigUnmarshal(t *testing.T) {
 	if claude.Command != "claude" {
 		t.Errorf("Agents[\"claude\"].Command = %q, want %q", claude.Command, "claude")
 	}
-	if claude.ConfigMount != "~/.claude" {
-		t.Errorf("Agents[\"claude\"].ConfigMount = %q, want %q", claude.ConfigMount, "~/.claude")
-	}
 	if len(claude.Env) != 2 {
 		t.Errorf("len(Agents[\"claude\"].Env) = %d, want 2", len(claude.Env))
 	}
@@ -254,9 +250,8 @@ func TestGlobalConfigRoundTrip(t *testing.T) {
 		},
 		Agents: map[string]AgentConfig{
 			"test-agent": {
-				Command:     "test-cmd",
-				ConfigMount: "/config",
-				Env:         []string{"VAR1", "VAR2"},
+				Command: "test-cmd",
+				Env:     []string{"VAR1", "VAR2"},
 			},
 		},
 		Defaults: DefaultsConfig{
@@ -318,13 +313,12 @@ func TestAgentConfigCredentialFieldsRoundTrip(t *testing.T) {
 		{
 			name: "all_credential_fields",
 			agent: AgentConfig{
-				Command:     "claude",
-				ConfigMount: "~/.claude",
-				Env:         []string{"ANTHROPIC_*"},
-				AuthMethod:  "token",
-				Token:       "oauth-token-value",
-				APIKey:      "sk-ant-api-key",
-				SkipPerms:   &skipPerms,
+				Command:    "claude",
+				Env:        []string{"ANTHROPIC_*"},
+				AuthMethod: "token",
+				Token:      "oauth-token-value",
+				APIKey:     "sk-ant-api-key",
+				SkipPerms:  &skipPerms,
 			},
 			verify: func(t *testing.T, got AgentConfig) {
 				if got.AuthMethod != "token" {
@@ -461,11 +455,10 @@ func TestAgentConfigInGlobalConfigRoundTrip(t *testing.T) {
 	original := GlobalConfig{
 		Agents: map[string]AgentConfig{
 			"claude": {
-				Command:     "claude",
-				ConfigMount: "~/.claude",
-				AuthMethod:  "token",
-				Token:       "my-oauth-token",
-				SkipPerms:   &skipPerms,
+				Command:    "claude",
+				AuthMethod: "token",
+				Token:      "my-oauth-token",
+				SkipPerms:  &skipPerms,
 			},
 			"codex": {
 				Command:    "codex",

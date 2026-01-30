@@ -87,12 +87,6 @@ func expandGlobalPaths(cfg *GlobalConfig) {
 	cfg.Log.File = pathutil.ExpandHome(cfg.Log.File)
 	cfg.Log.PerCloisterDir = pathutil.ExpandHome(cfg.Log.PerCloisterDir)
 
-	// Expand agent config mount paths
-	for name, agent := range cfg.Agents {
-		agent.ConfigMount = pathutil.ExpandHome(agent.ConfigMount)
-		cfg.Agents[name] = agent
-	}
-
 	// Expand blocked mount paths
 	for i, mount := range cfg.Devcontainer.BlockedMounts {
 		cfg.Devcontainer.BlockedMounts[i] = pathutil.ExpandHome(mount)

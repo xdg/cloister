@@ -132,9 +132,6 @@ func TestDefaultGlobalConfig_AllFields(t *testing.T) {
 		if agent.Command == "" {
 			t.Errorf("DefaultGlobalConfig() Agent %q has empty Command", name)
 		}
-		if agent.ConfigMount == "" {
-			t.Errorf("DefaultGlobalConfig() Agent %q has empty ConfigMount", name)
-		}
 		if len(agent.Env) == 0 {
 			t.Errorf("DefaultGlobalConfig() Agent %q has empty Env", name)
 		}
