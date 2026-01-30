@@ -346,9 +346,26 @@ func TestStart_WithTokenAuth(t *testing.T) {
 		t.Errorf("CLAUDE_CODE_OAUTH_TOKEN not found in container env vars: %v", envVars)
 	}
 
-	// Verify no files were copied (token auth uses env vars only)
-	if len(mockCopier.calls) != 0 {
-		t.Errorf("expected no file copies for token auth, got %d", len(mockCopier.calls))
+	// Verify only ~/.claude.json was copied (token auth uses env vars for credentials)
+	if len(mockCopier.calls) != 1 {
+		t.Errorf("expected 1 file copy for token auth, got %d", len(mockCopier.calls))
+	}
+	if len(mockCopier.calls) > 0 {
+		call := mockCopier.calls[0]
+		if call.destPath != "/home/cloister/.claude.json" {
+			t.Errorf("destPath = %q, want %q", call.destPath, "/home/cloister/.claude.json")
+		}
+		// Verify forced values are set
+		if !strings.Contains(call.content, `"hasCompletedOnboarding": true`) {
+			t.Errorf("~/.claude.json missing hasCompletedOnboarding: %s", call.content)
+		}
+		if !strings.Contains(call.content, `"bypassPermissionsModeAccepted": true`) {
+			t.Errorf("~/.claude.json missing bypassPermissionsModeAccepted: %s", call.content)
+		}
+		// Should NOT contain oauthAccount for token auth
+		if strings.Contains(call.content, `"oauthAccount"`) {
+			t.Errorf("~/.claude.json should not contain oauthAccount for token auth: %s", call.content)
+		}
 	}
 }
 
@@ -455,20 +472,35 @@ func TestStart_WithExistingAuth(t *testing.T) {
 		t.Fatalf("Start() returned error: %v", err)
 	}
 
-	// Verify file was copied to container
-	if len(mockCopier.calls) != 1 {
-		t.Fatalf("expected 1 file copy, got %d", len(mockCopier.calls))
+	// Verify files were copied to container (credentials + ~/.claude.json)
+	if len(mockCopier.calls) != 2 {
+		t.Fatalf("expected 2 file copies, got %d", len(mockCopier.calls))
 	}
-	call := mockCopier.calls[0]
-	if call.destPath != "/home/cloister/.claude/.credentials.json" {
-		t.Errorf("destPath = %q, want %q", call.destPath, "/home/cloister/.claude/.credentials.json")
+
+	// First call should be credentials file
+	credCall := mockCopier.calls[0]
+	if credCall.destPath != "/home/cloister/.claude/.credentials.json" {
+		t.Errorf("destPath = %q, want %q", credCall.destPath, "/home/cloister/.claude/.credentials.json")
 	}
-	if call.content != credJSON {
-		t.Errorf("content = %q, want %q", call.content, credJSON)
+	if credCall.content != credJSON {
+		t.Errorf("content = %q, want %q", credCall.content, credJSON)
 	}
 	// Container name should match generated name
-	if !strings.HasPrefix(call.containerName, "cloister-") {
-		t.Errorf("containerName = %q, expected prefix 'cloister-'", call.containerName)
+	if !strings.HasPrefix(credCall.containerName, "cloister-") {
+		t.Errorf("containerName = %q, expected prefix 'cloister-'", credCall.containerName)
+	}
+
+	// Second call should be ~/.claude.json
+	configCall := mockCopier.calls[1]
+	if configCall.destPath != "/home/cloister/.claude.json" {
+		t.Errorf("destPath = %q, want %q", configCall.destPath, "/home/cloister/.claude.json")
+	}
+	// Verify forced values are set
+	if !strings.Contains(configCall.content, `"hasCompletedOnboarding": true`) {
+		t.Errorf("~/.claude.json missing hasCompletedOnboarding: %s", configCall.content)
+	}
+	if !strings.Contains(configCall.content, `"bypassPermissionsModeAccepted": true`) {
+		t.Errorf("~/.claude.json missing bypassPermissionsModeAccepted: %s", configCall.content)
 	}
 }
 
@@ -847,5 +879,165 @@ func TestStart_ConfigCredentials_NoDeprecationWarning(t *testing.T) {
 	stderrOutput := stderrBuf.String()
 	if strings.Contains(stderrOutput, "Warning:") {
 		t.Errorf("stderr should not contain warning when config has credentials, got: %q", stderrOutput)
+	}
+}
+
+// TestInjectClaudeJSON_ExistingAuthIncludesOAuthAccount verifies that oauthAccount
+// is copied from host when using "existing" auth method.
+func TestInjectClaudeJSON_ExistingAuthIncludesOAuthAccount(t *testing.T) {
+	// Create temp home with ~/.claude.json containing oauthAccount
+	tempHome := t.TempDir()
+	hostClaudeJSON := `{
+		"userID": "test-user-id-12345",
+		"lastOnboardingVersion": "2.1.0",
+		"oauthAccount": {
+			"accountUuid": "test-account-uuid",
+			"emailAddress": "test@example.com",
+			"organizationUuid": "test-org-uuid"
+		},
+		"projects": {
+			"/host/path": {"hasTrustDialogAccepted": true}
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tempHome, ".claude.json"), []byte(hostClaudeJSON), 0644); err != nil {
+		t.Fatalf("Failed to create test ~/.claude.json: %v", err)
+	}
+
+	// Override home directory
+	oldHomeDirFunc := userHomeDirFunc
+	userHomeDirFunc = func() (string, error) { return tempHome, nil }
+	defer func() { userHomeDirFunc = oldHomeDirFunc }()
+
+	mockCopier := &mockFileCopier{}
+
+	// Call with "existing" auth method
+	err := injectClaudeJSON("test-container", mockCopier, "existing")
+	if err != nil {
+		t.Fatalf("injectClaudeJSON() returned error: %v", err)
+	}
+
+	if len(mockCopier.calls) != 1 {
+		t.Fatalf("expected 1 file copy, got %d", len(mockCopier.calls))
+	}
+
+	content := mockCopier.calls[0].content
+
+	// Should contain forced values
+	if !strings.Contains(content, `"hasCompletedOnboarding": true`) {
+		t.Errorf("missing hasCompletedOnboarding: %s", content)
+	}
+	if !strings.Contains(content, `"bypassPermissionsModeAccepted": true`) {
+		t.Errorf("missing bypassPermissionsModeAccepted: %s", content)
+	}
+	if !strings.Contains(content, `"installMethod": "native"`) {
+		t.Errorf("missing installMethod: %s", content)
+	}
+
+	// Should contain copied identity fields
+	if !strings.Contains(content, `"userID": "test-user-id-12345"`) {
+		t.Errorf("missing userID: %s", content)
+	}
+	if !strings.Contains(content, `"lastOnboardingVersion": "2.1.0"`) {
+		t.Errorf("missing lastOnboardingVersion: %s", content)
+	}
+
+	// Should contain oauthAccount for "existing" auth
+	if !strings.Contains(content, `"oauthAccount"`) {
+		t.Errorf("missing oauthAccount for existing auth: %s", content)
+	}
+	if !strings.Contains(content, `"emailAddress": "test@example.com"`) {
+		t.Errorf("oauthAccount missing emailAddress: %s", content)
+	}
+
+	// Should NOT contain projects (host-specific paths)
+	if strings.Contains(content, `"projects"`) {
+		t.Errorf("should not contain projects: %s", content)
+	}
+}
+
+// TestInjectClaudeJSON_TokenAuthExcludesOAuthAccount verifies that oauthAccount
+// is NOT copied when using "token" auth method.
+func TestInjectClaudeJSON_TokenAuthExcludesOAuthAccount(t *testing.T) {
+	// Create temp home with ~/.claude.json containing oauthAccount
+	tempHome := t.TempDir()
+	hostClaudeJSON := `{
+		"userID": "test-user-id-12345",
+		"oauthAccount": {
+			"accountUuid": "test-account-uuid",
+			"emailAddress": "test@example.com"
+		}
+	}`
+	if err := os.WriteFile(filepath.Join(tempHome, ".claude.json"), []byte(hostClaudeJSON), 0644); err != nil {
+		t.Fatalf("Failed to create test ~/.claude.json: %v", err)
+	}
+
+	// Override home directory
+	oldHomeDirFunc := userHomeDirFunc
+	userHomeDirFunc = func() (string, error) { return tempHome, nil }
+	defer func() { userHomeDirFunc = oldHomeDirFunc }()
+
+	mockCopier := &mockFileCopier{}
+
+	// Call with "token" auth method
+	err := injectClaudeJSON("test-container", mockCopier, "token")
+	if err != nil {
+		t.Fatalf("injectClaudeJSON() returned error: %v", err)
+	}
+
+	if len(mockCopier.calls) != 1 {
+		t.Fatalf("expected 1 file copy, got %d", len(mockCopier.calls))
+	}
+
+	content := mockCopier.calls[0].content
+
+	// Should contain userID (identity, not tied to auth method)
+	if !strings.Contains(content, `"userID": "test-user-id-12345"`) {
+		t.Errorf("missing userID: %s", content)
+	}
+
+	// Should NOT contain oauthAccount for "token" auth
+	if strings.Contains(content, `"oauthAccount"`) {
+		t.Errorf("should not contain oauthAccount for token auth: %s", content)
+	}
+}
+
+// TestInjectClaudeJSON_NoHostFile verifies that ~/.claude.json is generated
+// even when host file doesn't exist.
+func TestInjectClaudeJSON_NoHostFile(t *testing.T) {
+	// Create empty temp home (no ~/.claude.json)
+	tempHome := t.TempDir()
+
+	// Override home directory
+	oldHomeDirFunc := userHomeDirFunc
+	userHomeDirFunc = func() (string, error) { return tempHome, nil }
+	defer func() { userHomeDirFunc = oldHomeDirFunc }()
+
+	mockCopier := &mockFileCopier{}
+
+	err := injectClaudeJSON("test-container", mockCopier, "existing")
+	if err != nil {
+		t.Fatalf("injectClaudeJSON() returned error: %v", err)
+	}
+
+	if len(mockCopier.calls) != 1 {
+		t.Fatalf("expected 1 file copy, got %d", len(mockCopier.calls))
+	}
+
+	content := mockCopier.calls[0].content
+
+	// Should still contain forced values
+	if !strings.Contains(content, `"hasCompletedOnboarding": true`) {
+		t.Errorf("missing hasCompletedOnboarding: %s", content)
+	}
+	if !strings.Contains(content, `"bypassPermissionsModeAccepted": true`) {
+		t.Errorf("missing bypassPermissionsModeAccepted: %s", content)
+	}
+	if !strings.Contains(content, `"installMethod": "native"`) {
+		t.Errorf("missing installMethod: %s", content)
+	}
+
+	// Should NOT contain identity fields (no host file to copy from)
+	if strings.Contains(content, `"userID"`) {
+		t.Errorf("should not contain userID when host file missing: %s", content)
 	}
 }

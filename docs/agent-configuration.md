@@ -82,14 +82,40 @@ If no credentials are configured via `cloister setup claude`, cloister will fall
    - Missing directory is handled gracefully (first-time users)
 
 3. **Generates `~/.claude.json` inside the container:**
+
+   This file is *generated* (not simply copied from host) to ensure consistent behavior.
+   Cloister merges forced values with select fields from the host's `~/.claude.json`:
+
+   | Field | Source | Purpose |
+   |-------|--------|---------|
+   | `hasCompletedOnboarding` | Set to `true` | Skip onboarding prompts |
+   | `bypassPermissionsModeAccepted` | Set to `true` | Accept bypass-permissions mode |
+   | `installMethod` | Set to `"native"` | Match container's install method |
+   | `userID` | Copied from host | Preserve stable user identity hash |
+   | `lastOnboardingVersion` | Copied from host | Avoid "new version" upgrade prompts |
+   | `oauthAccount` | Copied from host (Option 1 only) | Account info tied to credentials |
+
+   **Fields NOT copied:**
+   - `projects` — Contains host-specific paths (e.g., `/Users/xdg/git/...`) that don't exist in the container
+   - `numStartups`, caches, tips history — Machine-local state that regenerates naturally
+
+   Example generated file:
    ```json
    {
      "hasCompletedOnboarding": true,
-     "bypassPermissionsModeAccepted": true
+     "bypassPermissionsModeAccepted": true,
+     "installMethod": "native",
+     "userID": "66fae89a7697d69d2a7773fe6714e73439141570901d7b104829a4a061317d79",
+     "lastOnboardingVersion": "2.1.25",
+     "oauthAccount": {
+       "accountUuid": "aa22cae9-...",
+       "emailAddress": "user@example.com",
+       "organizationUuid": "e0d2c770-..."
+     }
    }
    ```
-   This skips Claude's interactive onboarding flow and accepts bypass-permissions mode.
-   Note: This file is *generated*, not copied from host, so cloister controls onboarding behavior.
+
+   Note: `oauthAccount` is only included when using "existing" auth (Option 1), since it's tied to the credentials being injected. For token/API key auth, this field is omitted.
 
 4. **If permission skipping is enabled, creates a shell alias:**
    ```bash
@@ -142,8 +168,11 @@ Note: The `accessToken` is short-lived, but Claude Code auto-refreshes using the
 
 - Auth method stored in `~/.config/cloister/config.yaml` under `agents.claude.auth_method`
 - For token/API key methods, credentials stored under `agents.claude.token` or `agents.claude.api_key`
-- `~/.claude/` settings copied from host (path from `agents.claude.config_mount`)
-- `~/.claude.json` generated fresh in each container (cloister controls onboarding flags)
+- `~/.claude/` settings copied from host (one-way snapshot, excluding machine-local files)
+- `~/.claude.json` generated at container start:
+  - Forced fields: `hasCompletedOnboarding`, `bypassPermissionsModeAccepted`, `installMethod`
+  - Copied fields: `userID`, `lastOnboardingVersion`
+  - Conditional: `oauthAccount` (only for "existing" auth method)
 
 ---
 

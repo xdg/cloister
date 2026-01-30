@@ -3,6 +3,7 @@
 package cloister
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -281,6 +282,7 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	// Step 6: Load global config and get credential injection config for Claude
 	envVars := token.ProxyEnvVars(tok, "")
 	var injectionConfig *claude.InjectionConfig
+	var authMethod string // Track auth method for ~/.claude.json generation
 
 	// Use pre-loaded config if available, otherwise load it
 	globalCfg := deps.globalConfig
@@ -295,6 +297,7 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	if globalCfg != nil {
 		if claudeCfg, ok := globalCfg.Agents["claude"]; ok && claudeCfg.AuthMethod != "" {
 			// Config has Claude credentials configured - use them
+			authMethod = claudeCfg.AuthMethod
 			injectionConfig, err = deps.credentialInjector.InjectCredentials(&claudeCfg)
 			if err != nil {
 				return "", "", fmt.Errorf("credential injection failed: %w", err)
@@ -370,6 +373,12 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 				return "", "", fmt.Errorf("failed to write credential file %s: %w", destPath, writeErr)
 			}
 		}
+	}
+
+	// Step 11: Generate ~/.claude.json with identity fields and forced values
+	// This ensures consistent userID, skips onboarding, and accepts bypass-permissions mode
+	if writeErr := injectClaudeJSON(containerName, deps.fileCopier, authMethod); writeErr != nil {
+		return "", "", fmt.Errorf("failed to write ~/.claude.json: %w", writeErr)
 	}
 
 	return containerID, tok, nil
@@ -492,6 +501,71 @@ func copyWithCp(src, dest string) error {
 		return fmt.Errorf("cp failed: %w: %s", err, output)
 	}
 	return nil
+}
+
+// containerClaudeJSONPath is the path to the Claude config file in the container.
+const containerClaudeJSONPath = "/home/cloister/.claude.json"
+
+// claudeJSONFieldsToCopy lists the top-level fields from ~/.claude.json that should
+// be copied to the container. These are identity fields that ensure consistent user ID.
+// Host-specific fields like "projects" (which contains paths that don't exist in the
+// container) are excluded.
+var claudeJSONFieldsToCopy = []string{
+	"userID",
+	"lastOnboardingVersion",
+}
+
+// injectClaudeJSON generates ~/.claude.json in the container with:
+// - Fields copied from host: userID, lastOnboardingVersion
+// - Fields forced to specific values: hasCompletedOnboarding, bypassPermissionsModeAccepted, installMethod
+// - Conditional fields: oauthAccount (only when using "existing" auth method)
+//
+// This ensures consistent user identity, skips onboarding prompts, and accepts
+// bypass-permissions mode (since cloister is the sandbox, not Claude's permission system).
+//
+// Returns nil if ~/.claude.json doesn't exist on host (fresh install) - we still
+// generate the file with forced values. Returns error only if writing to container fails.
+func injectClaudeJSON(containerName string, fileCopier FileCopier, authMethod string) error {
+	// Start with forced values that ensure smooth operation in the container
+	config := map[string]any{
+		"hasCompletedOnboarding":        true,
+		"bypassPermissionsModeAccepted": true,
+		"installMethod":                 "native",
+	}
+
+	// Try to read host's ~/.claude.json to copy identity fields
+	homeDir, err := userHomeDirFunc()
+	if err == nil {
+		claudeJSONPath := filepath.Join(homeDir, ".claude.json")
+		if content, err := os.ReadFile(claudeJSONPath); err == nil {
+			var hostConfig map[string]any
+			if json.Unmarshal(content, &hostConfig) == nil {
+				// Copy identity fields from host
+				for _, field := range claudeJSONFieldsToCopy {
+					if value, ok := hostConfig[field]; ok {
+						config[field] = value
+					}
+				}
+
+				// Copy oauthAccount only when using "existing" auth method
+				// (it's tied to the credentials being injected)
+				if authMethod == claude.AuthMethodExisting {
+					if oauthAccount, ok := hostConfig["oauthAccount"]; ok {
+						config["oauthAccount"] = oauthAccount
+					}
+				}
+			}
+		}
+	}
+
+	// Marshal the config
+	configJSON, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal claude.json: %w", err)
+	}
+
+	// Write to container
+	return fileCopier.WriteFileToContainerWithOwner(containerName, containerClaudeJSONPath, string(configJSON)+"\n", "1000", "1000")
 }
 
 // Stop orchestrates stopping a cloister container with proper cleanup:
