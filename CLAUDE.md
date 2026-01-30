@@ -76,6 +76,24 @@ Tests are split into two tiers based on what they require:
 - These tests create real Docker containers/networks and require the daemon
 - All other tests are sandbox-safe (use httptest, t.TempDir(), mock interfaces)
 
+## Makefile Targets
+
+| Target | Description |
+|--------|-------------|
+| `make build` | Build the `cloister` binary |
+| `make docker` | Build the `cloister:latest` Docker image |
+| `make install` | Install binary via `go install` |
+| `make test` | Run unit tests (sandbox-safe, no Docker required) |
+| `make test-race` | Run unit tests with race detector |
+| `make test-integration` | Run all tests including Docker integration tests |
+| `make test-all` | Alias for `test-integration` |
+| `make lint` | Run `golangci-lint` |
+| `make clean` | Remove built binary |
+| `make diagrams` | Generate SVG diagrams from D2 sources |
+| `make clean-diagrams` | Remove generated diagram SVGs |
+
+**Tip:** Use `COUNT=1` to bypass test cache: `make test COUNT=1`
+
 ## Internal Packages
 
 | Package | Purpose |

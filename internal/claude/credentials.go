@@ -14,8 +14,8 @@ import (
 )
 
 // ErrCredentialsNotFound indicates that Claude Code credentials could not be found.
-// The user should run `claude login` first.
-var ErrCredentialsNotFound = errors.New("Claude Code credentials not found: run `claude login` first")
+// The user should run `claude login` or `cloister setup claude` to configure credentials.
+var ErrCredentialsNotFound = errors.New("Claude Code credentials not found: run `claude login` or `cloister setup claude`")
 
 // Credentials represents the extracted Claude Code credentials.
 // On macOS, this is extracted from the Keychain.

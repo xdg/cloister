@@ -207,13 +207,13 @@ Platform-aware credential injection into containers.
 - [x] Write credentials to container at `/home/cloister/.claude/.credentials.json`
 - [x] Use Docker copy or volume mount (prefer copy to avoid host file mutation issues)
 - [x] **Test (unit)**: Mock keychain/filesystem, verify correct JSON produced
-- [ ] **Test (integration)**: Container has valid `.credentials.json`
+- [x] **Test (integration)**: Container has valid `.credentials.json`
 
 ### 3.3.3 Implement token/API key injection
 - [x] For token: set `CLAUDE_CODE_OAUTH_TOKEN` env var on container
 - [x] For API key: set `ANTHROPIC_API_KEY` env var on container
 - [x] **Test (unit)**: Verify correct env vars passed to container.Manager
-- [ ] **Test (integration)**: `printenv` inside container shows expected var
+- [x] **Test (integration)**: `printenv` inside container shows expected var
 
 ### 3.3.4 Update container start to use new injection
 - [x] In `internal/cloister/cloister.go`, load global config

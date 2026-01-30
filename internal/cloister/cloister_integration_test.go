@@ -68,7 +68,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       "alpine:latest",
+			Image:       container.DefaultImage,
 		}
 
 		containerID, tok, err := Start(opts)
@@ -139,7 +139,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       "alpine:latest",
+			Image:       container.DefaultImage,
 		}
 
 		containerID, tok, err := Start(opts)
@@ -209,7 +209,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       "alpine:latest",
+			Image:       container.DefaultImage,
 		}
 
 		containerID, tok, err := Start(opts)
@@ -262,7 +262,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       "alpine:latest",
+			Image:       container.DefaultImage,
 		}
 
 		_, _, err = Start(opts)

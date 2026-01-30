@@ -154,10 +154,22 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 **Goal:** Production-ready UX and observability.
 
 **Delivers:**
+- Image distribution:
+  - Default image: `ghcr.io/xdg/cloister:latest`
+  - `CLOISTER_IMAGE` env var overrides default (for local dev and CI/CD)
+  - Precedence: `CLOISTER_IMAGE` > `config.default_image` > built-in default
+  - Auto-pull on `cloister start` if remote image, rate-limited to once per day
+  - `--no-pull` flag to skip update check (offline use)
+  - `cloister update` command to explicitly pull latest image
+  - First-run UX: progress indicator when pulling image
 - Custom image configuration:
-  - Global config: `default_image` overrides `cloister:latest`
+  - Global config: `default_image` overrides built-in default
   - Per-project config: `image` field overrides global default
-  - Users build custom images extending `cloister:latest` (e.g., Rust+WASM toolchain, Python ML stack)
+  - Users build custom images extending the default (e.g., Rust+WASM toolchain, Python ML stack)
+- Multi-arch container images:
+  - GitHub Action builds linux/amd64 + linux/arm64
+  - Tagged commits → `ghcr.io/xdg/cloister:vX.Y.Z` + update `:latest`
+  - Merges to main → `ghcr.io/xdg/cloister:edge`
 - Shell completion (bash, zsh, fish)
 - Read-only reference mounts (`/refs` for other repos, configured per-project)
 - Audit logging (unified + per-cloister)
@@ -165,9 +177,12 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - `cloister start -d` (detached mode)
 - Non-git directory support with `--allow-no-git`
 - Guardian API versioning (CLI checks compatibility with container image)
-- Multi-arch container images: GitHub Action builds linux/amd64 + linux/arm64 on tagged commits, pushes to ghcr.io
 
 **Verification:**
+- `CLOISTER_IMAGE=cloister:latest cloister start` → uses local dev image
+- `cloister start` with no local image → pulls from ghcr.io with progress
+- `cloister start --no-pull` → skips update check
+- `cloister update` → pulls latest image
 - Set `default_image: my-rust-wasm:latest` in global config → all cloisters use it
 - Set `image: my-python-ml:latest` in project config → overrides global for that project
 - Tab completion works for commands, cloister names, project names
@@ -175,6 +190,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - Logs capture all proxy and hostexec events
 - Clear error when starting from non-git directory without flag
 - Tagged release triggers GH Action → multi-arch image appears in ghcr.io
+- Merge to main triggers GH Action → `:edge` image updated
 
 ---
 

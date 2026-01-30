@@ -101,3 +101,80 @@ func restoreEnv(t *testing.T, key, origValue string) {
 		os.Setenv(key, origValue)
 	}
 }
+
+func TestCredentialEnvVarsUsed_ReturnsNames(t *testing.T) {
+	// Save and clear any existing values
+	origAPIKey := getEnvAndUnset(t, "ANTHROPIC_API_KEY")
+	origOAuthToken := getEnvAndUnset(t, "CLAUDE_CODE_OAUTH_TOKEN")
+	defer func() {
+		restoreEnv(t, "ANTHROPIC_API_KEY", origAPIKey)
+		restoreEnv(t, "CLAUDE_CODE_OAUTH_TOKEN", origOAuthToken)
+	}()
+
+	// Set test values
+	t.Setenv("ANTHROPIC_API_KEY", "test-api-key")
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "test-oauth-token")
+
+	names := CredentialEnvVarsUsed()
+
+	if len(names) != 2 {
+		t.Fatalf("expected 2 names, got %d: %v", len(names), names)
+	}
+
+	// Check names (not values)
+	var foundAPIKey, foundOAuth bool
+	for _, name := range names {
+		if name == "ANTHROPIC_API_KEY" {
+			foundAPIKey = true
+		}
+		if name == "CLAUDE_CODE_OAUTH_TOKEN" {
+			foundOAuth = true
+		}
+	}
+
+	if !foundAPIKey {
+		t.Error("missing ANTHROPIC_API_KEY in result")
+	}
+	if !foundOAuth {
+		t.Error("missing CLAUDE_CODE_OAUTH_TOKEN in result")
+	}
+}
+
+func TestCredentialEnvVarsUsed_SkipsEmptyVars(t *testing.T) {
+	// Save and clear any existing values
+	origAPIKey := getEnvAndUnset(t, "ANTHROPIC_API_KEY")
+	origOAuthToken := getEnvAndUnset(t, "CLAUDE_CODE_OAUTH_TOKEN")
+	defer func() {
+		restoreEnv(t, "ANTHROPIC_API_KEY", origAPIKey)
+		restoreEnv(t, "CLAUDE_CODE_OAUTH_TOKEN", origOAuthToken)
+	}()
+
+	// Set only one value
+	t.Setenv("ANTHROPIC_API_KEY", "test-api-key")
+
+	names := CredentialEnvVarsUsed()
+
+	if len(names) != 1 {
+		t.Fatalf("expected 1 name, got %d: %v", len(names), names)
+	}
+
+	if names[0] != "ANTHROPIC_API_KEY" {
+		t.Errorf("expected ANTHROPIC_API_KEY, got %s", names[0])
+	}
+}
+
+func TestCredentialEnvVarsUsed_EmptyWhenNoneSet(t *testing.T) {
+	// Save and clear any existing values
+	origAPIKey := getEnvAndUnset(t, "ANTHROPIC_API_KEY")
+	origOAuthToken := getEnvAndUnset(t, "CLAUDE_CODE_OAUTH_TOKEN")
+	defer func() {
+		restoreEnv(t, "ANTHROPIC_API_KEY", origAPIKey)
+		restoreEnv(t, "CLAUDE_CODE_OAUTH_TOKEN", origOAuthToken)
+	}()
+
+	names := CredentialEnvVarsUsed()
+
+	if len(names) != 0 {
+		t.Errorf("expected empty slice, got %v", names)
+	}
+}

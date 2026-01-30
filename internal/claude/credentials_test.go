@@ -388,9 +388,14 @@ func TestCredentials_Fields(t *testing.T) {
 
 func TestErrCredentialsNotFound_Message(t *testing.T) {
 	err := ErrCredentialsNotFound
-	expected := "Claude Code credentials not found: run `claude login` first"
-	if err.Error() != expected {
-		t.Errorf("expected error message %q, got %q", expected, err.Error())
+	// Error message should suggest both options for resolving
+	errMsg := err.Error()
+
+	if !containsString(errMsg, "claude login") {
+		t.Errorf("expected error message to mention 'claude login', got %q", errMsg)
+	}
+	if !containsString(errMsg, "cloister setup claude") {
+		t.Errorf("expected error message to mention 'cloister setup claude', got %q", errMsg)
 	}
 }
 

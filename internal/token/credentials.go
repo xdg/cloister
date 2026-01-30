@@ -32,3 +32,16 @@ func CredentialEnvVars() []string {
 	}
 	return envVars
 }
+
+// CredentialEnvVarsUsed returns the names of credential environment variables
+// that are set on the host system. This is used to generate deprecation warnings
+// when falling back to host env vars instead of config-based credentials.
+func CredentialEnvVarsUsed() []string {
+	var names []string
+	for _, name := range credentialEnvVarNames {
+		if value := os.Getenv(name); value != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}

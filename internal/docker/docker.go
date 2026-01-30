@@ -14,6 +14,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -232,6 +233,37 @@ func CopyToContainer(srcPath, containerName, destPath string) error {
 func StartContainer(containerName string) error {
 	_, err := Run("start", containerName)
 	return err
+}
+
+// WriteFileToContainer writes content to a file inside a container.
+// The container must be created (can be running or stopped).
+//
+// containerName is the name or ID of the container.
+// destPath is the absolute path inside the container.
+// content is the file content to write.
+//
+// This creates a temporary file on the host with the content, then uses
+// `docker cp` to copy it into the container. This approach works on both
+// running and stopped containers and avoids permission issues.
+func WriteFileToContainer(containerName, destPath, content string) error {
+	// Create a temp file with the content
+	tmpFile, err := os.CreateTemp("", "cloister-inject-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		tmpFile.Close()
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+
+	// Use docker cp to copy into container
+	// docker cp copies the file directly to the destination path
+	return CopyToContainer(tmpFile.Name(), containerName, destPath)
 }
 
 // ContainerInfo holds information about a Docker container.
