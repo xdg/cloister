@@ -10,9 +10,15 @@ import (
 // DefaultAllowedDomains contains the initial hardcoded allowlist for Phase 1.
 // This is used as a fallback when no configuration is provided.
 var DefaultAllowedDomains = []string{
+	// AI provider APIs
 	"api.anthropic.com",
 	"api.openai.com",
 	"generativelanguage.googleapis.com",
+
+	// Go module proxy and toolchain downloads
+	"proxy.golang.org",
+	"sum.golang.org",
+	"storage.googleapis.com",
 }
 
 // Allowlist enforces domain-based access control for the proxy.

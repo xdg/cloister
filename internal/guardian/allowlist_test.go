@@ -128,6 +128,9 @@ func TestNewDefaultAllowlist(t *testing.T) {
 		"api.anthropic.com",
 		"api.openai.com",
 		"generativelanguage.googleapis.com",
+		"proxy.golang.org",
+		"sum.golang.org",
+		"storage.googleapis.com",
 	}
 
 	for _, domain := range defaultDomains {
