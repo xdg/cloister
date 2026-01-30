@@ -154,6 +154,10 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 **Goal:** Production-ready UX and observability.
 
 **Delivers:**
+- Custom image configuration:
+  - Global config: `default_image` overrides `cloister:latest`
+  - Per-project config: `image` field overrides global default
+  - Users build custom images extending `cloister:latest` (e.g., Rust+WASM toolchain, Python ML stack)
 - Shell completion (bash, zsh, fish)
 - Read-only reference mounts (`/refs` for other repos, configured per-project)
 - Audit logging (unified + per-cloister)
@@ -164,6 +168,8 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - Multi-arch container images: GitHub Action builds linux/amd64 + linux/arm64 on tagged commits, pushes to ghcr.io
 
 **Verification:**
+- Set `default_image: my-rust-wasm:latest` in global config → all cloisters use it
+- Set `image: my-python-ml:latest` in project config → overrides global for that project
 - Tab completion works for commands, cloister names, project names
 - Project with refs config → ref directories mounted read-only at `/refs/`
 - Logs capture all proxy and hostexec events
