@@ -258,3 +258,26 @@ func WriteProjectConfig(name string, cfg *ProjectConfig, overwrite bool) error {
 	// Write the config file with user-only permissions
 	return os.WriteFile(path, data, 0600)
 }
+
+// WriteGlobalConfig writes a global configuration to the config directory.
+// The config file is written to GlobalConfigPath().
+// The config directory is created if it doesn't exist.
+// The file is written with 0600 permissions (user read/write only).
+// This will overwrite any existing config file.
+func WriteGlobalConfig(cfg *GlobalConfig) error {
+	path := GlobalConfigPath()
+
+	// Ensure config directory exists
+	if err := EnsureConfigDir(); err != nil {
+		return err
+	}
+
+	// Marshal the config to YAML
+	data, err := MarshalGlobalConfig(cfg)
+	if err != nil {
+		return err
+	}
+
+	// Write the config file with user-only permissions
+	return os.WriteFile(path, data, 0600)
+}

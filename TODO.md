@@ -123,69 +123,69 @@ Extend the configuration types to support credential storage. **All tests sandbo
 Create the interactive setup wizard for Claude credentials.
 
 ### 3.2.1 Create setup command structure
-- [ ] Create `internal/cmd/setup.go` with `setup` parent command
-- [ ] Create `internal/cmd/setup_claude.go` with `setup claude` subcommand
-- [ ] Wire up to root command: `cloister setup claude`
-- [ ] **Test (unit)**: `rootCmd.Commands()` includes setup; setup has claude subcommand
+- [x] Create `internal/cmd/setup.go` with `setup` parent command
+- [x] Create `internal/cmd/setup_claude.go` with `setup claude` subcommand
+- [x] Wire up to root command: `cloister setup claude`
+- [x] **Test (unit)**: `rootCmd.Commands()` includes setup; setup has claude subcommand
 
 ### 3.2.2 Implement auth method prompt
-- [ ] Define `Prompter` interface: `Prompt(prompt string, options []string, defaultIdx int) (int, error)`
-- [ ] Implement `StdinPrompter` for real use, `MockPrompter` for tests
-- [ ] Prompt user to select authentication method:
+- [x] Define `Prompter` interface: `Prompt(prompt string, options []string, defaultIdx int) (int, error)`
+- [x] Implement `StdinPrompter` for real use, `MockPrompter` for tests
+- [x] Prompt user to select authentication method:
   ```
   Select authentication method:
     1. Use existing Claude login (recommended)
     2. Long-lived OAuth token (from `claude setup-token`)
     3. API key (from console.anthropic.com)
   ```
-- [ ] Default to option 1 if user just presses Enter
-- [ ] **Test (unit)**: Mock prompter returns expected selection; default works
+- [x] Default to option 1 if user just presses Enter
+- [x] **Test (unit)**: Mock prompter returns expected selection; default works
 
 ### 3.2.3 Implement "existing login" option (option 1)
-- [ ] Create `internal/claude/credentials.go` package for credential extraction
-- [ ] Detect platform: `runtime.GOOS`
-- [ ] **macOS path:**
-  - [ ] Run `security find-generic-password -s 'Claude Code-credentials' -a "$(whoami)" -w`
-  - [ ] Parse JSON response to extract credentials
-  - [ ] Store extracted JSON in config at `agents.claude.credentials_json` (or separate file)
-  - [ ] Error if command fails → "Run `claude login` first"
-- [ ] **Linux path:**
-  - [ ] Check if `~/.claude/.credentials.json` exists
-  - [ ] Store path reference in config (will be copied at container start)
-  - [ ] Error if file missing → "Run `claude login` first"
-- [ ] **Test (unit)**: Mock exec.Command for keychain; mock filesystem for Linux
-- [ ] **Test (manual)**: macOS keychain extraction works; Linux file detection works
+- [x] Create `internal/claude/credentials.go` package for credential extraction
+- [x] Detect platform: `runtime.GOOS`
+- [x] **macOS path:**
+  - [x] Run `security find-generic-password -s 'Claude Code-credentials' -a "$(whoami)" -w`
+  - [x] Parse JSON response to extract credentials
+  - [x] Store extracted JSON in config at `agents.claude.credentials_json` (or separate file)
+  - [x] Error if command fails → "Run `claude login` first"
+- [x] **Linux path:**
+  - [x] Check if `~/.claude/.credentials.json` exists
+  - [x] Store path reference in config (will be copied at container start)
+  - [x] Error if file missing → "Run `claude login` first"
+- [x] **Test (unit)**: Mock exec.Command for keychain; mock filesystem for Linux
+- [x] **Test (manual)**: macOS keychain extraction works; Linux file detection works
 
 ### 3.2.4 Implement token/API key options (options 2 & 3)
-- [ ] Define `CredentialReader` interface: `ReadCredential(prompt string) (string, error)`
-- [ ] Implement `TerminalCredentialReader` using `golang.org/x/term` for hidden input
-- [ ] Implement `MockCredentialReader` that reads from provided string
-- [ ] For OAuth token: "Paste your OAuth token (from `claude setup-token`):"
-- [ ] For API key: "Paste your API key (from console.anthropic.com):"
-- [ ] **Test (unit)**: Mock reader returns provided credential
-- [ ] **Test (manual)**: Real terminal hides input while typing
+- [x] Define `CredentialReader` interface: `ReadCredential(prompt string) (string, error)`
+- [x] Implement `TerminalCredentialReader` using `golang.org/x/term` for hidden input
+- [x] Implement `MockCredentialReader` that reads from provided string
+- [x] For OAuth token: "Paste your OAuth token (from `claude setup-token`):"
+- [x] For API key: "Paste your API key (from console.anthropic.com):"
+- [x] **Test (unit)**: Mock reader returns provided credential
+- [x] **Test (manual)**: Real terminal hides input while typing
 
 ### 3.2.5 Implement skip-permissions prompt
-- [ ] Prompt: "Skip Claude's built-in permission prompts? (recommended inside cloister) [Y/n]:"
-- [ ] Default to yes (Y) if user just presses Enter
-- [ ] **Test (unit)**: Empty input → true; "n" → false; "N" → false; "y" → true
+- [x] Prompt: "Skip Claude's built-in permission prompts? (recommended inside cloister) [Y/n]:"
+- [x] Default to yes (Y) if user just presses Enter
+- [x] **Test (unit)**: Empty input → true; "n" → false; "N" → false; "y" → true
 
 ### 3.2.6 Save credentials to config
-- [ ] Load existing global config (or create default)
-- [ ] Based on auth method, update appropriate config field:
+- [x] Load existing global config (or create default)
+- [x] Based on auth method, update appropriate config field:
   - Option 1: `agents.claude.auth_method: "existing"` (credentials extracted at start)
   - Option 2: `agents.claude.auth_method: "token"`, `agents.claude.token: "..."`
   - Option 3: `agents.claude.auth_method: "api_key"`, `agents.claude.api_key: "..."`
-- [ ] Update `agents.claude.skip_permissions`
-- [ ] Write config back with `config.WriteGlobalConfig()`
-- [ ] Print success message with config path
-- [ ] **Test (unit)**: Use `t.TempDir()` for config path; verify YAML contains expected values
+- [x] Update `agents.claude.skip_permissions`
+- [x] Write config back with `config.WriteGlobalConfig()`
+- [x] Print success message with config path
+- [x] **Test (unit)**: Use `t.TempDir()` for config path; verify YAML contains expected values
 
 ### 3.2.7 Handle existing credentials
-- [ ] Check if credentials already exist in config
-- [ ] If yes, prompt: "Credentials already configured. Replace? [y/N]:"
-- [ ] Default to no (N) to prevent accidental overwrite
-- [ ] **Test (unit)**: Existing creds + "N" input → config unchanged; "y" → replaced
+- [x] Check if credentials already exist in config
+- [x] If yes, prompt: "Credentials already configured. Replace? [y/N]:"
+- [x] Default to no (N) to prevent accidental overwrite
+- [x] **Test (unit)**: Existing creds + "N" input → config unchanged; "y" → replaced
 
 ---
 

@@ -446,3 +446,147 @@ func TestInitProjectConfig_CreatesDir(t *testing.T) {
 		t.Errorf("projects dir permissions = %o, want 0700", perm)
 	}
 }
+
+func TestWriteGlobalConfig_Creates(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	skipPerms := true
+	cfg := &GlobalConfig{
+		Proxy: ProxyConfig{
+			Listen: ":9999",
+		},
+		Agents: map[string]AgentConfig{
+			"claude": {
+				AuthMethod: "token",
+				Token:      "test-token-value",
+				SkipPerms:  &skipPerms,
+			},
+		},
+	}
+
+	// Write global config
+	if err := WriteGlobalConfig(cfg); err != nil {
+		t.Fatalf("WriteGlobalConfig() error = %v", err)
+	}
+
+	// Verify file exists
+	path := GlobalConfigPath()
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("os.Stat() error = %v", err)
+	}
+
+	// Verify permissions are 0600
+	perm := info.Mode().Perm()
+	if perm != 0600 {
+		t.Errorf("config file permissions = %o, want 0600", perm)
+	}
+
+	// Read and verify content
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+
+	// Parse the written config
+	parsedCfg, err := ParseGlobalConfig(data)
+	if err != nil {
+		t.Fatalf("ParseGlobalConfig() error = %v", err)
+	}
+
+	// Verify values
+	if parsedCfg.Proxy.Listen != ":9999" {
+		t.Errorf("parsedCfg.Proxy.Listen = %q, want %q", parsedCfg.Proxy.Listen, ":9999")
+	}
+	claudeCfg, ok := parsedCfg.Agents["claude"]
+	if !ok {
+		t.Fatal("parsedCfg.Agents should have claude entry")
+	}
+	if claudeCfg.AuthMethod != "token" {
+		t.Errorf("claudeCfg.AuthMethod = %q, want %q", claudeCfg.AuthMethod, "token")
+	}
+	if claudeCfg.Token != "test-token-value" {
+		t.Errorf("claudeCfg.Token = %q, want %q", claudeCfg.Token, "test-token-value")
+	}
+	if claudeCfg.SkipPerms == nil || *claudeCfg.SkipPerms != true {
+		t.Error("claudeCfg.SkipPerms should be true")
+	}
+}
+
+func TestWriteGlobalConfig_Overwrites(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Create config directory and write initial config
+	configDir := filepath.Join(tmpDir, "cloister")
+	if err := os.MkdirAll(configDir, 0700); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+
+	initialContent := "proxy:\n  listen: \":1111\"\n"
+	path := GlobalConfigPath()
+	if err := os.WriteFile(path, []byte(initialContent), 0600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	// Write new config
+	cfg := &GlobalConfig{
+		Proxy: ProxyConfig{
+			Listen: ":2222",
+		},
+	}
+	if err := WriteGlobalConfig(cfg); err != nil {
+		t.Fatalf("WriteGlobalConfig() error = %v", err)
+	}
+
+	// Verify content was updated
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("os.ReadFile() error = %v", err)
+	}
+
+	parsedCfg, err := ParseGlobalConfig(data)
+	if err != nil {
+		t.Fatalf("ParseGlobalConfig() error = %v", err)
+	}
+
+	if parsedCfg.Proxy.Listen != ":2222" {
+		t.Errorf("parsedCfg.Proxy.Listen = %q, want %q", parsedCfg.Proxy.Listen, ":2222")
+	}
+}
+
+func TestWriteGlobalConfig_CreatesDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Verify config directory does not exist
+	configDir := ConfigDir()
+	if _, err := os.Stat(configDir); !os.IsNotExist(err) {
+		t.Fatalf("config dir should not exist before test: %v", err)
+	}
+
+	cfg := &GlobalConfig{
+		Proxy: ProxyConfig{
+			Listen: ":3333",
+		},
+	}
+	if err := WriteGlobalConfig(cfg); err != nil {
+		t.Fatalf("WriteGlobalConfig() error = %v", err)
+	}
+
+	// Verify config directory was created
+	info, err := os.Stat(configDir)
+	if err != nil {
+		t.Fatalf("os.Stat() error = %v", err)
+	}
+	if !info.IsDir() {
+		t.Error("config dir should be a directory")
+	}
+
+	// Verify directory permissions are 0700
+	perm := info.Mode().Perm()
+	if perm != 0700 {
+		t.Errorf("config dir permissions = %o, want 0700", perm)
+	}
+}
