@@ -393,20 +393,21 @@ var userHomeDirFunc = os.UserHomeDir
 // Based on ~/.claude/.gitignore patterns.
 var settingsExcludePatterns = []string{
 	".update.lock",
+	"cache",
 	"debug/",
+	"downloads/",
 	"file-history/",
 	"history.jsonl",
 	"plans/",
 	"plugins/install-counts-cache.json",
 	"projects/",
+	"session-env/",
 	"shell-snapshots/",
 	"stats-cache.json",
 	"statsig/",
 	"tasks/",
 	"telemetry",
 	"todos/",
-	"cache",
-	"downloads/",
 }
 
 // injectUserSettings copies the host's ~/.claude/ directory into the container.
@@ -460,10 +461,18 @@ func injectUserSettings(containerName string) error {
 	// Try rsync first (fast, supports exclusions natively)
 	// Fall back to cp -rL if rsync isn't available
 	if err := copyWithRsync(claudeDir, tmpClaudeDir); err != nil {
-		// rsync failed or not available, fall back to cp
+		// rsync failed or not available, fall back to cp (which has no exclusion support)
+		log.Printf("cloister: warning: rsync failed, falling back to cp (exclusions will not apply): %v", err)
 		if err := copyWithCp(claudeDir, tmpClaudeDir); err != nil {
 			return err
 		}
+	}
+
+	// Clear any pre-existing ~/.claude in the container (from image build)
+	// This ensures tar copy replaces rather than merges with installer-created dirs
+	clearCmd := exec.Command("docker", "exec", containerName, "rm", "-rf", containerHomeDir+"/.claude")
+	if output, err := clearCmd.CombinedOutput(); err != nil {
+		log.Printf("cloister: warning: failed to clear existing .claude: %v: %s", err, output)
 	}
 
 	// Copy the filtered directory to the container home (creates .claude there)
