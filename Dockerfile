@@ -21,9 +21,17 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Go (latest stable)
-ARG GO_VERSION=1.23.5
-RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
-    | tar -C /usr/local -xz
+RUN set -eux; \
+    RELEASE=$(curl -fsSL 'https://go.dev/dl/?mode=json' | \
+      jq -r '[.[] | select(.stable == true)][0]'); \
+    GO_VERSION=$(echo "$RELEASE" | jq -r '.version' | sed 's/^go//'); \
+    SHA256=$(echo "$RELEASE" | jq -r --arg arch "go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
+      '.files[] | select(.filename == $arch) | .sha256'); \
+    [ -n "$GO_VERSION" ] && [ -n "$SHA256" ]; \
+    curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" -o /tmp/go.tar.gz; \
+    echo "${SHA256}  /tmp/go.tar.gz" | sha256sum -c -; \
+    tar -C /usr/local -xzf /tmp/go.tar.gz; \
+    rm /tmp/go.tar.gz
 ENV PATH="/usr/local/go/bin:${PATH}"
 
 # Node.js LTS via NodeSource
