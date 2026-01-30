@@ -4,6 +4,7 @@ package cloister
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -299,16 +300,159 @@ func TestStop_NonExistentContainer(t *testing.T) {
 	}
 }
 
+func TestWriteFileToContainerWithOwner(t *testing.T) {
+	requireDocker(t)
+
+	// Create a test container
+	containerName := "cloister-ownership-test-" + time.Now().Format("150405")
+	t.Cleanup(func() { cleanupTestContainer(containerName) })
+
+	// Create container using cloister-default image which has /home/cloister
+	_, err := docker.Run("create",
+		"--name", containerName,
+		container.DefaultImage,
+		"sleep", "infinity")
+	if err != nil {
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage, err)
+	}
+
+	// Start the container first - tar piping requires a running container
+	if _, err := docker.Run("start", containerName); err != nil {
+		t.Fatalf("Failed to start container: %v", err)
+	}
+
+	// Write a file with ownership using tar piping (simulating credential injection)
+	testContent := `{"test": "data"}`
+	testPath := "/home/cloister/.claude/.credentials.json"
+	if err := docker.WriteFileToContainerWithOwner(containerName, testPath, testContent, "1000", "1000"); err != nil {
+		t.Fatalf("WriteFileToContainerWithOwner failed: %v", err)
+	}
+
+	// Check file ownership - should be cloister user (UID 1000)
+	output, err := docker.Run("exec", containerName, "stat", "-c", "%u:%g", testPath)
+	if err != nil {
+		t.Fatalf("Failed to stat credentials file: %v", err)
+	}
+	ownership := strings.TrimSpace(output)
+	if ownership != "1000:1000" {
+		t.Errorf("Expected credentials file owned by 1000:1000, got %s", ownership)
+	}
+
+	// Verify the cloister user can actually read the file
+	output, err = docker.Run("exec", "--user", "cloister", containerName, "cat", testPath)
+	if err != nil {
+		t.Errorf("Cloister user cannot read credentials file: %v", err)
+	} else if strings.TrimSpace(output) != testContent {
+		t.Errorf("File content mismatch: expected %q, got %q", testContent, output)
+	}
+}
+
+func TestCopyToContainerWithOwner(t *testing.T) {
+	requireDocker(t)
+
+	// Create a test container
+	containerName := "cloister-copy-ownership-test-" + time.Now().Format("150405")
+	t.Cleanup(func() { cleanupTestContainer(containerName) })
+
+	// Create a temp directory with test files
+	tmpDir, err := os.MkdirTemp("", "cloister-copy-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+	// Create a .claude directory with some test files
+	srcClaudeDir := filepath.Join(tmpDir, ".claude")
+	if err := os.MkdirAll(srcClaudeDir, 0o755); err != nil {
+		t.Fatalf("Failed to create .claude dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcClaudeDir, "settings.json"), []byte(`{"test": true}`), 0o644); err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	// Create container using cloister-default image
+	_, err = docker.Run("create",
+		"--name", containerName,
+		container.DefaultImage,
+		"sleep", "infinity")
+	if err != nil {
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage, err)
+	}
+
+	// Start the container first - tar piping requires a running container
+	if _, err := docker.Run("start", containerName); err != nil {
+		t.Fatalf("Failed to start container: %v", err)
+	}
+
+	// Copy the directory with ownership using tar piping
+	destDir := "/home/cloister"
+	destPath := destDir + "/.claude"
+	if err := docker.CopyToContainerWithOwner(srcClaudeDir, containerName, destDir, "1000", "1000"); err != nil {
+		t.Fatalf("CopyToContainerWithOwner failed: %v", err)
+	}
+
+	// Check directory ownership - should be cloister user (UID 1000)
+	output, err := docker.Run("exec", containerName, "stat", "-c", "%u:%g", destPath)
+	if err != nil {
+		t.Fatalf("Failed to stat .claude directory: %v", err)
+	}
+	ownership := strings.TrimSpace(output)
+	if ownership != "1000:1000" {
+		t.Errorf("Expected .claude directory owned by 1000:1000, got %s", ownership)
+	}
+
+	// Check file ownership inside the directory
+	settingsPath := destPath + "/settings.json"
+	output, err = docker.Run("exec", containerName, "stat", "-c", "%u:%g", settingsPath)
+	if err != nil {
+		t.Fatalf("Failed to stat settings.json: %v", err)
+	}
+
+	ownership = strings.TrimSpace(output)
+	if ownership != "1000:1000" {
+		t.Errorf("Expected settings.json owned by 1000:1000, got %s", ownership)
+	}
+
+	// Verify the cloister user can read the files
+	output, err = docker.Run("exec", "--user", "cloister", containerName, "cat", settingsPath)
+	if err != nil {
+		t.Errorf("Cloister user cannot read settings.json: %v", err)
+	}
+}
+
 func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
 	requireDocker(t)
 
-	// Create a test container to verify settings injection
-	// Uses cloister-default image which has the cloister user and home directory
+	// Create a mock home directory with test .claude files
+	mockHome, err := os.MkdirTemp("", "cloister-mock-home-*")
+	if err != nil {
+		t.Fatalf("Failed to create mock home: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(mockHome) })
+
+	// Create mock ~/.claude with test files
+	mockClaudeDir := filepath.Join(mockHome, ".claude")
+	if err := os.MkdirAll(mockClaudeDir, 0o755); err != nil {
+		t.Fatalf("Failed to create mock .claude: %v", err)
+	}
+
+	testFiles := []string{"settings.json", "CLAUDE.md", ".credentials.json"}
+	for _, f := range testFiles {
+		content := fmt.Sprintf(`{"file": %q}`, f)
+		if err := os.WriteFile(filepath.Join(mockClaudeDir, f), []byte(content), 0o644); err != nil {
+			t.Fatalf("Failed to create %s: %v", f, err)
+		}
+	}
+
+	// Override home directory for this test
+	origHomeDir := userHomeDirFunc
+	userHomeDirFunc = func() (string, error) { return mockHome, nil }
+	t.Cleanup(func() { userHomeDirFunc = origHomeDir })
+
+	// Create a test container
 	projectName := testProjectName()
 	branchName := "settings-test"
 	containerName := "cloister-" + projectName + "-" + branchName
-
-	// Ensure cleanup after test
 	t.Cleanup(func() { cleanupTestContainer(containerName) })
 
 	// Create a temporary directory for the project path
@@ -329,44 +473,45 @@ func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
 		t.Skipf("Could not create container with %s: %v", container.DefaultImage, err)
 	}
 
-	// Check if ~/.claude/ exists on host
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("Failed to get home dir: %v", err)
-	}
-	claudeDir := filepath.Join(homeDir, ".claude")
-
-	if _, err := os.Stat(claudeDir); os.IsNotExist(err) {
-		// ~/.claude/ doesn't exist, so injection should be a no-op
-		err := injectUserSettings(containerName)
-		if err != nil {
-			t.Errorf("injectUserSettings() with no ~/.claude/ should not error, got: %v", err)
-		}
-		return
-	}
-
-	// ~/.claude/ exists, test injection
-	// First start the container so we can exec into it
+	// Start the container first - injectUserSettings uses tar piping
+	// which requires a running container
 	_, err = docker.Run("start", containerName)
 	if err != nil {
 		t.Fatalf("Failed to start container: %v", err)
 	}
 
+	// Inject settings into container (uses tar piping for correct ownership)
 	err = injectUserSettings(containerName)
 	if err != nil {
 		t.Fatalf("injectUserSettings() failed: %v", err)
 	}
 
-	// Verify the settings were copied by checking if the directory exists in container
-	output, err := docker.Run("exec", containerName, "ls", "-la", "/home/cloister/")
-	if err != nil {
-		t.Fatalf("Failed to list container home dir: %v", err)
-	}
+	// Check each test file exists at correct path with correct ownership
+	for _, testFile := range testFiles {
+		expectedPath := "/home/cloister/.claude/" + testFile
+		nestedPath := "/home/cloister/.claude/.claude/" + testFile
 
-	t.Logf("Container .claude contents:\n%s", output)
+		output, err := docker.Run("exec", "--user", "root", containerName, "stat", "-c", "%u:%g", expectedPath)
+		if err != nil {
+			// Check if it's at the nested path (nesting bug)
+			if _, nestedErr := docker.Run("exec", "--user", "root", containerName, "stat", nestedPath); nestedErr == nil {
+				t.Errorf("BUG: %s is nested at %s instead of %s", testFile, nestedPath, expectedPath)
+			} else {
+				t.Errorf("Failed to stat %s: %v", expectedPath, err)
+			}
+			continue
+		}
 
-	// The .claude directory or symlink should exist
-	if !strings.Contains(output, ".claude") {
-		t.Error("Expected .claude to exist in container home directory")
+		// Verify ownership is cloister user (1000:1000), not host UID
+		ownership := strings.TrimSpace(output)
+		if ownership != "1000:1000" {
+			t.Errorf("Expected %s owned by 1000:1000, got %s", expectedPath, ownership)
+		}
+
+		// Verify cloister user can read the file
+		_, err = docker.Run("exec", "--user", "cloister", containerName, "cat", expectedPath)
+		if err != nil {
+			t.Errorf("Cloister user cannot read %s: %v", expectedPath, err)
+		}
 	}
 }

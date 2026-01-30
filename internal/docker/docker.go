@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -233,6 +234,147 @@ func CopyToContainer(srcPath, containerName, destPath string) error {
 func StartContainer(containerName string) error {
 	_, err := Run("start", containerName)
 	return err
+}
+
+// ChownInContainer changes ownership of a path inside a container.
+// The container must be running. Uses `docker exec --user root chown -R uid:gid path`.
+// Runs as root since container may have a non-root default user.
+//
+// Note: This requires CAP_CHOWN and CAP_DAC_OVERRIDE capabilities.
+// Prefer CopyToContainerWithOwner or WriteFileToContainerWithOwner which use
+// tar piping and don't require extra capabilities.
+func ChownInContainer(containerName, path, uid, gid string) error {
+	_, err := Run("exec", "--user", "root", containerName, "chown", "-R", uid+":"+gid, path)
+	return err
+}
+
+// CopyToContainerWithOwner copies a directory from the host to a running container,
+// setting ownership to the specified uid:gid. Uses tar piping which doesn't require
+// any special capabilities in the container.
+//
+// srcPath is a directory on the host.
+// containerName is the name or ID of a running container.
+// destDir is the parent directory inside the container (srcPath's basename will be created there).
+// uid and gid are the numeric user and group IDs for ownership.
+//
+// Example: CopyToContainerWithOwner("/tmp/foo/.claude", "mycontainer", "/home/user", "1000", "1000")
+// creates /home/user/.claude owned by 1000:1000.
+func CopyToContainerWithOwner(srcPath, containerName, destDir, uid, gid string) error {
+	// Get the base name of source to preserve directory name
+	baseName := filepath.Base(srcPath)
+
+	// Create tar on host with ownership, pipe to container
+	// tar -cf - --owner=UID --group=GID -C parentDir baseName | docker exec -i container tar -xf - -C destDir
+	tarCmd := exec.Command("tar", "-cf", "-",
+		"--owner="+uid, "--group="+gid,
+		"-C", filepath.Dir(srcPath), baseName)
+
+	dockerCmd := exec.Command("docker", "exec", "-i", containerName,
+		"tar", "-xf", "-", "-C", destDir)
+
+	// Connect tar stdout to docker stdin
+	pipe, err := tarCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create pipe: %w", err)
+	}
+	dockerCmd.Stdin = pipe
+
+	var tarStderr, dockerStderr bytes.Buffer
+	tarCmd.Stderr = &tarStderr
+	dockerCmd.Stderr = &dockerStderr
+
+	// Start both commands
+	if err := tarCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start tar: %w", err)
+	}
+	if err := dockerCmd.Start(); err != nil {
+		tarCmd.Process.Kill()
+		return fmt.Errorf("failed to start docker exec: %w", err)
+	}
+
+	// Wait for both to complete
+	tarErr := tarCmd.Wait()
+	dockerErr := dockerCmd.Wait()
+
+	if tarErr != nil {
+		return fmt.Errorf("tar failed: %w: %s", tarErr, tarStderr.String())
+	}
+	if dockerErr != nil {
+		return fmt.Errorf("docker exec tar failed: %w: %s", dockerErr, dockerStderr.String())
+	}
+
+	return nil
+}
+
+// WriteFileToContainerWithOwner writes content to a file inside a running container,
+// setting ownership to the specified uid:gid. Uses tar piping which doesn't require
+// any special capabilities in the container.
+//
+// containerName is the name or ID of a running container.
+// destPath is the absolute path inside the container (parent dirs will be created).
+// content is the file content to write.
+// uid and gid are the numeric user and group IDs for ownership.
+func WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid string) error {
+	// Create a temp directory with the file at the right relative path
+	tmpDir, err := os.MkdirTemp("", "cloister-inject-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Get the filename and destination directory
+	fileName := filepath.Base(destPath)
+	destDir := filepath.Dir(destPath)
+
+	// Write the file to temp directory
+	tmpFile := filepath.Join(tmpDir, fileName)
+	if err := os.WriteFile(tmpFile, []byte(content), 0o644); err != nil {
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+
+	// Ensure destination directory exists in container
+	mkdirCmd := exec.Command("docker", "exec", containerName, "mkdir", "-p", destDir)
+	if output, err := mkdirCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create destination directory: %w: %s", err, output)
+	}
+
+	// Create tar with ownership and pipe to container
+	tarCmd := exec.Command("tar", "-cf", "-",
+		"--owner="+uid, "--group="+gid,
+		"-C", tmpDir, fileName)
+
+	dockerCmd := exec.Command("docker", "exec", "-i", containerName,
+		"tar", "-xf", "-", "-C", destDir)
+
+	pipe, err := tarCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("failed to create pipe: %w", err)
+	}
+	dockerCmd.Stdin = pipe
+
+	var tarStderr, dockerStderr bytes.Buffer
+	tarCmd.Stderr = &tarStderr
+	dockerCmd.Stderr = &dockerStderr
+
+	if err := tarCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start tar: %w", err)
+	}
+	if err := dockerCmd.Start(); err != nil {
+		tarCmd.Process.Kill()
+		return fmt.Errorf("failed to start docker exec: %w", err)
+	}
+
+	tarErr := tarCmd.Wait()
+	dockerErr := dockerCmd.Wait()
+
+	if tarErr != nil {
+		return fmt.Errorf("tar failed: %w: %s", tarErr, tarStderr.String())
+	}
+	if dockerErr != nil {
+		return fmt.Errorf("docker exec tar failed: %w: %s", dockerErr, dockerStderr.String())
+	}
+
+	return nil
 }
 
 // WriteFileToContainer writes content to a file inside a container.

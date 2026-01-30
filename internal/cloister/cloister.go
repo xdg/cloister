@@ -62,14 +62,16 @@ func (d *defaultCredentialInjector) InjectCredentials(cfg *config.AgentConfig) (
 // FileCopier is the interface for copying files to containers.
 // This allows injecting mock implementations for testing.
 type FileCopier interface {
-	WriteFileToContainer(containerName, destPath, content string) error
+	// WriteFileToContainerWithOwner writes a file with the specified ownership.
+	// Uses tar piping which doesn't require extra container capabilities.
+	WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid string) error
 }
 
-// defaultFileCopier implements FileCopier using docker exec.
+// defaultFileCopier implements FileCopier using docker commands.
 type defaultFileCopier struct{}
 
-func (defaultFileCopier) WriteFileToContainer(containerName, destPath, content string) error {
-	return docker.WriteFileToContainer(containerName, destPath, content)
+func (defaultFileCopier) WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid string) error {
+	return docker.WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid)
 }
 
 // GuardianManager is the interface for guardian operations.
@@ -110,6 +112,7 @@ type options struct {
 	credentialInjector CredentialInjector
 	fileCopier         FileCopier
 	stderr             io.Writer
+	globalConfig       *config.GlobalConfig // Pre-loaded config (avoids double-load)
 }
 
 // WithManager sets a custom container manager for dependency injection.
@@ -157,6 +160,14 @@ func WithFileCopier(f FileCopier) Option {
 func WithStderr(w io.Writer) Option {
 	return func(o *options) {
 		o.stderr = w
+	}
+}
+
+// WithGlobalConfig sets a pre-loaded global config.
+// If set, Start() won't reload the config, avoiding duplicate log messages.
+func WithGlobalConfig(cfg *config.GlobalConfig) Option {
+	return func(o *options) {
+		o.globalConfig = cfg
 	}
 }
 
@@ -271,23 +282,40 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	envVars := token.ProxyEnvVars(tok, "")
 	var injectionConfig *claude.InjectionConfig
 
-	globalCfg, cfgErr := deps.configLoader.LoadGlobalConfig()
-	if cfgErr != nil {
-		log.Printf("cloister: warning: failed to load global config: %v", cfgErr)
-	} else if claudeCfg, ok := globalCfg.Agents["claude"]; ok && claudeCfg.AuthMethod != "" {
-		// Config has Claude credentials configured - use them
-		injectionConfig, err = deps.credentialInjector.InjectCredentials(&claudeCfg)
-		if err != nil {
-			return "", "", fmt.Errorf("credential injection failed: %w", err)
+	// Use pre-loaded config if available, otherwise load it
+	globalCfg := deps.globalConfig
+	if globalCfg == nil {
+		var cfgErr error
+		globalCfg, cfgErr = deps.configLoader.LoadGlobalConfig()
+		if cfgErr != nil {
+			log.Printf("cloister: warning: failed to load global config: %v", cfgErr)
 		}
+	}
 
-		// Add env vars from injection config
-		for key, value := range injectionConfig.EnvVars {
-			envVars = append(envVars, key+"="+value)
+	if globalCfg != nil {
+		if claudeCfg, ok := globalCfg.Agents["claude"]; ok && claudeCfg.AuthMethod != "" {
+			// Config has Claude credentials configured - use them
+			injectionConfig, err = deps.credentialInjector.InjectCredentials(&claudeCfg)
+			if err != nil {
+				return "", "", fmt.Errorf("credential injection failed: %w", err)
+			}
+
+			// Add env vars from injection config
+			for key, value := range injectionConfig.EnvVars {
+				envVars = append(envVars, key+"="+value)
+			}
+		} else {
+			// No config credentials - fall back to host env vars (Phase 1 behavior)
+			// This is deprecated - print warning once per Start() call
+			usedEnvVars := token.CredentialEnvVarsUsed()
+			if len(usedEnvVars) > 0 {
+				fmt.Fprintf(deps.stderr, "Warning: Using %s from environment.\n", usedEnvVars[0])
+				fmt.Fprintln(deps.stderr, "Run 'cloister setup claude' to store credentials in config.")
+			}
+			envVars = append(envVars, token.CredentialEnvVars()...)
 		}
 	} else {
-		// No config credentials - fall back to host env vars (Phase 1 behavior)
-		// This is deprecated - print warning once per Start() call
+		// Config load failed - fall back to host env vars
 		usedEnvVars := token.CredentialEnvVarsUsed()
 		if len(usedEnvVars) > 0 {
 			fmt.Fprintf(deps.stderr, "Warning: Using %s from environment.\n", usedEnvVars[0])
@@ -319,32 +347,57 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		}
 	}()
 
-	// Step 8: Inject user settings (~/.claude/) into the container
+	// Step 8: Start the container (needed for docker exec chown in later steps)
+	err = deps.manager.StartContainer(containerName)
+	if err != nil {
+		return "", "", err
+	}
+
+	// Step 9: Inject user settings (~/.claude/) into the container
 	// This is a one-way snapshot - writes inside container are isolated
-	// Uses docker cp which works on stopped containers
+	// After copying, chown to cloister user (docker cp preserves host uid)
 	if copyErr := injectUserSettings(containerName); copyErr != nil {
 		// Log but don't fail - missing settings is not fatal
 		// (user might not have ~/.claude/ on a fresh install)
 		_ = copyErr
 	}
 
-	// Step 9: Inject credential files into the container (for "existing" auth method)
-	// Uses docker cp via temp file, which works on stopped containers
+	// Step 10: Inject credential files into the container (for "existing" auth method)
+	// Uses tar piping to set ownership during copy (no extra capabilities needed)
 	if injectionConfig != nil {
 		for destPath, content := range injectionConfig.Files {
-			if writeErr := deps.fileCopier.WriteFileToContainer(containerName, destPath, content); writeErr != nil {
+			if writeErr := deps.fileCopier.WriteFileToContainerWithOwner(containerName, destPath, content, "1000", "1000"); writeErr != nil {
 				return "", "", fmt.Errorf("failed to write credential file %s: %w", destPath, writeErr)
 			}
 		}
 	}
 
-	// Step 10: Start the container
-	err = deps.manager.StartContainer(containerName)
-	if err != nil {
-		return "", "", err
-	}
-
 	return containerID, tok, nil
+}
+
+// userHomeDirFunc returns the user's home directory.
+// Can be overridden in tests to use a mock home directory.
+var userHomeDirFunc = os.UserHomeDir
+
+// settingsExcludePatterns lists directories/files to exclude when copying ~/.claude/
+// These are machine-local files that don't need to be in the container.
+// Based on ~/.claude/.gitignore patterns.
+var settingsExcludePatterns = []string{
+	".update.lock",
+	"debug/",
+	"file-history/",
+	"history.jsonl",
+	"plans/",
+	"plugins/install-counts-cache.json",
+	"projects/",
+	"shell-snapshots/",
+	"stats-cache.json",
+	"statsig/",
+	"tasks/",
+	"telemetry",
+	"todos/",
+	"cache",
+	"downloads/",
 }
 
 // injectUserSettings copies the host's ~/.claude/ directory into the container.
@@ -356,11 +409,14 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 // repositories (e.g., ~/.claude -> ~/dotfiles/claude) work correctly inside
 // the container where the original symlink target doesn't exist.
 //
+// Machine-local files (debug logs, history, todos, etc.) are excluded to keep
+// the copy fast and avoid leaking sensitive conversation history.
+//
 // Returns nil if ~/.claude/ doesn't exist on the host (fresh install).
 // Returns an error only if the directory exists but cannot be copied.
 func injectUserSettings(containerName string) error {
 	// Get the user's home directory
-	homeDir, err := os.UserHomeDir()
+	homeDir, err := userHomeDirFunc()
 	if err != nil {
 		return err
 	}
@@ -383,24 +439,59 @@ func injectUserSettings(containerName string) error {
 		return nil
 	}
 
-	// Create a temp directory to hold the dereferenced copy
+	// Create a temp directory to hold the filtered copy
 	tmpDir, err := os.MkdirTemp("", "cloister-claude-settings-*")
 	if err != nil {
 		return fmt.Errorf("failed to create temp directory: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Copy with symlink dereferencing using cp -rL
-	// This ensures symlinks to dotfiles repos are resolved to actual files
 	tmpClaudeDir := filepath.Join(tmpDir, ".claude")
-	cmd := exec.Command("cp", "-rL", claudeDir, tmpClaudeDir)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to copy with symlink dereferencing: %w: %s", err, output)
+
+	// Try rsync first (fast, supports exclusions natively)
+	// Fall back to cp -rL if rsync isn't available
+	if err := copyWithRsync(claudeDir, tmpClaudeDir); err != nil {
+		// rsync failed or not available, fall back to cp
+		if err := copyWithCp(claudeDir, tmpClaudeDir); err != nil {
+			return err
+		}
 	}
 
-	// Copy the dereferenced directory to the container
-	destPath := filepath.Join(containerHomeDir, ".claude")
-	return docker.CopyToContainer(tmpClaudeDir, containerName, destPath)
+	// Copy the filtered directory to the container home (creates .claude there)
+	// Uses tar piping which sets ownership during copy (no extra capabilities needed)
+	return docker.CopyToContainerWithOwner(tmpClaudeDir, containerName, containerHomeDir, "1000", "1000")
+}
+
+// copyWithRsync copies src to dest using rsync with exclusions and symlink dereferencing.
+// Returns an error if rsync is not available or fails.
+func copyWithRsync(src, dest string) error {
+	args := []string{
+		"-rL",             // recursive, dereference symlinks
+		"--copy-dirlinks", // also dereference symlinks to directories
+	}
+	for _, pattern := range settingsExcludePatterns {
+		args = append(args, "--exclude="+pattern)
+	}
+	// rsync needs trailing slash on source to copy contents, not the directory itself
+	args = append(args, src+"/", dest)
+
+	cmd := exec.Command("rsync", args...)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("rsync failed: %w: %s", err, output)
+	}
+	return nil
+}
+
+// copyWithCp copies src to dest using cp -rL (no exclusion support).
+// This is the fallback when rsync is not available.
+func copyWithCp(src, dest string) error {
+	cmd := exec.Command("cp", "-rL", src, dest)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("cp failed: %w: %s", err, output)
+	}
+	return nil
 }
 
 // Stop orchestrates stopping a cloister container with proper cleanup:

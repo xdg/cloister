@@ -2,9 +2,15 @@
 BINARY := cloister
 CMD_PATH := ./cmd/cloister
 
-# Test settings (set COUNT=1 to bust cache, COUNT=N for flakiness testing)
+# Test settings
+#   COUNT=1    - bust cache, COUNT=N for flakiness testing
+#   RUN=regex  - run only tests matching regex (-run flag)
+#   PKG=path   - test specific package(s), default ./...
 COUNT ?=
+RUN ?=
+PKG ?= ./...
 COUNT_FLAG = $(if $(COUNT),-count=$(COUNT))
+RUN_FLAG = $(if $(RUN),-run=$(RUN))
 
 # D2 diagram settings
 D2_SOURCES := $(wildcard docs/diagrams/*.d2)
@@ -23,13 +29,13 @@ install:
 	go install $(CMD_PATH)
 
 test:
-	go test $(COUNT_FLAG) ./...
+	go test $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
 
 test-race:
-	go test -race $(COUNT_FLAG) ./...
+	go test -race $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
 
 test-integration:
-	go test -tags=integration $(COUNT_FLAG) -p 1 ./...
+	go test -tags=integration $(COUNT_FLAG) $(RUN_FLAG) -p 1 $(PKG)
 
 test-all: test-integration
 

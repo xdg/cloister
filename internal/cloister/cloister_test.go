@@ -3,6 +3,8 @@ package cloister
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -36,23 +38,22 @@ func TestStartOptions_Fields(t *testing.T) {
 
 func TestInjectUserSettings_MissingClaudeDir(t *testing.T) {
 	// Test that injectUserSettings returns nil when ~/.claude/ doesn't exist.
-	// We can't easily test this without mocking UserHomeDir, but we can test
-	// that the function doesn't panic or error when called with an invalid
-	// container (the container doesn't need to exist for us to test the
-	// directory check logic - it will fail at docker cp, not at the stat).
+	// Skip if ~/.claude exists to avoid slow copy operation - integration tests
+	// cover the real behavior.
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("Failed to get home dir: %v", err)
+	}
+	claudeDir := filepath.Join(homeDir, ".claude")
+	if _, err := os.Stat(claudeDir); err == nil {
+		t.Skip("~/.claude exists - skipping to avoid slow copy; integration tests cover this")
+	}
 
-	// This test just verifies the function signature and basic behavior.
-	// The function should return an error only if docker cp fails on an
-	// existing directory, or nil if the directory doesn't exist.
-
-	// Since we can't mock UserHomeDir, we instead verify that the function
-	// handles the docker cp error gracefully when the container doesn't exist.
-	err := injectUserSettings("nonexistent-container-12345")
-
-	// If ~/.claude/ exists on this machine, we expect a docker error.
-	// If ~/.claude/ doesn't exist, we expect nil.
-	// Either is acceptable behavior - we're testing that it doesn't panic.
-	_ = err
+	// ~/.claude doesn't exist, so injectUserSettings should return nil (no-op)
+	err = injectUserSettings("nonexistent-container-12345")
+	if err != nil {
+		t.Errorf("Expected nil when ~/.claude doesn't exist, got: %v", err)
+	}
 }
 
 // mockManager is a test double for ContainerManager that records calls
@@ -260,10 +261,12 @@ type fileCopyCall struct {
 	containerName string
 	destPath      string
 	content       string
+	uid           string
+	gid           string
 }
 
-func (m *mockFileCopier) WriteFileToContainer(containerName, destPath, content string) error {
-	m.calls = append(m.calls, fileCopyCall{containerName, destPath, content})
+func (m *mockFileCopier) WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid string) error {
+	m.calls = append(m.calls, fileCopyCall{containerName, destPath, content, uid, gid})
 	return m.err
 }
 

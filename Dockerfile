@@ -84,6 +84,9 @@ RUN echo '{"hasCompletedOnboarding": true, "bypassPermissionsModeAccepted": true
 # 2. Add alias to skip permission prompts (cloister is the sandbox, not Claude)
 RUN echo "alias claude='claude --dangerously-skip-permissions'" >> /home/cloister/.bashrc
 
+# 3. Clean up backup files created during install/config
+RUN rm -f /home/cloister/.claude.json.backup.*
+
 # Working directory for projects
 WORKDIR /work
 

@@ -37,7 +37,8 @@ func runStart(cmd *cobra.Command, args []string) error {
 	// Step 0: Ensure config exists (creates default if missing)
 	// This must happen before starting the guardian so the config file
 	// exists when mounted into the container.
-	if _, err := config.LoadGlobalConfig(); err != nil {
+	globalCfg, err := config.LoadGlobalConfig()
+	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
 	}
 
@@ -99,7 +100,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		ProjectPath: gitRoot,
 		ProjectName: projectName,
 		BranchName:  branch,
-	})
+	}, cloister.WithGlobalConfig(globalCfg))
 	if err != nil {
 		// Check for common error conditions
 		if errors.Is(err, docker.ErrDockerNotRunning) {

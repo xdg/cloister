@@ -94,6 +94,7 @@ func (c *Config) BuildRunArgs() []string {
 	}
 
 	// Security hardening: drop all capabilities
+	// File injection uses tar piping with --owner/--group flags, so no extra capabilities needed
 	args = append(args, "--cap-drop=ALL")
 
 	// Security hardening: prevent privilege escalation
