@@ -16,6 +16,13 @@ var validLogLevels = map[string]bool{
 	"error": true,
 }
 
+// validAuthMethods defines the allowed auth_method values for agent configs.
+var validAuthMethods = map[string]bool{
+	"existing": true,
+	"token":    true,
+	"api_key":  true,
+}
+
 // ValidateGlobalConfig validates a parsed GlobalConfig, checking that all
 // fields contain valid values. It validates:
 //   - Port numbers in Listen fields (1-65535 or ":port" format)
@@ -82,6 +89,13 @@ func ValidateGlobalConfig(cfg *GlobalConfig) error {
 		}
 	}
 
+	// Validate agent configs
+	for name, agentCfg := range cfg.Agents {
+		if err := ValidateAgentConfig(&agentCfg, fmt.Sprintf("agents.%s", name)); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -144,4 +158,74 @@ func validateRegex(pattern, field string) error {
 		return fmt.Errorf("%s: invalid regex %q: %v", field, pattern, err)
 	}
 	return nil
+}
+
+// ValidateAgentConfig validates an AgentConfig, checking that credential fields
+// are consistent with the specified auth_method. It validates:
+//   - auth_method is one of: "existing", "token", "api_key" (if non-empty)
+//   - "token" method requires the token field to be set
+//   - "api_key" method requires the api_key field to be set
+//   - "existing" method requires no additional fields
+//
+// The fieldPrefix is prepended to error messages (e.g., "agents.claude").
+//
+// Returns nil if the config is valid, or an error with a clear message
+// indicating which field is invalid.
+func ValidateAgentConfig(cfg *AgentConfig, fieldPrefix string) error {
+	if cfg.AuthMethod == "" {
+		// No auth_method set - this is valid but may warrant a warning
+		// (warnings are handled separately by ValidateAgentConfigWarnings)
+		return nil
+	}
+
+	// Validate auth_method is a known value
+	if !validAuthMethods[cfg.AuthMethod] {
+		return fmt.Errorf("%s.auth_method: invalid value %q, must be one of: existing, token, api_key", fieldPrefix, cfg.AuthMethod)
+	}
+
+	// Validate required fields based on auth_method
+	switch cfg.AuthMethod {
+	case "token":
+		if cfg.Token == "" {
+			return fmt.Errorf("%s.token: required when auth_method is \"token\"", fieldPrefix)
+		}
+	case "api_key":
+		if cfg.APIKey == "" {
+			return fmt.Errorf("%s.api_key: required when auth_method is \"api_key\"", fieldPrefix)
+		}
+	case "existing":
+		// No additional fields required
+	}
+
+	return nil
+}
+
+// ValidateAgentConfigWarnings returns warnings for an AgentConfig.
+// Currently warns if no authentication is configured (auth_method not set
+// and no host environment variables would provide credentials).
+//
+// The fieldPrefix is prepended to warning messages (e.g., "agents.claude").
+// The hostEnvVars parameter lists environment variable names present on the host
+// that could provide credentials (e.g., "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN").
+//
+// Returns a slice of warning messages (empty if no warnings).
+func ValidateAgentConfigWarnings(cfg *AgentConfig, fieldPrefix string, hostEnvVars []string) []string {
+	var warnings []string
+
+	// Warn if no auth configured
+	if cfg.AuthMethod == "" {
+		// Check if any host env vars would provide credentials
+		hasHostEnvAuth := false
+		for _, envVar := range hostEnvVars {
+			if envVar != "" {
+				hasHostEnvAuth = true
+				break
+			}
+		}
+		if !hasHostEnvAuth {
+			warnings = append(warnings, fmt.Sprintf("%s: no authentication configured (auth_method not set)", fieldPrefix))
+		}
+	}
+
+	return warnings
 }

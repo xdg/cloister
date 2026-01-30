@@ -439,3 +439,249 @@ func TestValidateProjectConfig_EmptyPattern(t *testing.T) {
 		t.Errorf("ValidateProjectConfig() error = %v, want nil for empty pattern", err)
 	}
 }
+
+func TestValidateAgentConfig_ValidAuthMethods(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *AgentConfig
+	}{
+		{
+			name: "empty auth_method is valid",
+			cfg:  &AgentConfig{},
+		},
+		{
+			name: "existing auth_method",
+			cfg:  &AgentConfig{AuthMethod: "existing"},
+		},
+		{
+			name: "token auth_method with token",
+			cfg:  &AgentConfig{AuthMethod: "token", Token: "my-token"},
+		},
+		{
+			name: "api_key auth_method with api_key",
+			cfg:  &AgentConfig{AuthMethod: "api_key", APIKey: "sk-ant-123"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateAgentConfig(tt.cfg, "agents.claude")
+			if err != nil {
+				t.Errorf("ValidateAgentConfig() error = %v, want nil", err)
+			}
+		})
+	}
+}
+
+func TestValidateAgentConfig_InvalidAuthMethod(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *AgentConfig
+		wantErr string
+	}{
+		{
+			name:    "unknown auth_method",
+			cfg:     &AgentConfig{AuthMethod: "oauth"},
+			wantErr: "agents.claude.auth_method: invalid value \"oauth\", must be one of: existing, token, api_key",
+		},
+		{
+			name:    "typo in auth_method",
+			cfg:     &AgentConfig{AuthMethod: "tokens"},
+			wantErr: "agents.claude.auth_method: invalid value \"tokens\", must be one of: existing, token, api_key",
+		},
+		{
+			name:    "capitalized auth_method",
+			cfg:     &AgentConfig{AuthMethod: "TOKEN"},
+			wantErr: "agents.claude.auth_method: invalid value \"TOKEN\", must be one of: existing, token, api_key",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateAgentConfig(tt.cfg, "agents.claude")
+			if err == nil {
+				t.Fatal("ValidateAgentConfig() expected error, got nil")
+			}
+			if err.Error() != tt.wantErr {
+				t.Errorf("error = %q, want %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateAgentConfig_MissingRequiredFields(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *AgentConfig
+		wantErr string
+	}{
+		{
+			name:    "token auth_method without token",
+			cfg:     &AgentConfig{AuthMethod: "token"},
+			wantErr: "agents.claude.token: required when auth_method is \"token\"",
+		},
+		{
+			name:    "token auth_method with empty token",
+			cfg:     &AgentConfig{AuthMethod: "token", Token: ""},
+			wantErr: "agents.claude.token: required when auth_method is \"token\"",
+		},
+		{
+			name:    "api_key auth_method without api_key",
+			cfg:     &AgentConfig{AuthMethod: "api_key"},
+			wantErr: "agents.claude.api_key: required when auth_method is \"api_key\"",
+		},
+		{
+			name:    "api_key auth_method with empty api_key",
+			cfg:     &AgentConfig{AuthMethod: "api_key", APIKey: ""},
+			wantErr: "agents.claude.api_key: required when auth_method is \"api_key\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateAgentConfig(tt.cfg, "agents.claude")
+			if err == nil {
+				t.Fatal("ValidateAgentConfig() expected error, got nil")
+			}
+			if err.Error() != tt.wantErr {
+				t.Errorf("error = %q, want %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateAgentConfig_ExistingNoExtraFields(t *testing.T) {
+	// "existing" auth_method should not require any additional fields
+	cfg := &AgentConfig{
+		AuthMethod: "existing",
+		// Intentionally not setting Token or APIKey
+	}
+
+	err := ValidateAgentConfig(cfg, "agents.claude")
+	if err != nil {
+		t.Errorf("ValidateAgentConfig() error = %v, want nil for existing auth_method", err)
+	}
+}
+
+func TestValidateAgentConfigWarnings_NoAuth(t *testing.T) {
+	cfg := &AgentConfig{}
+	warnings := ValidateAgentConfigWarnings(cfg, "agents.claude", nil)
+
+	if len(warnings) != 1 {
+		t.Fatalf("expected 1 warning, got %d", len(warnings))
+	}
+	expected := "agents.claude: no authentication configured (auth_method not set)"
+	if warnings[0] != expected {
+		t.Errorf("warning = %q, want %q", warnings[0], expected)
+	}
+}
+
+func TestValidateAgentConfigWarnings_NoAuthWithHostEnv(t *testing.T) {
+	cfg := &AgentConfig{}
+	// Simulate host having ANTHROPIC_API_KEY set
+	warnings := ValidateAgentConfigWarnings(cfg, "agents.claude", []string{"some-api-key"})
+
+	if len(warnings) != 0 {
+		t.Errorf("expected no warnings when host env vars present, got %v", warnings)
+	}
+}
+
+func TestValidateAgentConfigWarnings_AuthConfigured(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  *AgentConfig
+	}{
+		{
+			name: "existing auth_method",
+			cfg:  &AgentConfig{AuthMethod: "existing"},
+		},
+		{
+			name: "token auth_method",
+			cfg:  &AgentConfig{AuthMethod: "token", Token: "my-token"},
+		},
+		{
+			name: "api_key auth_method",
+			cfg:  &AgentConfig{AuthMethod: "api_key", APIKey: "sk-ant-123"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := ValidateAgentConfigWarnings(tt.cfg, "agents.claude", nil)
+			if len(warnings) != 0 {
+				t.Errorf("expected no warnings when auth configured, got %v", warnings)
+			}
+		})
+	}
+}
+
+func TestValidateGlobalConfig_InvalidAgentConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *GlobalConfig
+		wantErr string
+	}{
+		{
+			name: "invalid auth_method in agent config",
+			cfg: &GlobalConfig{
+				Agents: map[string]AgentConfig{
+					"claude": {AuthMethod: "invalid"},
+				},
+			},
+			wantErr: "agents.claude.auth_method: invalid value \"invalid\"",
+		},
+		{
+			name: "token auth without token field",
+			cfg: &GlobalConfig{
+				Agents: map[string]AgentConfig{
+					"claude": {AuthMethod: "token"},
+				},
+			},
+			wantErr: "agents.claude.token: required when auth_method is \"token\"",
+		},
+		{
+			name: "api_key auth without api_key field",
+			cfg: &GlobalConfig{
+				Agents: map[string]AgentConfig{
+					"codex": {AuthMethod: "api_key"},
+				},
+			},
+			wantErr: "agents.codex.api_key: required when auth_method is \"api_key\"",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateGlobalConfig(tt.cfg)
+			if err == nil {
+				t.Fatal("ValidateGlobalConfig() expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateGlobalConfig_ValidAgentConfig(t *testing.T) {
+	cfg := &GlobalConfig{
+		Agents: map[string]AgentConfig{
+			"claude": {
+				AuthMethod: "token",
+				Token:      "my-oauth-token",
+			},
+			"codex": {
+				AuthMethod: "api_key",
+				APIKey:     "sk-openai-123",
+			},
+			"gemini": {
+				AuthMethod: "existing",
+			},
+		},
+	}
+
+	err := ValidateGlobalConfig(cfg)
+	if err != nil {
+		t.Errorf("ValidateGlobalConfig() error = %v, want nil", err)
+	}
+}

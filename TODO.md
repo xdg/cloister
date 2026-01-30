@@ -110,11 +110,11 @@ Extend the configuration types to support credential storage. **All tests sandbo
 - [x] **Test (unit)**: `DefaultGlobalConfig()` returns config with `agents["claude"].SkipPerms == true`
 
 ### 3.1.3 Add config validation for agent credentials
-- [ ] In `internal/config/validate.go`, add validation:
+- [x] In `internal/config/validate.go`, add validation:
   - Error if `auth_method` set but required field missing (e.g., `token` for "token" method)
   - Warn if `auth_method` not set and no host env vars (no auth configured)
   - Validate `auth_method` is one of: "existing", "token", "api_key"
-- [ ] **Test (unit)**: Validation returns expected errors/warnings for each case
+- [x] **Test (unit)**: Validation returns expected errors/warnings for each case
 
 ---
 
