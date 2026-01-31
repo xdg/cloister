@@ -394,43 +394,34 @@ Implement the approval server (:9999) with htmx-based UI for human review.
 - [x] **Test (manual)**: Click Approve → request disappears, shows "Approved"
 - [x] **Test (manual)**: Click Deny → request disappears, shows "Denied"
 
-### 4.6.8 Implement SSE for real-time updates
-- [ ] Create `GET /events` SSE endpoint
-- [ ] Broadcast events when:
-  - New request added to queue
-  - Request approved/denied/timed out
-- [ ] Client subscribes on page load
-- [ ] Use htmx SSE extension for updates
-- [ ] **Test (unit)**: SSE endpoint sends correctly formatted events
-- [ ] **Test (manual)**: New request appears without page refresh
-
 ---
 
 ## Phase 4.7: hostexec Wrapper
 
 Create the in-container wrapper script that communicates with the request server.
 
-### 4.7.1 Create hostexec script
-- [ ] Create `docker/hostexec` bash script (per container-image.md spec):
-  - Validate `CLOISTER_GUARDIAN_HOST` and `CLOISTER_TOKEN` are set
-  - Validate at least one argument provided
-  - Send POST to `http://${CLOISTER_GUARDIAN_HOST}:9998/request`
-  - Include `X-Cloister-Token` header
-  - Use `--max-time 300` for 5-minute timeout
-  - Parse JSON response with jq
-  - Print stdout/stderr appropriately
-  - Exit with command's exit code
+### 4.7.1 Validate hostexec script
+- [ ] Verify `hostexec` script in repo root matches spec (per container-image.md):
+  - Validates `CLOISTER_GUARDIAN_HOST` and `CLOISTER_TOKEN` are set
+  - Validates at least one argument provided
+  - Sends POST to `http://${CLOISTER_GUARDIAN_HOST}:9998/request`
+  - Includes `X-Cloister-Token` header
+  - Uses `--max-time 300` for 5-minute timeout
+  - Parses JSON response with jq
+  - Prints stdout/stderr appropriately
+  - Exits with command's exit code
 - [ ] **Test (unit)**: Script syntax check (`bash -n`)
 
 ### 4.7.2 Handle response statuses
-- [ ] `approved` or `auto_approved`: print output, exit with exit_code
-- [ ] `denied`: print reason to stderr, exit 1
-- [ ] `timeout`: print timeout message to stderr, exit 1
-- [ ] `error`: print error to stderr, exit 1
+- [ ] Verify script handles all statuses:
+  - `approved` or `auto_approved`: print output, exit with exit_code
+  - `denied`: print reason to stderr, exit 1
+  - `timeout`: print timeout message to stderr, exit 1
+  - `error`: print error to stderr, exit 1
 - [ ] **Test (integration)**: Each status handled correctly
 
 ### 4.7.3 Add to container image
-- [ ] Copy `hostexec` to `/usr/local/bin/hostexec` in Dockerfile
+- [ ] Copy `hostexec` (from repo root) to `/usr/local/bin/hostexec` in Dockerfile
 - [ ] Set executable permissions
 - [ ] **Test (integration)**: `hostexec` available in container
 
@@ -441,11 +432,29 @@ Create the in-container wrapper script that communicates with the request server
 
 ---
 
-## Phase 4.8: Audit Logging
+## Phase 4.8: SSE for Real-Time Updates
+
+Complete the approval UI with real-time updates via Server-Sent Events.
+
+### 4.8.1 Implement SSE endpoint
+- [ ] Create `GET /events` SSE endpoint
+- [ ] Broadcast events when:
+  - New request added to queue
+  - Request approved/denied/timed out
+- [ ] **Test (unit)**: SSE endpoint sends correctly formatted events
+
+### 4.8.2 Integrate SSE into approval UI
+- [ ] Client subscribes on page load
+- [ ] Use htmx SSE extension or native EventSource for updates
+- [ ] **Test (manual)**: New request appears without page refresh
+
+---
+
+## Phase 4.9: Audit Logging
 
 Add logging for all hostexec requests and responses.
 
-### 4.8.1 Define audit log format
+### 4.9.1 Define audit log format
 - [ ] Request event: `HOSTEXEC REQUEST project=X branch=Y cloister=Z cmd="..."`
 - [ ] Auto-approve event: `HOSTEXEC AUTO_APPROVE ... pattern="^..."`
 - [ ] Approve event: `HOSTEXEC APPROVE ... user="..."` (user from approval UI)
@@ -454,22 +463,22 @@ Add logging for all hostexec requests and responses.
 - [ ] Timeout event: `HOSTEXEC TIMEOUT ...`
 - [ ] Follow existing log format from config-reference.md
 
-### 4.8.2 Integrate with existing logging
+### 4.9.2 Integrate with existing logging
 - [ ] Use existing guardian logger
 - [ ] Log to unified audit log (`~/.local/share/cloister/audit.log`)
 - [ ] Log to per-cloister log if enabled
 - [ ] **Test (unit)**: Mock logger, verify correct format
 
-### 4.8.3 Add structured fields
+### 4.9.3 Add structured fields
 - [ ] Include all relevant metadata: project, branch, cloister, agent
 - [ ] Include execution duration for completed commands
 - [ ] **Test (unit)**: All fields present in log output
 
 ---
 
-## Phase 4.9: Documentation and Integration
+## Phase 4.10: Documentation and Integration
 
-### 4.9.1 Update ~/.claude/rules/cloister.md
+### 4.10.1 Update ~/.claude/rules/cloister.md
 - [ ] Review and update the rules file created in Phase 3.4.6
 - [ ] Ensure hostexec usage instructions are accurate:
   - When to use hostexec (git push, docker build, etc.)
@@ -478,17 +487,17 @@ Add logging for all hostexec requests and responses.
   - How to check if command was approved
 - [ ] **Test (manual)**: Rules file content is helpful for Claude
 
-### 4.9.2 Update docs/guardian-api.md if needed
+### 4.10.2 Update docs/guardian-api.md if needed
 - [ ] Verify API documentation matches implementation
 - [ ] Add any undocumented endpoints or fields
 - [ ] **Test (manual)**: API docs accurate
 
-### 4.9.3 Update docs/container-image.md if needed
+### 4.10.3 Update docs/container-image.md if needed
 - [ ] Verify hostexec script documentation matches implementation
 - [ ] Document environment variables
 - [ ] **Test (manual)**: Container image docs accurate
 
-### 4.9.4 End-to-end verification
+### 4.10.4 End-to-end verification
 - [ ] **Test (manual)**: Full flow from Claude → hostexec → approval UI → execution → output
 - [ ] **Test (manual)**: Auto-approve flow works without UI interaction
 - [ ] **Test (manual)**: Denial flow shows clear message in container
