@@ -11,6 +11,7 @@ import (
 
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/executor"
+	executorclient "github.com/xdg/cloister/internal/guardian/executor"
 )
 
 // requireDocker skips the test if Docker is not available.
@@ -161,6 +162,48 @@ func TestGuardian_Lifecycle(t *testing.T) {
 		}
 		if !executor.IsDaemonRunning(state) {
 			t.Errorf("Executor daemon should be running (PID %d)", state.PID)
+		}
+	})
+
+	t.Run("Executor_ClientCanExecuteCommand", func(t *testing.T) {
+		// Load daemon state to get the socket path and secret
+		state, err := executor.LoadDaemonState()
+		if err != nil {
+			t.Fatalf("LoadDaemonState() error: %v", err)
+		}
+		if state == nil {
+			t.Fatal("Expected daemon state to exist after guardian start")
+		}
+
+		// Create executor client with socket path and secret from daemon state
+		client := executorclient.NewClient(state.SocketPath, state.Secret)
+
+		// Execute a simple echo command
+		req := executor.ExecuteRequest{
+			Token:   "test-token", // Token is validated by the guardian, not the executor
+			Command: "echo",
+			Args:    []string{"hello"},
+		}
+
+		resp, err := client.Execute(req)
+		if err != nil {
+			t.Fatalf("Execute() error: %v", err)
+		}
+
+		// Verify the response
+		if resp.Status != executor.StatusCompleted {
+			t.Errorf("Status = %q, want %q", resp.Status, executor.StatusCompleted)
+		}
+		if resp.ExitCode != 0 {
+			t.Errorf("ExitCode = %d, want 0", resp.ExitCode)
+		}
+		// Note: echo adds a newline, so we expect "hello\n"
+		expectedStdout := "hello\n"
+		if resp.Stdout != expectedStdout {
+			t.Errorf("Stdout = %q, want %q", resp.Stdout, expectedStdout)
+		}
+		if resp.Stderr != "" {
+			t.Errorf("Stderr = %q, want empty", resp.Stderr)
 		}
 	})
 

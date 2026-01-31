@@ -308,14 +308,14 @@ Implement the host-side process that executes approved commands.
 Connect the guardian container to the host executor via the Unix socket.
 
 ### 4.5.1 Create executor client in guardian
-- [ ] Create `internal/guardian/executor/client.go`:
+- [x] Create `internal/guardian/executor/client.go`:
   - Connect to socket at `/var/run/hostexec.sock`
   - Send execute request as JSON
   - Read response
   - Close connection
-- [ ] Handle connection errors gracefully
-- [ ] **Test (unit)**: Mock socket, verify wire format
-- [ ] **Test (integration)**: Guardian can execute command via socket
+- [x] Handle connection errors gracefully
+- [x] **Test (unit)**: Mock socket, verify wire format
+- [x] **Test (integration)**: Guardian can execute command via socket
 
 ### 4.5.2 Wire executor client into request flow
 - [ ] After approval (auto or manual), call executor client
