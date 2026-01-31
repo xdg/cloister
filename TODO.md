@@ -302,10 +302,10 @@ Ensure Claude Code works correctly inside the container. **All tests require Doc
 - [x] Remove "Phase 1 limitation" notes about manual credential setup
 
 ### 3.5.2 Update docs/agent-configuration.md
-- [ ] Add complete setup wizard documentation
-- [ ] Document credential priority order (config > env vars)
-- [ ] Document skip_permissions option and why it defaults to true
-- [ ] Note env var fallback is deprecated
+- [x] Add complete setup wizard documentation
+- [x] Document credential priority order (config > env vars)
+- [x] Document skip_permissions option and why it defaults to true
+- [x] Note env var fallback is deprecated
 
 ### 3.5.3 Remove Phase 1 workaround comments
 - [ ] Remove "TEMPORARY: Phase 1 workaround" comments from `internal/token/credentials.go`

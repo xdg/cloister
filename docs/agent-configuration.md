@@ -65,6 +65,8 @@ Key is stored in `~/.config/cloister/config.yaml` under `agents.claude.api_key` 
 
 If no credentials are configured via `cloister setup claude`, cloister will fall back to host environment variables (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`). This is deprecated and will show a warning. Run `cloister setup claude` to migrate.
 
+**Priority order:** Config credentials (from `cloister setup claude`) always take priority over environment variables. If both are present, the config value is used.
+
 ### Container Configuration
 
 **What cloister does at container launch:**
@@ -128,6 +130,18 @@ If no credentials are configured via `cloister setup claude`, cloister will fall
 Claude Code has its own permission system that prompts before file edits, shell commands, etc. Inside a cloister, this is redundant — the cloister *is* the sandbox. Disabling Claude's prompts allows uninterrupted operation while cloister enforces the actual security boundary.
 
 There is no config file option for `--dangerously-skip-permissions`, so we use a shell alias.
+
+**Configuration:**
+
+Permission skipping is controlled by `agents.claude.skip_permissions` in `~/.config/cloister/config.yaml`:
+
+```yaml
+agents:
+  claude:
+    skip_permissions: true  # default
+```
+
+This defaults to `true`. Set to `false` to omit the alias, allowing Claude to use its normal permission prompts inside the container.
 
 **Important: macOS credential handling**
 
