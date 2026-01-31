@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
 )
@@ -219,7 +221,9 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, nil)
+	mockExec := &mockCommandExecutor{}
+
+	server := NewServer(lookup, matcher, mockExec)
 	server.Addr = ":0" // Use random port
 
 	if err := server.Start(); err != nil {
@@ -282,6 +286,27 @@ func (m *mockPatternMatcher) Match(cmd string) patterns.MatchResult {
 	return patterns.MatchResult{Action: patterns.Deny}
 }
 
+// mockCommandExecutor implements CommandExecutor for testing
+type mockCommandExecutor struct {
+	responses map[string]*executor.ExecuteResponse
+	err       error
+}
+
+func (m *mockCommandExecutor) Execute(req executor.ExecuteRequest) (*executor.ExecuteResponse, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	if resp, ok := m.responses[req.Command]; ok {
+		return resp, nil
+	}
+	// Default to a successful response
+	return &executor.ExecuteResponse{
+		Status:   executor.StatusCompleted,
+		ExitCode: 0,
+		Stdout:   "mock output for: " + req.Command,
+	}, nil
+}
+
 func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 	lookup := mockTokenLookup(map[string]TokenInfo{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
@@ -293,7 +318,17 @@ func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, nil)
+	mockExec := &mockCommandExecutor{
+		responses: map[string]*executor.ExecuteResponse{
+			"docker compose ps": {
+				Status:   executor.StatusCompleted,
+				ExitCode: 0,
+				Stdout:   "NAME    STATUS\nweb     running",
+			},
+		},
+	}
+
+	server := NewServer(lookup, matcher, mockExec)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "docker compose ps"}
@@ -320,13 +355,13 @@ func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 	if resp.Pattern != "^docker compose ps$" {
 		t.Errorf("expected pattern '^docker compose ps$', got %q", resp.Pattern)
 	}
-	// ExitCode should be 0 (placeholder success)
+	// ExitCode should be 0 (from mock executor)
 	if resp.ExitCode != 0 {
 		t.Errorf("expected exit_code 0, got %d", resp.ExitCode)
 	}
-	// Stdout should contain placeholder message
-	if resp.Stdout == "" {
-		t.Error("expected stdout to contain placeholder message")
+	// Stdout should contain the mock output
+	if !strings.Contains(resp.Stdout, "NAME") {
+		t.Errorf("expected stdout to contain output, got %q", resp.Stdout)
 	}
 }
 
@@ -716,5 +751,375 @@ func TestServer_HandleRequest_GETReturns405(t *testing.T) {
 	// Go's net/http returns 405 Method Not Allowed for unmatched methods
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, resp.StatusCode)
+	}
+}
+
+// Tests for Phase 4.5.2: Executor wiring
+
+func TestServer_HandleRequest_AutoApprove_ExecutorCalled(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"echo hello": {Action: patterns.AutoApprove, Pattern: "^echo .*$"},
+		},
+	}
+
+	mockExec := &mockCommandExecutor{
+		responses: map[string]*executor.ExecuteResponse{
+			"echo hello": {
+				Status:   executor.StatusCompleted,
+				ExitCode: 0,
+				Stdout:   "hello\n",
+			},
+		},
+	}
+
+	server := NewServer(lookup, matcher, mockExec)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "echo hello"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "test-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "auto_approved" {
+		t.Errorf("expected status 'auto_approved', got %q", resp.Status)
+	}
+	if resp.Pattern != "^echo .*$" {
+		t.Errorf("expected pattern '^echo .*$', got %q", resp.Pattern)
+	}
+	if resp.ExitCode != 0 {
+		t.Errorf("expected exit_code 0, got %d", resp.ExitCode)
+	}
+	if resp.Stdout != "hello\n" {
+		t.Errorf("expected stdout 'hello\\n', got %q", resp.Stdout)
+	}
+}
+
+func TestServer_HandleRequest_AutoApprove_NilExecutor(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"echo hello": {Action: patterns.AutoApprove, Pattern: "^echo .*$"},
+		},
+	}
+
+	// Server with nil executor should return error
+	server := NewServer(lookup, matcher, nil)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "echo hello"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "test-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "error" {
+		t.Errorf("expected status 'error', got %q", resp.Status)
+	}
+	if !strings.Contains(resp.Reason, "not configured") {
+		t.Errorf("expected reason to contain 'not configured', got %q", resp.Reason)
+	}
+}
+
+func TestServer_HandleRequest_AutoApprove_ExecutorError(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"echo hello": {Action: patterns.AutoApprove, Pattern: "^echo .*$"},
+		},
+	}
+
+	mockExec := &mockCommandExecutor{
+		err: errors.New("connection refused"),
+	}
+
+	server := NewServer(lookup, matcher, mockExec)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "echo hello"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "test-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "error" {
+		t.Errorf("expected status 'error', got %q", resp.Status)
+	}
+	if !strings.Contains(resp.Reason, "connection refused") {
+		t.Errorf("expected reason to contain 'connection refused', got %q", resp.Reason)
+	}
+}
+
+func TestServer_HandleRequest_AutoApprove_ExecutorTimeout(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"slow command": {Action: patterns.AutoApprove, Pattern: "^slow .*$"},
+		},
+	}
+
+	mockExec := &mockCommandExecutor{
+		responses: map[string]*executor.ExecuteResponse{
+			"slow command": {
+				Status:   executor.StatusTimeout,
+				ExitCode: -1,
+				Stdout:   "partial output",
+				Error:    "command timed out after 30s",
+			},
+		},
+	}
+
+	server := NewServer(lookup, matcher, mockExec)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "slow command"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "test-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "timeout" {
+		t.Errorf("expected status 'timeout', got %q", resp.Status)
+	}
+	if !strings.Contains(resp.Reason, "timed out") {
+		t.Errorf("expected reason to contain 'timed out', got %q", resp.Reason)
+	}
+	// Should still include partial output
+	if resp.Stdout != "partial output" {
+		t.Errorf("expected partial stdout, got %q", resp.Stdout)
+	}
+}
+
+func TestServer_HandleRequest_AutoApprove_CommandFailed(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"failing command": {Action: patterns.AutoApprove, Pattern: "^failing .*$"},
+		},
+	}
+
+	mockExec := &mockCommandExecutor{
+		responses: map[string]*executor.ExecuteResponse{
+			"failing command": {
+				Status:   executor.StatusCompleted,
+				ExitCode: 1,
+				Stderr:   "error: command failed",
+			},
+		},
+	}
+
+	server := NewServer(lookup, matcher, mockExec)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "failing command"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "test-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Even with non-zero exit code, status should be auto_approved (command completed)
+	if resp.Status != "auto_approved" {
+		t.Errorf("expected status 'auto_approved', got %q", resp.Status)
+	}
+	if resp.ExitCode != 1 {
+		t.Errorf("expected exit_code 1, got %d", resp.ExitCode)
+	}
+	if resp.Stderr != "error: command failed" {
+		t.Errorf("expected stderr 'error: command failed', got %q", resp.Stderr)
+	}
+}
+
+func TestMapExecutorResponse(t *testing.T) {
+	tests := []struct {
+		name     string
+		execResp *executor.ExecuteResponse
+		status   string
+		pattern  string
+		want     CommandResponse
+	}{
+		{
+			name: "completed with approved status",
+			execResp: &executor.ExecuteResponse{
+				Status:   executor.StatusCompleted,
+				ExitCode: 0,
+				Stdout:   "output",
+			},
+			status:  "approved",
+			pattern: "",
+			want: CommandResponse{
+				Status:   "approved",
+				ExitCode: 0,
+				Stdout:   "output",
+			},
+		},
+		{
+			name: "completed with auto_approved status and pattern",
+			execResp: &executor.ExecuteResponse{
+				Status:   executor.StatusCompleted,
+				ExitCode: 0,
+				Stdout:   "output",
+			},
+			status:  "auto_approved",
+			pattern: "^test$",
+			want: CommandResponse{
+				Status:   "auto_approved",
+				Pattern:  "^test$",
+				ExitCode: 0,
+				Stdout:   "output",
+			},
+		},
+		{
+			name: "timeout with error message",
+			execResp: &executor.ExecuteResponse{
+				Status: executor.StatusTimeout,
+				Error:  "custom timeout message",
+				Stdout: "partial",
+			},
+			status:  "approved",
+			pattern: "",
+			want: CommandResponse{
+				Status: "timeout",
+				Reason: "custom timeout message",
+				Stdout: "partial",
+			},
+		},
+		{
+			name: "timeout without error message",
+			execResp: &executor.ExecuteResponse{
+				Status: executor.StatusTimeout,
+			},
+			status:  "approved",
+			pattern: "",
+			want: CommandResponse{
+				Status: "timeout",
+				Reason: "command execution timed out",
+			},
+		},
+		{
+			name: "error status",
+			execResp: &executor.ExecuteResponse{
+				Status: executor.StatusError,
+				Error:  "command not found",
+			},
+			status:  "approved",
+			pattern: "",
+			want: CommandResponse{
+				Status: "error",
+				Reason: "command not found",
+			},
+		},
+		{
+			name: "unknown status",
+			execResp: &executor.ExecuteResponse{
+				Status: "unknown",
+			},
+			status:  "approved",
+			pattern: "",
+			want: CommandResponse{
+				Status: "error",
+				Reason: "unknown executor status: unknown",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mapExecutorResponse(tt.execResp, tt.status, tt.pattern)
+			if got.Status != tt.want.Status {
+				t.Errorf("Status = %q, want %q", got.Status, tt.want.Status)
+			}
+			if got.Pattern != tt.want.Pattern {
+				t.Errorf("Pattern = %q, want %q", got.Pattern, tt.want.Pattern)
+			}
+			if got.Reason != tt.want.Reason {
+				t.Errorf("Reason = %q, want %q", got.Reason, tt.want.Reason)
+			}
+			if got.ExitCode != tt.want.ExitCode {
+				t.Errorf("ExitCode = %d, want %d", got.ExitCode, tt.want.ExitCode)
+			}
+			if got.Stdout != tt.want.Stdout {
+				t.Errorf("Stdout = %q, want %q", got.Stdout, tt.want.Stdout)
+			}
+			if got.Stderr != tt.want.Stderr {
+				t.Errorf("Stderr = %q, want %q", got.Stderr, tt.want.Stderr)
+			}
+		})
 	}
 }

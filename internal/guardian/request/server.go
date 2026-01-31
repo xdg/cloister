@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
 )
@@ -28,11 +29,11 @@ type PatternMatcher interface {
 	Match(cmd string) patterns.MatchResult
 }
 
-// Executor executes approved commands on the host.
-// This interface will be implemented in Phase 4.4.
-type Executor interface {
-	// Execute runs the command and returns the result.
-	Execute(ctx context.Context, cmd string) (stdout, stderr string, exitCode int, err error)
+// CommandExecutor executes approved commands on the host via the executor socket.
+// This interface wraps the executor client for testability.
+type CommandExecutor interface {
+	// Execute sends an execution request to the host executor and returns the response.
+	Execute(req executor.ExecuteRequest) (*executor.ExecuteResponse, error)
 }
 
 // Server handles hostexec command requests from cloister containers.
@@ -49,9 +50,9 @@ type Server struct {
 	// If nil, all commands require manual approval.
 	PatternMatcher PatternMatcher
 
-	// Executor executes approved commands.
+	// CommandExecutor executes approved commands via the host executor socket.
 	// If nil, commands will return a "not implemented" response.
-	Executor Executor
+	CommandExecutor CommandExecutor
 
 	// Queue holds pending requests awaiting human approval.
 	// If nil, ManualApprove commands will be denied.
@@ -64,14 +65,14 @@ type Server struct {
 }
 
 // NewServer creates a new request server.
-// The tokenLookup is required; patternMatcher and executor may be nil
-// (they will be implemented in later phases).
-func NewServer(tokenLookup TokenLookup, patternMatcher PatternMatcher, executor Executor) *Server {
+// The tokenLookup is required; patternMatcher and commandExecutor may be nil
+// (commandExecutor is optional during initial setup).
+func NewServer(tokenLookup TokenLookup, patternMatcher PatternMatcher, commandExecutor CommandExecutor) *Server {
 	return &Server{
-		Addr:           fmt.Sprintf(":%d", DefaultRequestPort),
-		TokenLookup:    tokenLookup,
-		PatternMatcher: patternMatcher,
-		Executor:       executor,
+		Addr:            fmt.Sprintf(":%d", DefaultRequestPort),
+		TokenLookup:     tokenLookup,
+		PatternMatcher:  patternMatcher,
+		CommandExecutor: commandExecutor,
 	}
 }
 
@@ -184,14 +185,8 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	switch result.Action {
 	case patterns.AutoApprove:
 		// Auto-approved: proceed to execution
-		// Phase 4.4/4.5 will add actual command execution via the Executor.
-		// For now, return a placeholder success response.
-		s.writeJSON(w, http.StatusOK, CommandResponse{
-			Status:   "auto_approved",
-			Pattern:  result.Pattern,
-			ExitCode: 0,
-			Stdout:   "[placeholder: command execution not yet implemented]",
-		})
+		resp := s.executeCommand(info.Token, req.Cmd, "auto_approved", result.Pattern)
+		s.writeJSON(w, http.StatusOK, resp)
 
 	case patterns.ManualApprove:
 		// Manual approval required: queue for human review
@@ -260,4 +255,67 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// executeCommand runs the command through the executor and returns a CommandResponse.
+// The status parameter is used for the response status (e.g., "approved" or "auto_approved").
+// The pattern parameter is included in the response for auto_approved commands.
+func (s *Server) executeCommand(token, cmd, status, pattern string) CommandResponse {
+	if s.CommandExecutor == nil {
+		return CommandResponse{
+			Status: "error",
+			Reason: "command execution not configured",
+		}
+	}
+
+	// Build the executor request
+	// The command string is passed as-is; the host executor will parse it
+	execReq := executor.ExecuteRequest{
+		Token:   token,
+		Command: cmd,
+		// Workdir, Args, Env, and TimeoutMs can be extended later
+	}
+
+	execResp, err := s.CommandExecutor.Execute(execReq)
+	if err != nil {
+		return CommandResponse{
+			Status: "error",
+			Reason: err.Error(),
+		}
+	}
+
+	// Map executor response to command response
+	return mapExecutorResponse(execResp, status, pattern)
+}
+
+// mapExecutorResponse converts an executor.ExecuteResponse to a CommandResponse.
+// The status parameter overrides the response status for approved commands.
+// The pattern is included for auto_approved commands.
+func mapExecutorResponse(execResp *executor.ExecuteResponse, status, pattern string) CommandResponse {
+	resp := CommandResponse{
+		Pattern:  pattern,
+		ExitCode: execResp.ExitCode,
+		Stdout:   execResp.Stdout,
+		Stderr:   execResp.Stderr,
+	}
+
+	// Map executor status to command response status
+	switch execResp.Status {
+	case executor.StatusCompleted:
+		resp.Status = status // Use the provided status (approved/auto_approved)
+	case executor.StatusTimeout:
+		resp.Status = "timeout"
+		resp.Reason = "command execution timed out"
+		if execResp.Error != "" {
+			resp.Reason = execResp.Error
+		}
+	case executor.StatusError:
+		resp.Status = "error"
+		resp.Reason = execResp.Error
+	default:
+		resp.Status = "error"
+		resp.Reason = "unknown executor status: " + execResp.Status
+	}
+
+	return resp
 }

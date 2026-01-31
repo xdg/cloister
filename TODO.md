@@ -318,10 +318,10 @@ Connect the guardian container to the host executor via the Unix socket.
 - [x] **Test (integration)**: Guardian can execute command via socket
 
 ### 4.5.2 Wire executor client into request flow
-- [ ] After approval (auto or manual), call executor client
-- [ ] Map executor response to command response
-- [ ] Return to waiting request handler
-- [ ] **Test (unit)**: Approved request → executor called → response returned
+- [x] After approval (auto or manual), call executor client
+- [x] Map executor response to command response
+- [x] Return to waiting request handler
+- [x] **Test (unit)**: Approved request → executor called → response returned
 
 ### 4.5.3 Handle executor errors
 - [ ] Connection refused → return error response

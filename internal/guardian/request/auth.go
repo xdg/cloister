@@ -15,6 +15,7 @@ const TokenHeader = "X-Cloister-Token"
 type TokenInfo struct {
 	CloisterName string
 	ProjectName  string
+	Token        string // The raw token value for passing to executor
 }
 
 // TokenLookup validates a token and returns its associated info.
@@ -58,6 +59,9 @@ func AuthMiddleware(lookup TokenLookup) func(http.Handler) http.Handler {
 				http.Error(w, "Unauthorized: invalid token", http.StatusUnauthorized)
 				return
 			}
+
+			// Store the raw token value for passing to executor
+			info.Token = token
 
 			// Attach TokenInfo to context and continue
 			ctx := context.WithValue(r.Context(), tokenInfoKey, info)
