@@ -75,7 +75,7 @@ Phase 2 (Config) ✓
 Add the request server (:9998) to the guardian container for receiving hostexec commands.
 
 ### 4.1.1 Define request/response types
-- [ ] Create `internal/guardian/request/types.go` with request and response structs:
+- [x] Create `internal/guardian/request/types.go` with request and response structs:
   ```go
   type CommandRequest struct {
       Cmd string `json:"cmd"`
@@ -89,24 +89,24 @@ Add the request server (:9998) to the guardian container for receiving hostexec 
       Stderr   string `json:"stderr,omitempty"`
   }
   ```
-- [ ] **Test (unit)**: JSON marshal/unmarshal round-trip for all response variants
+- [x] **Test (unit)**: JSON marshal/unmarshal round-trip for all response variants
 
 ### 4.1.2 Implement token-based authentication middleware
-- [ ] Create `internal/guardian/request/auth.go` with middleware that:
+- [x] Create `internal/guardian/request/auth.go` with middleware that:
   - Extracts `X-Cloister-Token` header
   - Looks up token in guardian's token registry
   - Returns 401 if missing/invalid
   - Attaches cloister metadata to request context
-- [ ] **Test (unit)**: Missing header → 401; invalid token → 401; valid token → context populated
+- [x] **Test (unit)**: Missing header → 401; invalid token → 401; valid token → context populated
 
 ### 4.1.3 Create request server skeleton
-- [ ] Create `internal/guardian/request/server.go` with:
+- [x] Create `internal/guardian/request/server.go` with:
   - `NewServer(tokenRegistry, patternMatcher, executor)` constructor
   - `POST /request` handler (returns placeholder response for now)
   - Bind to port 9998 on `cloister-net`
-- [ ] Wire into guardian startup in `internal/guardian/guardian.go`
-- [ ] **Test (unit)**: Server starts, `/request` endpoint responds
-- [ ] **Test (integration)**: Container can reach request server via `cloister-guardian:9998`
+- [x] Wire into guardian startup in `internal/guardian/guardian.go`
+- [x] **Test (unit)**: Server starts, `/request` endpoint responds
+- [x] **Test (integration)**: Container can reach request server via `cloister-guardian:9998`
 
 ---
 

@@ -18,6 +18,7 @@ import (
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
+	"github.com/xdg/cloister/internal/guardian/request"
 	"github.com/xdg/cloister/internal/token"
 )
 
@@ -297,6 +298,21 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	apiAddr := fmt.Sprintf(":%d", guardian.DefaultAPIPort)
 	api := guardian.NewAPIServer(apiAddr, &registryAdapter{registry})
 
+	// Create the request server for hostexec commands
+	// Token lookup adapter for the request server
+	requestTokenLookup := func(tok string) (request.TokenInfo, bool) {
+		info, ok := registry.Lookup(tok)
+		if !ok {
+			return request.TokenInfo{}, false
+		}
+		return request.TokenInfo{
+			CloisterName: info.CloisterName,
+			ProjectName:  info.ProjectName,
+		}, true
+	}
+	// PatternMatcher and Executor are nil for now (Phase 4.2 and 4.4)
+	reqServer := request.NewServer(requestTokenLookup, nil, nil)
+
 	// Start the proxy server
 	if err := proxy.Start(); err != nil {
 		return fmt.Errorf("failed to start proxy server: %w", err)
@@ -315,6 +331,18 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	log.Printf("Guardian API server listening on %s", api.ListenAddr())
 
+	// Start the request server for hostexec commands
+	if err := reqServer.Start(); err != nil {
+		// Clean up other servers on failure
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = proxy.Stop(ctx)
+		_ = api.Stop(ctx)
+		return fmt.Errorf("failed to start request server: %w", err)
+	}
+
+	log.Printf("Guardian request server listening on %s", reqServer.ListenAddr())
+
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -326,16 +354,20 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Stop both servers
-	var proxyErr, apiErr error
+	// Stop all servers
+	var proxyErr, apiErr, reqErr error
 	proxyErr = proxy.Stop(ctx)
 	apiErr = api.Stop(ctx)
+	reqErr = reqServer.Stop(ctx)
 
 	if proxyErr != nil {
 		return fmt.Errorf("error during proxy shutdown: %w", proxyErr)
 	}
 	if apiErr != nil {
 		return fmt.Errorf("error during API shutdown: %w", apiErr)
+	}
+	if reqErr != nil {
+		return fmt.Errorf("error during request server shutdown: %w", reqErr)
 	}
 
 	log.Println("Guardian servers stopped")
