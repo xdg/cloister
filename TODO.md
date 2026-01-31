@@ -115,7 +115,7 @@ Add the request server (:9998) to the guardian container for receiving hostexec 
 Implement command pattern matching for auto-approve and manual-approve decisions.
 
 ### 4.2.1 Define pattern matcher interface
-- [ ] Create `internal/guardian/patterns/matcher.go` with:
+- [x] Create `internal/guardian/patterns/matcher.go` with:
   ```go
   type Matcher interface {
       Match(cmd string) MatchResult
@@ -131,35 +131,35 @@ Implement command pattern matching for auto-approve and manual-approve decisions
       ManualApprove
   )
   ```
-- [ ] **Test (unit)**: Interface compiles, MatchResult struct works
+- [x] **Test (unit)**: Interface compiles, MatchResult struct works
 
 ### 4.2.2 Implement regex-based pattern matcher
-- [ ] Create `RegexMatcher` that:
+- [x] Create `RegexMatcher` that:
   - Compiles patterns from config at construction time
   - Checks auto_approve patterns first (return AutoApprove on match)
   - Checks manual_approve patterns second (return ManualApprove on match)
   - Returns Deny if no pattern matches
-- [ ] Handle regex compilation errors gracefully (log and skip invalid patterns)
-- [ ] **Test (unit)**: `docker compose ps` matches `^docker compose ps$` → AutoApprove
-- [ ] **Test (unit)**: `docker compose up -d` matches `^docker compose (up|down|restart|build).*$` → ManualApprove
-- [ ] **Test (unit)**: `rm -rf /` matches nothing → Deny
-- [ ] **Test (unit)**: Invalid regex pattern → logged, skipped
+- [x] Handle regex compilation errors gracefully (log and skip invalid patterns)
+- [x] **Test (unit)**: `docker compose ps` matches `^docker compose ps$` → AutoApprove
+- [x] **Test (unit)**: `docker compose up -d` matches `^docker compose (up|down|restart|build).*$` → ManualApprove
+- [x] **Test (unit)**: `rm -rf /` matches nothing → Deny
+- [x] **Test (unit)**: Invalid regex pattern → logged, skipped
 
 ### 4.2.3 Load patterns from config
-- [ ] Add config parsing for `approval.auto_approve` and `approval.manual_approve` in `internal/config`
-- [ ] Pass patterns to `RegexMatcher` during guardian initialization
-- [ ] Support per-project pattern additions (merged with global)
-- [ ] **Test (unit)**: Config with patterns → matcher initialized correctly
-- [ ] **Test (unit)**: Project patterns merge with global patterns
+- [x] Add config parsing for `approval.auto_approve` and `approval.manual_approve` in `internal/config`
+- [x] Pass patterns to `RegexMatcher` during guardian initialization
+- [x] Support per-project pattern additions (merged with global)
+- [x] **Test (unit)**: Config with patterns → matcher initialized correctly
+- [x] **Test (unit)**: Project patterns merge with global patterns
 
 ### 4.2.4 Integrate pattern matcher into request handler
-- [ ] In `/request` handler, call `matcher.Match(cmd)`
-- [ ] If AutoApprove: proceed to execution immediately
-- [ ] If ManualApprove: queue for approval (Phase 4.3)
-- [ ] If Deny: return denial response immediately
-- [ ] **Test (unit)**: Auto-approve pattern → executes without approval queue
-- [ ] **Test (unit)**: Manual-approve pattern → queued (mocked)
-- [ ] **Test (unit)**: No match → denied immediately
+- [x] In `/request` handler, call `matcher.Match(cmd)`
+- [x] If AutoApprove: proceed to execution immediately
+- [x] If ManualApprove: queue for approval (Phase 4.3)
+- [x] If Deny: return denial response immediately
+- [x] **Test (unit)**: Auto-approve pattern → executes without approval queue
+- [x] **Test (unit)**: Manual-approve pattern → queued (mocked)
+- [x] **Test (unit)**: No match → denied immediately
 
 ---
 

@@ -107,5 +107,6 @@ type ProjectProxyConfig struct {
 // ProjectCommandsConfig contains project-specific command patterns that are
 // merged with global patterns.
 type ProjectCommandsConfig struct {
-	AutoApprove []CommandPattern `yaml:"auto_approve,omitempty"`
+	AutoApprove   []CommandPattern `yaml:"auto_approve,omitempty"`
+	ManualApprove []CommandPattern `yaml:"manual_approve,omitempty"`
 }

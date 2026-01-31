@@ -75,6 +75,8 @@ proxy:
 commands:
   auto_approve:
     - pattern: "^make test$"
+  manual_approve:
+    - pattern: "^./deploy\\.sh.*$"
 `
 
 func TestGlobalConfigUnmarshal(t *testing.T) {
@@ -212,6 +214,12 @@ func TestProjectConfigUnmarshal(t *testing.T) {
 	}
 	if cfg.Commands.AutoApprove[0].Pattern != "^make test$" {
 		t.Errorf("Commands.AutoApprove[0].Pattern = %q, want %q", cfg.Commands.AutoApprove[0].Pattern, "^make test$")
+	}
+	if len(cfg.Commands.ManualApprove) != 1 {
+		t.Errorf("len(Commands.ManualApprove) = %d, want 1", len(cfg.Commands.ManualApprove))
+	}
+	if cfg.Commands.ManualApprove[0].Pattern != "^./deploy\\.sh.*$" {
+		t.Errorf("Commands.ManualApprove[0].Pattern = %q, want %q", cfg.Commands.ManualApprove[0].Pattern, "^./deploy\\.sh.*$")
 	}
 }
 
@@ -520,6 +528,9 @@ func TestProjectConfigRoundTrip(t *testing.T) {
 			AutoApprove: []CommandPattern{
 				{Pattern: "^make build$"},
 			},
+			ManualApprove: []CommandPattern{
+				{Pattern: "^./deploy\\.sh.*$"},
+			},
 		},
 	}
 
@@ -547,5 +558,8 @@ func TestProjectConfigRoundTrip(t *testing.T) {
 	}
 	if len(roundTripped.Commands.AutoApprove) != len(original.Commands.AutoApprove) {
 		t.Errorf("len(Commands.AutoApprove) = %d, want %d", len(roundTripped.Commands.AutoApprove), len(original.Commands.AutoApprove))
+	}
+	if len(roundTripped.Commands.ManualApprove) != len(original.Commands.ManualApprove) {
+		t.Errorf("len(Commands.ManualApprove) = %d, want %d", len(roundTripped.Commands.ManualApprove), len(original.Commands.ManualApprove))
 	}
 }

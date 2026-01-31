@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/xdg/cloister/internal/guardian/patterns"
 )
 
 // DefaultRequestPort is the port for the request server.
@@ -18,11 +20,11 @@ import (
 const DefaultRequestPort = 9998
 
 // PatternMatcher matches commands against approval patterns.
-// This interface will be implemented in Phase 4.2.
+// Uses the patterns.Matcher interface from the patterns package.
 type PatternMatcher interface {
-	// Match returns the action to take for the given command.
-	// Returns true if the command should be auto-approved.
-	Match(cmd string) (autoApprove bool, pattern string)
+	// Match checks a command string against configured patterns.
+	// Returns MatchResult indicating the action to take.
+	Match(cmd string) patterns.MatchResult
 }
 
 // Executor executes approved commands on the host.
@@ -162,16 +164,55 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// For now, return a placeholder response.
-	// Phase 4.2 will add pattern matching for auto-approve.
-	// Phase 4.3 will add the approval queue for manual approval.
-	// Phase 4.4/4.5 will add actual command execution.
 	_ = info // Will be used for logging and approval queue in later phases
 
-	s.writeJSON(w, http.StatusNotImplemented, CommandResponse{
-		Status: "error",
-		Reason: "command execution not yet implemented",
-	})
+	// If no pattern matcher is configured, deny all commands
+	if s.PatternMatcher == nil {
+		s.writeJSON(w, http.StatusOK, CommandResponse{
+			Status: "denied",
+			Reason: "no approval patterns configured",
+		})
+		return
+	}
+
+	// Match command against configured patterns
+	result := s.PatternMatcher.Match(req.Cmd)
+
+	switch result.Action {
+	case patterns.AutoApprove:
+		// Auto-approved: proceed to execution
+		// Phase 4.4/4.5 will add actual command execution via the Executor.
+		// For now, return a placeholder success response.
+		s.writeJSON(w, http.StatusOK, CommandResponse{
+			Status:   "auto_approved",
+			Pattern:  result.Pattern,
+			ExitCode: 0,
+			Stdout:   "[placeholder: command execution not yet implemented]",
+		})
+
+	case patterns.ManualApprove:
+		// Manual approval required: queue for human review
+		// Phase 4.3 will add the approval queue.
+		// For now, return a placeholder "awaiting approval" response.
+		s.writeJSON(w, http.StatusAccepted, CommandResponse{
+			Status: "awaiting_approval",
+			Reason: "command requires manual approval (approval queue not yet implemented)",
+		})
+
+	case patterns.Deny:
+		// No pattern matched: deny the command
+		s.writeJSON(w, http.StatusOK, CommandResponse{
+			Status: "denied",
+			Reason: "command does not match any approval pattern",
+		})
+
+	default:
+		// Unexpected action - should never happen
+		s.writeJSON(w, http.StatusInternalServerError, CommandResponse{
+			Status: "error",
+			Reason: "internal error: unknown pattern action",
+		})
+	}
 }
 
 // writeJSON writes a JSON response with the given status code.

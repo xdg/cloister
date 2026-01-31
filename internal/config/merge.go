@@ -140,6 +140,7 @@ func ResolveConfig(projectName string) (*EffectiveConfig, error) {
 
 	// Merge command patterns (global + project)
 	effective.AutoApprove = MergeCommandPatterns(global.Approval.AutoApprove, project.Commands.AutoApprove)
+	effective.ManualApprove = MergeCommandPatterns(global.Approval.ManualApprove, project.Commands.ManualApprove)
 
 	return effective, nil
 }

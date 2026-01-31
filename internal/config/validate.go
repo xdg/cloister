@@ -102,6 +102,7 @@ func ValidateGlobalConfig(cfg *GlobalConfig) error {
 // ValidateProjectConfig validates a parsed ProjectConfig, checking that all
 // fields contain valid values. It validates:
 //   - Regex patterns in Commands.AutoApprove compile
+//   - Regex patterns in Commands.ManualApprove compile
 //
 // Note: Remote URL is not validated as required because empty ProjectConfig
 // is valid (defaults will be applied later).
@@ -111,6 +112,11 @@ func ValidateGlobalConfig(cfg *GlobalConfig) error {
 func ValidateProjectConfig(cfg *ProjectConfig) error {
 	for i, pattern := range cfg.Commands.AutoApprove {
 		if err := validateRegex(pattern.Pattern, fmt.Sprintf("commands.auto_approve[%d].pattern", i)); err != nil {
+			return err
+		}
+	}
+	for i, pattern := range cfg.Commands.ManualApprove {
+		if err := validateRegex(pattern.Pattern, fmt.Sprintf("commands.manual_approve[%d].pattern", i)); err != nil {
 			return err
 		}
 	}

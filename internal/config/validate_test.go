@@ -440,6 +440,66 @@ func TestValidateProjectConfig_EmptyPattern(t *testing.T) {
 	}
 }
 
+func TestValidateProjectConfig_ManualApproveValid(t *testing.T) {
+	cfg := &ProjectConfig{
+		Commands: ProjectCommandsConfig{
+			ManualApprove: []CommandPattern{
+				{Pattern: "^./deploy\\.sh.*$"},
+				{Pattern: "^terraform apply.*$"},
+			},
+		},
+	}
+
+	err := ValidateProjectConfig(cfg)
+	if err != nil {
+		t.Errorf("ValidateProjectConfig() error = %v, want nil", err)
+	}
+}
+
+func TestValidateProjectConfig_ManualApproveInvalidRegex(t *testing.T) {
+	tests := []struct {
+		name    string
+		cfg     *ProjectConfig
+		wantErr string
+	}{
+		{
+			name: "unclosed bracket in manual_approve",
+			cfg: &ProjectConfig{
+				Commands: ProjectCommandsConfig{
+					ManualApprove: []CommandPattern{
+						{Pattern: "[invalid"},
+					},
+				},
+			},
+			wantErr: "commands.manual_approve[0].pattern: invalid regex",
+		},
+		{
+			name: "unclosed group in manual_approve",
+			cfg: &ProjectConfig{
+				Commands: ProjectCommandsConfig{
+					ManualApprove: []CommandPattern{
+						{Pattern: "^valid$"},
+						{Pattern: "(unclosed"},
+					},
+				},
+			},
+			wantErr: "commands.manual_approve[1].pattern: invalid regex",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateProjectConfig(tt.cfg)
+			if err == nil {
+				t.Fatal("ValidateProjectConfig() expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Errorf("error = %q, want to contain %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestValidateAgentConfig_ValidAuthMethods(t *testing.T) {
 	tests := []struct {
 		name string

@@ -18,6 +18,7 @@ import (
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
+	"github.com/xdg/cloister/internal/guardian/patterns"
 	"github.com/xdg/cloister/internal/guardian/request"
 	"github.com/xdg/cloister/internal/token"
 )
@@ -310,8 +311,16 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			ProjectName:  info.ProjectName,
 		}, true
 	}
-	// PatternMatcher and Executor are nil for now (Phase 4.2 and 4.4)
-	reqServer := request.NewServer(requestTokenLookup, nil, nil)
+
+	// Create pattern matcher from global config approval patterns
+	autoApprovePatterns := extractPatterns(cfg.Approval.AutoApprove)
+	manualApprovePatterns := extractPatterns(cfg.Approval.ManualApprove)
+	regexMatcher := patterns.NewRegexMatcher(autoApprovePatterns, manualApprovePatterns)
+	log.Printf("Loaded approval patterns: %d auto-approve, %d manual-approve",
+		len(autoApprovePatterns), len(manualApprovePatterns))
+
+	// Executor is nil for now (Phase 4.4)
+	reqServer := request.NewServer(requestTokenLookup, regexMatcher, nil)
 
 	// Start the proxy server
 	if err := proxy.Start(); err != nil {
@@ -467,4 +476,13 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%d days, %d hours", days, hours)
 	}
 	return fmt.Sprintf("%d days", days)
+}
+
+// extractPatterns extracts pattern strings from a slice of CommandPattern.
+func extractPatterns(patterns []config.CommandPattern) []string {
+	result := make([]string, len(patterns))
+	for i, p := range patterns {
+		result[i] = p.Pattern
+	}
+	return result
 }

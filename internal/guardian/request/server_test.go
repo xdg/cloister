@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/xdg/cloister/internal/guardian/patterns"
 )
 
 func TestNewServer(t *testing.T) {
@@ -170,7 +172,7 @@ func TestServer_HandleRequest_EmptyCmd(t *testing.T) {
 	}
 }
 
-func TestServer_HandleRequest_ValidRequest_NotImplemented(t *testing.T) {
+func TestServer_HandleRequest_ValidRequest_NilMatcher(t *testing.T) {
 	lookup := mockTokenLookup(map[string]TokenInfo{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
@@ -187,20 +189,20 @@ func TestServer_HandleRequest_ValidRequest_NotImplemented(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	// Should return 501 Not Implemented for now
-	if rr.Code != http.StatusNotImplemented {
-		t.Errorf("expected status %d, got %d", http.StatusNotImplemented, rr.Code)
+	// With nil PatternMatcher, commands are denied
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 
 	var resp CommandResponse
 	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if resp.Status != "error" {
-		t.Errorf("expected status 'error', got %q", resp.Status)
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q", resp.Status)
 	}
-	if !strings.Contains(resp.Reason, "not yet implemented") {
-		t.Errorf("expected reason to contain 'not yet implemented', got %q", resp.Reason)
+	if !strings.Contains(resp.Reason, "no approval patterns configured") {
+		t.Errorf("expected reason to contain 'no approval patterns configured', got %q", resp.Reason)
 	}
 }
 
@@ -209,7 +211,13 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
-	server := NewServer(lookup, nil, nil)
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"echo hello": {Action: patterns.AutoApprove, Pattern: "^echo .*$"},
+		},
+	}
+
+	server := NewServer(lookup, matcher, nil)
 	server.Addr = ":0" // Use random port
 
 	if err := server.Start(); err != nil {
@@ -236,16 +244,16 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusNotImplemented {
-		t.Errorf("expected status %d, got %d", http.StatusNotImplemented, resp.StatusCode)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
 	}
 
 	var cmdResp CommandResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cmdResp); err != nil {
 		t.Fatalf("failed to decode response: %v", err)
 	}
-	if cmdResp.Status != "error" {
-		t.Errorf("expected status 'error', got %q", cmdResp.Status)
+	if cmdResp.Status != "auto_approved" {
+		t.Errorf("expected status 'auto_approved', got %q", cmdResp.Status)
 	}
 }
 
@@ -256,5 +264,184 @@ func TestServer_ListenAddrBeforeStart(t *testing.T) {
 	addr := server.ListenAddr()
 	if addr != "" {
 		t.Errorf("expected empty addr before Start, got %q", addr)
+	}
+}
+
+// mockPatternMatcher implements PatternMatcher for testing
+type mockPatternMatcher struct {
+	results map[string]patterns.MatchResult
+}
+
+func (m *mockPatternMatcher) Match(cmd string) patterns.MatchResult {
+	if result, ok := m.results[cmd]; ok {
+		return result
+	}
+	// Default to deny if not in results map
+	return patterns.MatchResult{Action: patterns.Deny}
+}
+
+func TestServer_HandleRequest_AutoApprove(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"docker compose ps": {Action: patterns.AutoApprove, Pattern: "^docker compose ps$"},
+		},
+	}
+
+	server := NewServer(lookup, matcher, nil)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "docker compose ps"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "auto_approved" {
+		t.Errorf("expected status 'auto_approved', got %q", resp.Status)
+	}
+	if resp.Pattern != "^docker compose ps$" {
+		t.Errorf("expected pattern '^docker compose ps$', got %q", resp.Pattern)
+	}
+	// ExitCode should be 0 (placeholder success)
+	if resp.ExitCode != 0 {
+		t.Errorf("expected exit_code 0, got %d", resp.ExitCode)
+	}
+	// Stdout should contain placeholder message
+	if resp.Stdout == "" {
+		t.Error("expected stdout to contain placeholder message")
+	}
+}
+
+func TestServer_HandleRequest_ManualApprove(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"docker compose up -d": {Action: patterns.ManualApprove, Pattern: "^docker compose (up|down).*$"},
+		},
+	}
+
+	server := NewServer(lookup, matcher, nil)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "docker compose up -d"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// Should return 202 Accepted for pending approval
+	if rr.Code != http.StatusAccepted {
+		t.Errorf("expected status %d, got %d", http.StatusAccepted, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "awaiting_approval" {
+		t.Errorf("expected status 'awaiting_approval', got %q", resp.Status)
+	}
+	if !strings.Contains(resp.Reason, "manual approval") {
+		t.Errorf("expected reason to contain 'manual approval', got %q", resp.Reason)
+	}
+}
+
+func TestServer_HandleRequest_Deny(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	// Matcher with no patterns that match "rm -rf /"
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			// Only safe commands are configured
+			"docker compose ps": {Action: patterns.AutoApprove, Pattern: "^docker compose ps$"},
+		},
+	}
+
+	server := NewServer(lookup, matcher, nil)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "rm -rf /"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q", resp.Status)
+	}
+	if !strings.Contains(resp.Reason, "does not match") {
+		t.Errorf("expected reason to contain 'does not match', got %q", resp.Reason)
+	}
+}
+
+func TestServer_HandleRequest_NoPatternMatcher(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	// Server with nil pattern matcher
+	server := NewServer(lookup, nil, nil)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "echo hello"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q", resp.Status)
+	}
+	if !strings.Contains(resp.Reason, "no approval patterns configured") {
+		t.Errorf("expected reason to contain 'no approval patterns configured', got %q", resp.Reason)
 	}
 }
