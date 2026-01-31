@@ -401,7 +401,7 @@ Implement the approval server (:9999) with htmx-based UI for human review.
 Create the in-container wrapper script that communicates with the request server.
 
 ### 4.7.1 Validate hostexec script
-- [ ] Verify `hostexec` script in repo root matches spec (per container-image.md):
+- [x] Verify `hostexec` script in repo root matches spec (per container-image.md):
   - Validates `CLOISTER_GUARDIAN_HOST` and `CLOISTER_TOKEN` are set
   - Validates at least one argument provided
   - Sends POST to `http://${CLOISTER_GUARDIAN_HOST}:9998/request`
@@ -410,25 +410,25 @@ Create the in-container wrapper script that communicates with the request server
   - Parses JSON response with jq
   - Prints stdout/stderr appropriately
   - Exits with command's exit code
-- [ ] **Test (unit)**: Script syntax check (`bash -n`)
+- [x] **Test (unit)**: Script syntax check (`bash -n`)
 
 ### 4.7.2 Handle response statuses
-- [ ] Verify script handles all statuses:
+- [x] Verify script handles all statuses:
   - `approved` or `auto_approved`: print output, exit with exit_code
   - `denied`: print reason to stderr, exit 1
   - `timeout`: print timeout message to stderr, exit 1
   - `error`: print error to stderr, exit 1
-- [ ] **Test (integration)**: Each status handled correctly
+- [x] **Test (integration)**: Each status handled correctly
 
 ### 4.7.3 Add to container image
-- [ ] Copy `hostexec` (from repo root) to `/usr/local/bin/hostexec` in Dockerfile
-- [ ] Set executable permissions
-- [ ] **Test (integration)**: `hostexec` available in container
+- [x] Copy `hostexec` (from repo root) to `/usr/local/bin/hostexec` in Dockerfile
+- [x] Set executable permissions
+- [x] **Test (integration)**: `hostexec` available in container
 
 ### 4.7.4 Set environment variables at container start
-- [ ] Set `CLOISTER_GUARDIAN_HOST=cloister-guardian` in container
-- [ ] `CLOISTER_TOKEN` already set (from Phase 1)
-- [ ] **Test (integration)**: Environment variables present in container
+- [x] Set `CLOISTER_GUARDIAN_HOST=cloister-guardian` in container
+- [x] `CLOISTER_TOKEN` already set (from Phase 1)
+- [x] **Test (integration)**: Environment variables present in container
 
 ---
 

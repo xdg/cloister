@@ -161,6 +161,61 @@ func TestCloisterLifecycle(t *testing.T) {
 				t.Errorf("%s = %q, want %q", key, val, expectedProxy)
 			}
 		}
+
+		// Verify CLOISTER_GUARDIAN_HOST
+		expectedHost := "cloister-guardian"
+		if hostVal, ok := envMap["CLOISTER_GUARDIAN_HOST"]; !ok {
+			t.Error("CLOISTER_GUARDIAN_HOST not set in container")
+		} else if hostVal != expectedHost {
+			t.Errorf("CLOISTER_GUARDIAN_HOST = %q, want %q", hostVal, expectedHost)
+		}
+	})
+
+	t.Run("HostexecAvailable", func(t *testing.T) {
+		projectName := testutil.TestProjectName()
+		branchName := "hostexec-test"
+		containerName := container.GenerateContainerName(projectName)
+		t.Cleanup(func() { testutil.CleanupContainer(containerName) })
+
+		tmpDir, err := os.MkdirTemp("", "cloister-test-*")
+		if err != nil {
+			t.Fatalf("Failed to create temp dir: %v", err)
+		}
+		t.Cleanup(func() { os.RemoveAll(tmpDir) })
+
+		opts := StartOptions{
+			ProjectPath: tmpDir,
+			ProjectName: projectName,
+			BranchName:  branchName,
+			Image:       container.DefaultImage,
+		}
+
+		_, tok, err := Start(opts)
+		if err != nil {
+			t.Fatalf("Start() failed: %v", err)
+		}
+		t.Cleanup(func() { _ = Stop(containerName, tok) })
+
+		// Verify hostexec exists at /usr/local/bin/hostexec
+		_, err = docker.Run("exec", containerName, "test", "-f", "/usr/local/bin/hostexec")
+		if err != nil {
+			t.Errorf("hostexec not found at /usr/local/bin/hostexec: %v", err)
+		}
+
+		// Verify hostexec is executable
+		_, err = docker.Run("exec", containerName, "test", "-x", "/usr/local/bin/hostexec")
+		if err != nil {
+			t.Errorf("hostexec is not executable: %v", err)
+		}
+
+		// Verify hostexec outputs expected usage message when called with no args
+		// Note: hostexec writes usage to stderr and exits with code 1 when no args
+		// We need to redirect stderr to stdout to capture it
+		output, _ := docker.Run("exec", "--user", "1000", containerName, "bash", "-c", "/usr/local/bin/hostexec 2>&1 || true")
+		expectedUsage := "Usage: hostexec <command> [args...]"
+		if !strings.Contains(output, expectedUsage) {
+			t.Errorf("hostexec usage output = %q, want to contain %q", output, expectedUsage)
+		}
 	})
 
 	t.Run("ConnectsToCloisterNet", func(t *testing.T) {

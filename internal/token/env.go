@@ -14,6 +14,7 @@ const DefaultProxyPort = 3128
 //
 // The returned slice contains:
 //   - CLOISTER_TOKEN: the authentication token
+//   - CLOISTER_GUARDIAN_HOST: the guardian hostname (for hostexec and other tools)
 //   - HTTP_PROXY: proxy URL with embedded credentials
 //   - HTTPS_PROXY: same proxy URL (for tools that check HTTPS_PROXY)
 //   - http_proxy: lowercase variant for compatibility
@@ -30,6 +31,7 @@ func ProxyEnvVars(token, guardianHost string) []string {
 
 	return []string{
 		"CLOISTER_TOKEN=" + token,
+		"CLOISTER_GUARDIAN_HOST=" + guardianHost,
 		"HTTP_PROXY=" + proxyURL,
 		"HTTPS_PROXY=" + proxyURL,
 		"http_proxy=" + proxyURL,

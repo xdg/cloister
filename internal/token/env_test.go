@@ -11,6 +11,7 @@ func TestProxyEnvVars_ContainsAllVariables(t *testing.T) {
 
 	expected := []string{
 		"CLOISTER_TOKEN",
+		"CLOISTER_GUARDIAN_HOST",
 		"HTTP_PROXY",
 		"HTTPS_PROXY",
 		"http_proxy",
@@ -132,6 +133,41 @@ func TestProxyEnvVars_SpecialCharactersInToken(t *testing.T) {
 	if !strings.Contains(httpProxy, token) {
 		t.Errorf("HTTP_PROXY does not contain token")
 	}
+}
+
+func TestProxyEnvVars_GuardianHostEnvVar(t *testing.T) {
+	t.Run("default host", func(t *testing.T) {
+		envVars := ProxyEnvVars("token123", "")
+
+		var guardianHost string
+		for _, env := range envVars {
+			if strings.HasPrefix(env, "CLOISTER_GUARDIAN_HOST=") {
+				guardianHost = strings.TrimPrefix(env, "CLOISTER_GUARDIAN_HOST=")
+				break
+			}
+		}
+
+		if guardianHost != DefaultGuardianHost {
+			t.Errorf("CLOISTER_GUARDIAN_HOST = %q, want %q", guardianHost, DefaultGuardianHost)
+		}
+	})
+
+	t.Run("custom host", func(t *testing.T) {
+		customHost := "custom-host"
+		envVars := ProxyEnvVars("token123", customHost)
+
+		var guardianHost string
+		for _, env := range envVars {
+			if strings.HasPrefix(env, "CLOISTER_GUARDIAN_HOST=") {
+				guardianHost = strings.TrimPrefix(env, "CLOISTER_GUARDIAN_HOST=")
+				break
+			}
+		}
+
+		if guardianHost != customHost {
+			t.Errorf("CLOISTER_GUARDIAN_HOST = %q, want %q", guardianHost, customHost)
+		}
+	})
 }
 
 func TestDefaultGuardianHost_Constant(t *testing.T) {
