@@ -28,16 +28,17 @@ go install github.com/xdg/cloister/cmd/cloister@latest
 
 ### Configure Credentials
 
-Set your Claude credentials as environment variables:
+Run the setup wizard to configure Claude Code credentials:
 
 ```bash
-# Option 1: OAuth token (for Claude Pro/Max subscribers)
-# Run 'claude setup-token' first to get the token
-export CLAUDE_CODE_OAUTH_TOKEN="your-oauth-token"
-
-# Option 2: API key (for pay-per-use via Anthropic API)
-export ANTHROPIC_API_KEY="your-api-key"
+cloister setup claude
 ```
+
+The wizard offers three authentication methods:
+
+1. **Existing Claude login** — Extracts credentials from your system keychain or credentials file (if you've logged in via `claude` before)
+2. **Long-lived OAuth token** — For Claude Pro/Max subscribers; run `claude setup-token` first to generate a token
+3. **API key** — For pay-per-use via Anthropic API; get your key from [console.anthropic.com](https://console.anthropic.com)
 
 ### Start a Sandboxed Session
 
@@ -137,9 +138,7 @@ See [docs/config-reference.md](docs/config-reference.md) for the full schema.
 
 ## Current Limitations
 
-Cloister is in active development (Phase 2 complete). Current limitations include:
-
-**Manual credential setup** — Claude Code credentials must be set via environment variables (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`). A setup wizard will be added in Phase 3.
+Cloister is in active development (Phase 3 mostly complete). Current limitations include:
 
 **No host command execution** — The `hostexec` feature for running host commands (git push, docker build, etc.) with approval is not yet implemented. This is planned for Phase 4.
 

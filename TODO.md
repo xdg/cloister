@@ -297,9 +297,9 @@ Ensure Claude Code works correctly inside the container. **All tests require Doc
 ## Phase 3.5: Documentation and Cleanup
 
 ### 3.5.1 Update README with new setup flow
-- [ ] Replace manual env var instructions with `cloister setup claude`
-- [ ] Document both OAuth and API key flows
-- [ ] Remove "Phase 1 limitation" notes about manual credential setup
+- [x] Replace manual env var instructions with `cloister setup claude`
+- [x] Document both OAuth and API key flows
+- [x] Remove "Phase 1 limitation" notes about manual credential setup
 
 ### 3.5.2 Update docs/agent-configuration.md
 - [ ] Add complete setup wizard documentation
