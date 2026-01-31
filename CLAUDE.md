@@ -62,19 +62,22 @@ This is a greenfield Go project. Primary components:
 
 ## Testing
 
-Tests are split into two tiers based on what they require:
+Tests are split into three tiers based on what they require:
 
-| Command | What it runs | Requirements |
-|---------|--------------|--------------|
-| `make test` | Unit tests + sandbox-safe integration tests | None (runs in any sandbox) |
-| `make test-integration` | All tests including Docker | Docker daemon running |
+| Tier | Command | Docker | Guardian | What It Tests |
+|------|---------|--------|----------|---------------|
+| Unit | `make test` | Mocked/self-skip | In-process/mocked | Logic, handlers, protocol |
+| Integration | `make test-integration` | Real | Self-managed | Lifecycle, container ops |
+| E2E | `make test-e2e` | Real | TestMain-managed | Workflows assuming stable guardian |
 
-**For coding agents:** Use `make test` for fast iteration — it covers ~90% of the test suite and runs without Docker. Use `make test-integration` only when changing Docker/container code or before final commit, because it will require either human approval or for a human to run it outside a sandbox.
+**For coding agents:** Use `make test` for fast iteration — it covers ~90% of the test suite and runs without Docker. Use `make test-integration` or `make test-e2e` only when changing Docker/container code or before final commit, because they require Docker and may need human approval to run outside a sandbox.
 
 **Build tags:**
-- Tests in `*_integration_test.go` files use `//go:build integration`
-- These tests create real Docker containers/networks and require the daemon
+- Tests in `*_integration_test.go` files use `//go:build integration` — lifecycle tests that manage their own guardian
+- Tests in `test/e2e/` use `//go:build e2e` — workflow tests that share a guardian via TestMain
 - All other tests are sandbox-safe (use httptest, t.TempDir(), mock interfaces)
+
+**Shared test helpers:** `internal/testutil/` provides `RequireDocker`, `RequireGuardian`, `CleanupContainer`, and unique name generators.
 
 ## Makefile Targets
 
@@ -85,8 +88,9 @@ Tests are split into two tiers based on what they require:
 | `make install` | Install binary via `go install` |
 | `make test` | Run unit tests (sandbox-safe, no Docker required) |
 | `make test-race` | Run unit tests with race detector |
-| `make test-integration` | Run all tests including Docker integration tests |
-| `make test-all` | Alias for `test-integration` |
+| `make test-integration` | Run integration tests (lifecycle tests, require Docker) |
+| `make test-e2e` | Run E2E tests (workflow tests with shared guardian) |
+| `make test-all` | Run both integration and E2E tests |
 | `make fmt` | Format code with `goimports` (run before commits) |
 | `make lint` | Run `golangci-lint` |
 | `make clean` | Remove built binary |
@@ -107,6 +111,7 @@ Tests are split into two tiers based on what they require:
 | `internal/docker` | Low-level Docker CLI wrapper. Provides `Run`, `RunJSON`, `RunJSONLines` helpers and network management for `cloister-net`. |
 | `internal/guardian` | HTTP CONNECT proxy server with domain allowlist, token validation API, and per-project allowlist caching. Runs inside the guardian container. |
 | `internal/project` | Git repository detection and project registry. Tracks known projects in `~/.config/cloister/projects.yaml` with remote URLs and paths. |
+| `internal/testutil` | Shared test helpers for Docker/guardian tests. Provides `RequireDocker`, `RequireGuardian`, `CleanupContainer`, and unique name generators. |
 | `internal/token` | Cryptographic token generation, in-memory registry, and disk persistence. Also provides proxy environment variable configuration for containers. |
 
 ## Documentation

@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y \
     locales \
     man-db \
     nano \
+    netcat-openbsd \
     openssh-client \
     pkg-config \
     procps \

@@ -4,12 +4,18 @@ package guardian
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/xdg/cloister/internal/docker"
+	"github.com/xdg/cloister/internal/executor"
 )
 
 // requireDocker skips the test if Docker is not available.
+// Note: We can't use testutil.RequireDocker here because testutil imports guardian,
+// which would create an import cycle.
 func requireDocker(t *testing.T) {
 	t.Helper()
 	if err := docker.CheckDaemon(); err != nil {
@@ -17,9 +23,31 @@ func requireDocker(t *testing.T) {
 	}
 }
 
-// cleanupGuardian removes the guardian container if it exists.
+// requireCloisterBinary ensures the cloister binary is built and sets CLOISTER_EXECUTABLE.
+// Skips the test if the binary doesn't exist.
+func requireCloisterBinary(t *testing.T) {
+	t.Helper()
+
+	// Find repo root (go up from this file's directory)
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Skip("Could not determine test file location")
+	}
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	binaryPath := filepath.Join(repoRoot, "cloister")
+
+	if _, err := os.Stat(binaryPath); err != nil {
+		t.Skipf("cloister binary not found at %s (run 'make build' first)", binaryPath)
+	}
+
+	// Set env var for StartExecutor to use
+	t.Setenv(ExecutableEnvVar, binaryPath)
+}
+
+// cleanupGuardian removes the guardian container and executor if they exist.
 func cleanupGuardian() {
 	// Best effort cleanup - ignore errors
+	_ = StopExecutor()
 	_, _ = docker.Run("stop", ContainerName)
 	_, _ = docker.Run("rm", ContainerName)
 }
@@ -73,6 +101,7 @@ func TestGuardian_WhenNotRunning(t *testing.T) {
 // TestGuardian_Lifecycle tests guardian start/stop behavior.
 func TestGuardian_Lifecycle(t *testing.T) {
 	requireCleanGuardianState(t)
+	requireCloisterBinary(t)
 
 	// Start the guardian (required for all subtests)
 	err := EnsureRunning()
@@ -104,6 +133,71 @@ func TestGuardian_Lifecycle(t *testing.T) {
 		err := Start()
 		if !errors.Is(err, ErrGuardianAlreadyRunning) {
 			t.Errorf("Start() = %v, want ErrGuardianAlreadyRunning", err)
+		}
+	})
+
+	t.Run("Executor_SocketExists", func(t *testing.T) {
+		socketPath, err := HostSocketPath()
+		if err != nil {
+			t.Fatalf("HostSocketPath() error: %v", err)
+		}
+		info, err := os.Stat(socketPath)
+		if err != nil {
+			t.Errorf("Socket file should exist at %s: %v", socketPath, err)
+			return
+		}
+		if info.Mode().Type()&os.ModeSocket == 0 {
+			t.Errorf("Expected socket file, got mode %v", info.Mode())
+		}
+	})
+
+	t.Run("Executor_DaemonRunning", func(t *testing.T) {
+		state, err := executor.LoadDaemonState()
+		if err != nil {
+			t.Fatalf("LoadDaemonState() error: %v", err)
+		}
+		if state == nil {
+			t.Fatal("Expected daemon state to exist after guardian start")
+		}
+		if !executor.IsDaemonRunning(state) {
+			t.Errorf("Executor daemon should be running (PID %d)", state.PID)
+		}
+	})
+
+	// Stop guardian and verify cleanup
+	t.Run("Stop_CleansUpExecutor", func(t *testing.T) {
+		// Get socket path before stopping
+		socketPath, err := HostSocketPath()
+		if err != nil {
+			t.Fatalf("HostSocketPath() error: %v", err)
+		}
+
+		// Stop the guardian
+		if err := Stop(); err != nil {
+			t.Fatalf("Stop() error: %v", err)
+		}
+
+		// Verify guardian is stopped
+		running, err := IsRunning()
+		if err != nil {
+			t.Fatalf("IsRunning() error: %v", err)
+		}
+		if running {
+			t.Error("Guardian should not be running after Stop()")
+		}
+
+		// Verify executor state is cleaned up
+		state, err := executor.LoadDaemonState()
+		if err != nil {
+			t.Fatalf("LoadDaemonState() error: %v", err)
+		}
+		if state != nil && executor.IsDaemonRunning(state) {
+			t.Errorf("Executor daemon should not be running after Stop() (PID %d)", state.PID)
+		}
+
+		// Verify socket is removed
+		if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
+			t.Errorf("Socket file should be removed after Stop(): %v", err)
 		}
 	})
 }

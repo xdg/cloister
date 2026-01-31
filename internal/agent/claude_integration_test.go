@@ -5,37 +5,18 @@ package agent
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
+	"github.com/xdg/cloister/internal/testutil"
 )
 
-// testContainerName generates a unique test container name.
-func testContainerName(suffix string) string {
-	return "cloister-agent-test-" + suffix + "-" + time.Now().Format("150405")
-}
-
-// cleanupTestContainer removes a test container if it exists.
-func cleanupTestContainer(name string) {
-	// Best effort cleanup - ignore errors
-	_, _ = docker.Run("rm", "-f", name)
-}
-
-// requireDocker skips the test if Docker is not available.
-func requireDocker(t *testing.T) {
-	t.Helper()
-	if err := docker.CheckDaemon(); err != nil {
-		t.Skipf("Docker not available: %v", err)
-	}
-}
-
 func TestClaudeAgent_SkipPerms_False_NoAlias(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
-	containerName := testContainerName("skipperms-false")
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	containerName := testutil.TestContainerName("skipperms-false")
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	// Create container using cloister-default image which has /home/cloister
 	_, err := docker.Run("create",
@@ -98,10 +79,10 @@ func TestClaudeAgent_SkipPerms_False_NoAlias(t *testing.T) {
 }
 
 func TestClaudeAgent_SkipPerms_Nil_HasAlias(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
-	containerName := testContainerName("skipperms-nil")
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	containerName := testutil.TestContainerName("skipperms-nil")
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	// Create container using cloister-default image which has /home/cloister
 	_, err := docker.Run("create",
@@ -163,10 +144,10 @@ func TestClaudeAgent_SkipPerms_Nil_HasAlias(t *testing.T) {
 }
 
 func TestClaudeAgent_RulesFile(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
-	containerName := testContainerName("rules")
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	containerName := testutil.TestContainerName("rules")
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	// Create container using cloister-default image which has /home/cloister
 	_, err := docker.Run("create",

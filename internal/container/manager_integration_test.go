@@ -8,36 +8,17 @@ import (
 	"os"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/xdg/cloister/internal/docker"
+	"github.com/xdg/cloister/internal/testutil"
 )
 
-// testProjectName generates a unique test project name.
-func testProjectName() string {
-	return "test-" + time.Now().Format("20060102-150405")
-}
-
-// cleanupTestContainer removes a test container if it exists.
-func cleanupTestContainer(name string) {
-	// Best effort cleanup - ignore errors
-	_, _ = docker.Run("rm", "-f", name)
-}
-
-// requireDocker skips the test if Docker is not available.
-func requireDocker(t *testing.T) {
-	t.Helper()
-	if err := docker.CheckDaemon(); err != nil {
-		t.Skipf("Docker not available: %v", err)
-	}
-}
-
 func TestManager_Start_Stop(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
-	projectName := testProjectName()
+	projectName := testutil.TestProjectName()
 	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -98,11 +79,11 @@ func TestManager_Start_Stop(t *testing.T) {
 }
 
 func TestManager_Start_AlreadyExists(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
-	projectName := testProjectName()
+	projectName := testutil.TestProjectName()
 	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -130,7 +111,7 @@ func TestManager_Start_AlreadyExists(t *testing.T) {
 }
 
 func TestManager_Stop_NotFound(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
 	manager := NewManager()
 	err := manager.Stop("cloister-nonexistent-container-12345")
@@ -140,7 +121,7 @@ func TestManager_Stop_NotFound(t *testing.T) {
 }
 
 func TestManager_List_FiltersCloisterContainers(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
 	manager := NewManager()
 	containers, err := manager.List()
@@ -156,11 +137,11 @@ func TestManager_List_FiltersCloisterContainers(t *testing.T) {
 }
 
 func TestManager_Start_VerifySecuritySettings(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
-	projectName := testProjectName()
+	projectName := testutil.TestProjectName()
 	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -264,7 +245,7 @@ func TestManager_Start_VerifySecuritySettings(t *testing.T) {
 }
 
 func TestManager_ContainerStatus_NonExistent(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
 	manager := NewManager()
 	exists, running, err := manager.ContainerStatus("cloister-nonexistent-container-12345")
@@ -280,11 +261,11 @@ func TestManager_ContainerStatus_NonExistent(t *testing.T) {
 }
 
 func TestManager_ContainerStatus_Running(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
-	projectName := testProjectName()
+	projectName := testutil.TestProjectName()
 	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -318,11 +299,11 @@ func TestManager_ContainerStatus_Running(t *testing.T) {
 }
 
 func TestManager_ContainerStatus_Stopped(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
-	projectName := testProjectName()
+	projectName := testutil.TestProjectName()
 	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -356,11 +337,11 @@ func TestManager_ContainerStatus_Stopped(t *testing.T) {
 }
 
 func TestManager_ContainerStatus_SingleDockerCall(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
-	projectName := testProjectName()
+	projectName := testutil.TestProjectName()
 	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {

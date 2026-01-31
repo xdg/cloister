@@ -14,51 +14,19 @@ import (
 	"github.com/xdg/cloister/internal/agent"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
-	"github.com/xdg/cloister/internal/guardian"
+	"github.com/xdg/cloister/internal/testutil"
 )
-
-// testProjectName generates a unique test project name.
-func testProjectName() string {
-	return "test-" + time.Now().Format("20060102-150405")
-}
-
-// cleanupTestContainer removes a test container if it exists.
-func cleanupTestContainer(name string) {
-	// Best effort cleanup - ignore errors
-	_, _ = docker.Run("rm", "-f", name)
-}
-
-// requireDocker skips the test if Docker is not available.
-func requireDocker(t *testing.T) {
-	t.Helper()
-	if err := docker.CheckDaemon(); err != nil {
-		t.Skipf("Docker not available: %v", err)
-	}
-}
-
-// requireGuardian skips the test if guardian cannot be started.
-// Registers cleanup to stop the guardian when test completes.
-func requireGuardian(t *testing.T) {
-	t.Helper()
-	requireDocker(t)
-	if err := guardian.EnsureRunning(); err != nil {
-		t.Skipf("Guardian not available: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = guardian.Stop()
-	})
-}
 
 // TestCloisterLifecycle combines integration tests that require the guardian.
 // Using subtests allows sharing a single guardian instance across all tests.
 func TestCloisterLifecycle(t *testing.T) {
-	requireGuardian(t)
+	testutil.RequireGuardian(t)
 
 	t.Run("Start_Stop", func(t *testing.T) {
-		projectName := testProjectName()
+		projectName := testutil.TestProjectName()
 		branchName := "main"
 		containerName := container.GenerateContainerName(projectName)
-		t.Cleanup(func() { cleanupTestContainer(containerName) })
+		t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 		tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 		if err != nil {
@@ -126,10 +94,10 @@ func TestCloisterLifecycle(t *testing.T) {
 	})
 
 	t.Run("InjectsEnvVars", func(t *testing.T) {
-		projectName := testProjectName()
+		projectName := testutil.TestProjectName()
 		branchName := "env-test"
 		containerName := container.GenerateContainerName(projectName)
-		t.Cleanup(func() { cleanupTestContainer(containerName) })
+		t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 		tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 		if err != nil {
@@ -196,10 +164,10 @@ func TestCloisterLifecycle(t *testing.T) {
 	})
 
 	t.Run("ConnectsToCloisterNet", func(t *testing.T) {
-		projectName := testProjectName()
+		projectName := testutil.TestProjectName()
 		branchName := "network-test"
 		containerName := container.GenerateContainerName(projectName)
-		t.Cleanup(func() { cleanupTestContainer(containerName) })
+		t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 		tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 		if err != nil {
@@ -249,10 +217,10 @@ func TestCloisterLifecycle(t *testing.T) {
 	})
 
 	t.Run("StopWithEmptyToken", func(t *testing.T) {
-		projectName := testProjectName()
+		projectName := testutil.TestProjectName()
 		branchName := "empty-token"
 		containerName := container.GenerateContainerName(projectName)
-		t.Cleanup(func() { cleanupTestContainer(containerName) })
+		t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 		tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 		if err != nil {
@@ -292,7 +260,7 @@ func TestCloisterLifecycle(t *testing.T) {
 }
 
 func TestStop_NonExistentContainer(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
 	// Stop a non-existent container - should return error
 	err := Stop("cloister-nonexistent-12345", "sometoken")
@@ -302,11 +270,11 @@ func TestStop_NonExistentContainer(t *testing.T) {
 }
 
 func TestWriteFileToContainerWithOwner(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
 	// Create a test container
 	containerName := "cloister-ownership-test-" + time.Now().Format("150405")
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	// Create container using cloister-default image which has /home/cloister
 	_, err := docker.Run("create",
@@ -349,11 +317,11 @@ func TestWriteFileToContainerWithOwner(t *testing.T) {
 }
 
 func TestCopyToContainerWithOwner(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
 	// Create a test container
 	containerName := "cloister-copy-ownership-test-" + time.Now().Format("150405")
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	// Create a temp directory with test files
 	tmpDir, err := os.MkdirTemp("", "cloister-copy-test-*")
@@ -422,7 +390,7 @@ func TestCopyToContainerWithOwner(t *testing.T) {
 }
 
 func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
-	requireDocker(t)
+	testutil.RequireDocker(t)
 
 	// Create a mock home directory with test .claude files
 	mockHome, err := os.MkdirTemp("", "cloister-mock-home-*")
@@ -451,10 +419,10 @@ func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
 	t.Cleanup(func() { agent.UserHomeDirFunc = origHomeDir })
 
 	// Create a test container
-	projectName := testProjectName()
+	projectName := testutil.TestProjectName()
 	branchName := "settings-test"
 	containerName := "cloister-" + projectName + "-" + branchName
-	t.Cleanup(func() { cleanupTestContainer(containerName) })
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	// Create a temporary directory for the project path
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")

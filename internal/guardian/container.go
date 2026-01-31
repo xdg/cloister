@@ -259,9 +259,15 @@ func StartWithOptions(opts StartOptions) error {
 	return nil
 }
 
-// Stop stops and removes the guardian container.
-// Returns nil if the container doesn't exist (idempotent).
+// Stop stops the executor daemon and removes the guardian container.
+// Returns nil if nothing is running (idempotent).
 func Stop() error {
+	// Stop the executor daemon first
+	if err := StopExecutor(); err != nil {
+		// Log but continue - we still want to stop the container
+		_ = err
+	}
+
 	state, err := getContainerState()
 	if err != nil {
 		return err
@@ -275,9 +281,10 @@ func Stop() error {
 	return removeContainer()
 }
 
-// EnsureRunning ensures the guardian container is running and the API is ready.
+// EnsureRunning ensures the guardian container and executor daemon are running.
 // If the container is already running, this is a no-op.
-// If the container is not running, it starts it and waits for API readiness.
+// If the container is not running, it starts the executor daemon and container,
+// then waits for API readiness.
 func EnsureRunning() error {
 	running, err := IsRunning()
 	if err != nil {
@@ -288,7 +295,23 @@ func EnsureRunning() error {
 		return nil
 	}
 
-	if err := Start(); err != nil {
+	// Start the executor daemon first
+	execInfo, err := StartExecutor()
+	if err != nil {
+		return fmt.Errorf("failed to start executor: %w", err)
+	}
+
+	// Start the guardian container with executor socket mounted
+	opts := StartOptions{
+		SocketPath:   execInfo.SocketPath,
+		SharedSecret: execInfo.Secret,
+	}
+	if err := StartWithOptions(opts); err != nil {
+		// Clean up executor if guardian fails to start
+		if execInfo.Process != nil {
+			_ = execInfo.Process.Kill()
+		}
+		_ = StopExecutor()
 		return err
 	}
 

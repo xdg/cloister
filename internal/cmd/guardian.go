@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -60,58 +59,10 @@ var guardianStartCmd = &cobra.Command{
 			return nil
 		}
 
-		// Clean up any stale executor state
-		if err := executor.CleanupStaleState(); err != nil {
-			log.Printf("Warning: failed to clean up stale executor state: %v", err)
-		}
-
-		// Generate shared secret for executor authentication
-		secret := token.Generate()
-
-		// Get socket path
-		socketPath, err := guardian.HostSocketPath()
-		if err != nil {
-			return fmt.Errorf("failed to get socket path: %w", err)
-		}
-
-		// Start the executor process in the background
 		fmt.Println("Starting executor...")
-		executablePath, err := os.Executable()
-		if err != nil {
-			return fmt.Errorf("failed to get executable path: %w", err)
-		}
-
-		executorCmd := exec.Command(executablePath, "executor", "run")
-		executorCmd.Env = append(os.Environ(), guardian.SharedSecretEnvVar+"="+secret)
-		// Detach from parent process group
-		executorCmd.SysProcAttr = &syscall.SysProcAttr{
-			Setpgid: true,
-		}
-
-		if err := executorCmd.Start(); err != nil {
-			return fmt.Errorf("failed to start executor: %w", err)
-		}
-
-		// Wait a moment for the socket to be created
-		time.Sleep(100 * time.Millisecond)
-
-		// Verify socket was created
-		if _, err := os.Stat(socketPath); err != nil {
-			// Executor may have failed to start, try to clean up
-			_ = executorCmd.Process.Kill()
-			return fmt.Errorf("executor failed to create socket: %w", err)
-		}
-
-		// Start the guardian container with executor socket mounted
 		fmt.Println("Starting guardian...")
-		opts := guardian.StartOptions{
-			SocketPath:   socketPath,
-			SharedSecret: secret,
-		}
-		if err := guardian.StartWithOptions(opts); err != nil {
-			// Clean up executor if guardian fails to start
-			_ = executorCmd.Process.Kill()
-			_ = executor.RemoveDaemonState()
+
+		if err := guardian.EnsureRunning(); err != nil {
 			if errors.Is(err, guardian.ErrGuardianAlreadyRunning) {
 				fmt.Println("Guardian is already running")
 				return nil
@@ -172,25 +123,9 @@ Warns if there are running cloister containers that depend on the guardian.`,
 			fmt.Fprintln(os.Stderr)
 		}
 
-		// Stop the executor first
 		fmt.Println("Stopping executor...")
-		state, err := executor.LoadDaemonState()
-		if err != nil {
-			log.Printf("Warning: failed to load executor state: %v", err)
-		} else if state != nil {
-			if err := executor.StopDaemon(state); err != nil {
-				log.Printf("Warning: failed to stop executor: %v", err)
-			}
-			// Give it a moment to shut down gracefully
-			time.Sleep(100 * time.Millisecond)
-			// Clean up state file
-			if err := executor.RemoveDaemonState(); err != nil {
-				log.Printf("Warning: failed to remove executor state: %v", err)
-			}
-		}
-
-		// Stop the guardian
 		fmt.Println("Stopping guardian...")
+
 		if err := guardian.Stop(); err != nil {
 			return fmt.Errorf("failed to stop guardian: %w", err)
 		}

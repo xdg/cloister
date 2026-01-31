@@ -1,26 +1,33 @@
 # Go build settings
 BINARY := cloister
 CMD_PATH := ./cmd/cloister
+GO_FILES := $(shell find . -name '*.go' -type f -not -name '*_test.go' -not -path './test/*')
+GO_MOD_FILES := go.mod go.sum
 
 # Test settings
 #   COUNT=1    - bust cache, COUNT=N for flakiness testing
 #   RUN=regex  - run only tests matching regex (-run flag)
 #   PKG=path   - test specific package(s), default ./...
+#   VERBOSE=1  - verbose test output (-v flag)
 COUNT ?=
 RUN ?=
 PKG ?= ./...
+VERBOSE ?=
 COUNT_FLAG = $(if $(COUNT),-count=$(COUNT))
 RUN_FLAG = $(if $(RUN),-run=$(RUN))
+VERBOSE_FLAG = $(if $(VERBOSE),-v)
 
 # D2 diagram settings
 D2_SOURCES := $(wildcard docs/diagrams/*.d2)
 D2_SVGS := $(D2_SOURCES:.d2=.svg)
 
-.PHONY: build docker install test test-race test-integration test-all fmt lint clean diagrams clean-diagrams
+.PHONY: docker install test test-race test-integration test-e2e test-all fmt lint clean diagrams clean-diagrams
 
 # Go targets
-build:
+$(BINARY): $(GO_FILES) $(GO_MOD_FILES)
 	go build -o $(BINARY) $(CMD_PATH)
+
+build: $(BINARY)
 
 docker:
 	docker build -t cloister:latest .
@@ -29,21 +36,24 @@ install:
 	go install $(CMD_PATH)
 
 test:
-	go test $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
+	go test $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
 
 test-race:
-	go test -race $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
+	go test -race $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
 
-test-integration:
-	go test -tags=integration $(COUNT_FLAG) $(RUN_FLAG) -p 1 $(PKG)
+test-integration: $(BINARY)
+	go test -tags=integration $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 $(PKG)
 
-test-all: test-integration
+test-e2e: $(BINARY) docker
+	go test -tags=e2e $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 ./test/e2e/...
+
+test-all: test-integration test-e2e
 
 fmt:
 	goimports -w .
 
 lint:
-	golangci-lint run --build-tags=integration
+	golangci-lint run --build-tags=integration,e2e
 
 clean:
 	rm -f $(BINARY)

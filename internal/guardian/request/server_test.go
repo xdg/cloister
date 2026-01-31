@@ -684,3 +684,37 @@ func TestServer_HandleRequest_ManualApprove_Denied(t *testing.T) {
 		t.Errorf("expected reason 'Denied by user: not safe', got %q", resp.Reason)
 	}
 }
+
+func TestServer_HandleRequest_GETReturns405(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	server := NewServer(lookup, nil, nil)
+	server.Addr = ":0" // Use random port
+
+	if err := server.Start(); err != nil {
+		t.Fatalf("Start failed: %v", err)
+	}
+	defer func() { _ = server.Stop(context.Background()) }()
+
+	// Make a GET request (should be rejected - POST only)
+	url := "http://" + server.ListenAddr() + "/request"
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set(TokenHeader, "valid-token")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	// Go's net/http returns 405 Method Not Allowed for unmatched methods
+	if resp.StatusCode != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, resp.StatusCode)
+	}
+}
