@@ -139,5 +139,13 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 		return nil, fmt.Errorf("failed to write config file: %w", err)
 	}
 
+	// Step 4: Add skip-permissions alias if enabled (default true)
+	// SkipPerms is *bool: nil or true means add the alias, only explicit false skips it
+	if agentCfg == nil || agentCfg.SkipPerms == nil || *agentCfg.SkipPerms {
+		if err := appendSkipPermsAlias(containerName); err != nil {
+			return nil, fmt.Errorf("failed to add skip-permissions alias: %w", err)
+		}
+	}
+
 	return result, nil
 }

@@ -272,9 +272,9 @@ Ensure Claude Code works correctly inside the container. **All tests require Doc
 - [x] **Test (integration)**: Start container, run `bash -ic 'type claude'`, verify alias shown
 
 ### 3.4.4 Handle skip_permissions=false case
-- [ ] If user sets `skip_permissions: false` in config, don't create alias
-- [ ] Claude will use its normal permission prompts
-- [ ] **Test (integration)**: Start container with skip_permissions=false, verify no alias
+- [x] If user sets `skip_permissions: false` in config, don't create alias
+- [x] Claude will use its normal permission prompts
+- [x] **Test (integration)**: Start container with skip_permissions=false, verify no alias
 
 ### 3.4.5 End-to-end Claude verification
 - [x] **Test (manual)**: Inside container, run `claude --version` → prints version

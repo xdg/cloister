@@ -240,3 +240,24 @@ func MergeJSONConfig(hostFileName string, fieldsToCopy []string, forcedValues ma
 
 	return string(configJSON) + "\n", nil
 }
+
+// skipPermsAlias is the alias line added to bashrc for --dangerously-skip-permissions.
+const skipPermsAlias = `alias claude='claude --dangerously-skip-permissions'`
+
+// appendSkipPermsAlias adds the --dangerously-skip-permissions alias to the container's bashrc.
+// The alias is only added if not already present (idempotent).
+// The container must be running.
+func appendSkipPermsAlias(containerName string) error {
+	bashrcPath := containerHomeDir + "/.bashrc"
+
+	// Use grep to check if alias already exists, then append if not.
+	// The command exits 0 if alias exists, 1 if not. We use || to append only when grep fails.
+	cmd := exec.Command("docker", "exec", containerName, "sh", "-c",
+		fmt.Sprintf(`grep -qF %q %s || echo %q >> %s`,
+			skipPermsAlias, bashrcPath, skipPermsAlias, bashrcPath))
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to add alias: %w: %s", err, output)
+	}
+	return nil
+}

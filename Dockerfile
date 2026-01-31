@@ -105,8 +105,7 @@ ENV PATH="/home/cloister/.local/bin:${PATH}"
 # 1. Skip onboarding prompts
 RUN echo '{"hasCompletedOnboarding": true, "bypassPermissionsModeAccepted": true}' > /home/cloister/.claude.json
 
-# 2. Add alias to skip permission prompts (cloister is the sandbox, not Claude)
-RUN echo "alias claude='claude --dangerously-skip-permissions'" >> /home/cloister/.bashrc
+# 2. Skip-permissions alias is added dynamically by ClaudeAgent.Setup based on config
 
 # 3. Clean up backup files created during install/config
 RUN rm -f /home/cloister/.claude.json.backup.*
