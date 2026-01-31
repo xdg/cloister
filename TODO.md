@@ -46,6 +46,9 @@ Before marking Phase 4 complete:
 14. Request with mismatched workdir → rejected
 15. Verify socket permissions (not world-writable)
 
+After each subphase is complete and all of its tests pass, commit relevant new
+and changed files as a single, atomic commit.
+
 ## Dependencies Between Phases
 
 ```
@@ -90,7 +93,6 @@ Add the request server (:9998) to the guardian container for receiving hostexec 
   }
   ```
 - [x] **Test (unit)**: JSON marshal/unmarshal round-trip for all response variants
-- [x] **Commit**
 
 ### 4.1.2 Implement token-based authentication middleware
 - [x] Create `internal/guardian/request/auth.go` with middleware that:
@@ -99,7 +101,6 @@ Add the request server (:9998) to the guardian container for receiving hostexec 
   - Returns 401 if missing/invalid
   - Attaches cloister metadata to request context
 - [x] **Test (unit)**: Missing header → 401; invalid token → 401; valid token → context populated
-- [x] **Commit**
 
 ### 4.1.3 Create request server skeleton
 - [x] Create `internal/guardian/request/server.go` with:
@@ -109,7 +110,6 @@ Add the request server (:9998) to the guardian container for receiving hostexec 
 - [x] Wire into guardian startup in `internal/guardian/guardian.go`
 - [x] **Test (unit)**: Server starts, `/request` endpoint responds
 - [x] **Test (integration)**: Container can reach request server via `cloister-guardian:9998`
-- [x] **Commit**
 
 ---
 
@@ -135,7 +135,6 @@ Implement command pattern matching for auto-approve and manual-approve decisions
   )
   ```
 - [x] **Test (unit)**: Interface compiles, MatchResult struct works
-- [x] **Commit**
 
 ### 4.2.2 Implement regex-based pattern matcher
 - [x] Create `RegexMatcher` that:
@@ -148,7 +147,6 @@ Implement command pattern matching for auto-approve and manual-approve decisions
 - [x] **Test (unit)**: `docker compose up -d` matches `^docker compose (up|down|restart|build).*$` → ManualApprove
 - [x] **Test (unit)**: `rm -rf /` matches nothing → Deny
 - [x] **Test (unit)**: Invalid regex pattern → logged, skipped
-- [x] **Commit**
 
 ### 4.2.3 Load patterns from config
 - [x] Add config parsing for `approval.auto_approve` and `approval.manual_approve` in `internal/config`
@@ -156,7 +154,6 @@ Implement command pattern matching for auto-approve and manual-approve decisions
 - [x] Support per-project pattern additions (merged with global)
 - [x] **Test (unit)**: Config with patterns → matcher initialized correctly
 - [x] **Test (unit)**: Project patterns merge with global patterns
-- [x] **Commit**
 
 ### 4.2.4 Integrate pattern matcher into request handler
 - [x] In `/request` handler, call `matcher.Match(cmd)`
@@ -166,7 +163,6 @@ Implement command pattern matching for auto-approve and manual-approve decisions
 - [x] **Test (unit)**: Auto-approve pattern → executes without approval queue
 - [x] **Test (unit)**: Manual-approve pattern → queued (mocked)
 - [x] **Test (unit)**: No match → denied immediately
-- [x] **Commit**
 
 ---
 
@@ -198,7 +194,6 @@ Implement the in-memory queue for pending approval requests.
 - [x] Generate request IDs with `crypto/rand` (8 bytes hex)
 - [x] **Test (unit)**: Add/Get/Remove/List operations work correctly
 - [x] **Test (unit)**: Concurrent access is safe (use `-race`)
-- [x] **Commit**
 
 ### 4.3.2 Add timeout handling
 - [x] Start timeout goroutine when request is added
@@ -207,7 +202,6 @@ Implement the in-memory queue for pending approval requests.
 - [x] Default timeout: 5 minutes (configurable in config)
 - [x] **Test (unit)**: Request times out → timeout response sent
 - [x] **Test (unit)**: Approved before timeout → no timeout response
-- [x] **Commit**
 
 ### 4.3.3 Integrate queue into request handler
 - [x] For ManualApprove matches:
@@ -217,7 +211,6 @@ Implement the in-memory queue for pending approval requests.
   - Return response to client
 - [x] **Test (unit)**: Handler blocks until approval received
 - [x] **Test (unit)**: Handler returns timeout response after timeout
-- [x] **Commit**
 
 ---
 
@@ -248,7 +241,6 @@ Implement the host-side process that executes approved commands.
   }
   ```
 - [x] **Test (unit)**: Types compile and serialize correctly
-- [x] **Commit**
 
 ### 4.4.2 Implement command executor
 - [x] Create `RealExecutor` that uses `os/exec`:
@@ -261,7 +253,6 @@ Implement the host-side process that executes approved commands.
 - [x] **Test (unit)**: Execute `echo hello` → stdout contains "hello"
 - [x] **Test (unit)**: Execute nonexistent command → error response
 - [x] **Test (unit)**: Timeout → partial output + timeout status
-- [x] **Commit**
 
 ### 4.4.3 Implement Unix socket listener
 - [x] Create `internal/executor/socket.go` with socket server:
@@ -278,21 +269,18 @@ Implement the host-side process that executes approved commands.
   - Close connection
 - [x] **Test (unit)**: Mock socket, verify request/response flow
 - [x] **Test (integration)**: Real socket communication works
-- [x] **Commit**
 
 ### 4.4.4 Implement shared secret validation
 - [x] Verify secret on every request (socket.go handleConnection)
 - [x] Reject with "invalid secret" if mismatch
 - [x] **Test (unit)**: Wrong secret → rejected (TestSocketServerInvalidSecret)
 - [x] **Test (unit)**: Correct secret → proceeds (TestSocketServerValidRequest)
-- [x] **Commit** (included in Phase 4.4.1-4.4.3 commit)
 
 ### 4.4.5 Implement workdir validation
 - [x] Compare request workdir against registered path (via injected WorkdirValidator)
 - [x] Reject with "workdir mismatch" if different
 - [x] **Test (unit)**: Matching workdir → proceeds (TestSocketServerWorkdirValidation)
 - [x] **Test (unit)**: Mismatched workdir → rejected with clear error
-- [x] **Commit** (included in Phase 4.4.1-4.4.3 commit)
 
 ### 4.4.6 Start executor with guardian
 - [x] Generate 32-byte secret at guardian start (use token.Generate())
@@ -304,9 +292,8 @@ Implement the host-side process that executes approved commands.
 - [x] Wire TokenValidator to look up token in registry for worktree path
 - [x] Wire WorkdirValidator to compare workdir against registered worktree
 - [x] Graceful shutdown: stop executor when guardian stops
-- [ ] **Test (integration)**: `guardian start` creates socket and executor runs
-- [ ] **Test (integration)**: `guardian stop` cleans up socket and executor
-- [x] **Commit**
+- [x] **Test (integration)**: `guardian start` creates socket and executor runs
+- [x] **Test (integration)**: `guardian stop` cleans up socket and executor
 
 ---
 
@@ -323,21 +310,18 @@ Connect the guardian container to the host executor via the Unix socket.
 - [ ] Handle connection errors gracefully
 - [ ] **Test (unit)**: Mock socket, verify wire format
 - [ ] **Test (integration)**: Guardian can execute command via socket
-- [ ] **Commit**
 
 ### 4.5.2 Wire executor client into request flow
 - [ ] After approval (auto or manual), call executor client
 - [ ] Map executor response to command response
 - [ ] Return to waiting request handler
 - [ ] **Test (unit)**: Approved request → executor called → response returned
-- [ ] **Commit**
 
 ### 4.5.3 Handle executor errors
 - [ ] Connection refused → return error response
 - [ ] Timeout → return timeout response with partial output
 - [ ] Command failed → return response with exit code and stderr
 - [ ] **Test (unit)**: Each error case produces correct response
-- [ ] **Commit**
 
 ---
 
@@ -354,13 +338,11 @@ Implement the approval server (:9999) with htmx-based UI for human review.
 - [ ] Bind to `127.0.0.1:9999` (localhost only)
 - [ ] Wire into guardian startup
 - [ ] **Test (unit)**: Endpoints respond correctly
-- [ ] **Commit**
 
 ### 4.6.2 Implement pending requests list
 - [ ] `GET /pending` returns JSON array of pending requests
 - [ ] Include: id, cloister, project, branch, agent, cmd, timestamp
 - [ ] **Test (unit)**: Queue with requests → JSON contains all fields
-- [ ] **Commit**
 
 ### 4.6.3 Implement approve endpoint
 - [ ] `POST /approve/{id}`:
@@ -371,7 +353,6 @@ Implement the approval server (:9999) with htmx-based UI for human review.
   - Return success JSON
 - [ ] **Test (unit)**: Approve existing request → response sent, removed from queue
 - [ ] **Test (unit)**: Approve nonexistent → 404
-- [ ] **Commit**
 
 ### 4.6.4 Implement deny endpoint
 - [ ] `POST /deny/{id}`:
@@ -382,7 +363,6 @@ Implement the approval server (:9999) with htmx-based UI for human review.
 - [ ] Default reason: "Denied by user"
 - [ ] **Test (unit)**: Deny with reason → reason in response
 - [ ] **Test (unit)**: Deny without reason → default reason used
-- [ ] **Commit**
 
 ### 4.6.5 Create HTML templates
 - [ ] Create `internal/guardian/approval/templates/` with embedded templates:
@@ -391,14 +371,12 @@ Implement the approval server (:9999) with htmx-based UI for human review.
 - [ ] Use `embed.FS` for single-binary distribution
 - [ ] Style with minimal inline CSS (no build step)
 - [ ] **Test (unit)**: Templates parse without error
-- [ ] **Commit**
 
 ### 4.6.6 Integrate htmx
 - [ ] Embed htmx.min.js (~14kb) via `embed.FS`
 - [ ] Serve at `/static/htmx.min.js`
 - [ ] Include in `index.html` template
 - [ ] **Test (unit)**: Static file served correctly
-- [ ] **Commit**
 
 ### 4.6.7 Implement approve/deny buttons
 - [ ] Add htmx buttons to request template:
@@ -407,7 +385,6 @@ Implement the approval server (:9999) with htmx-based UI for human review.
 - [ ] Return updated HTML partial showing result
 - [ ] **Test (manual)**: Click Approve → request disappears, shows "Approved"
 - [ ] **Test (manual)**: Click Deny → request disappears, shows "Denied"
-- [ ] **Commit**
 
 ### 4.6.8 Implement SSE for real-time updates
 - [ ] Create `GET /events` SSE endpoint
@@ -418,7 +395,6 @@ Implement the approval server (:9999) with htmx-based UI for human review.
 - [ ] Use htmx SSE extension for updates
 - [ ] **Test (unit)**: SSE endpoint sends correctly formatted events
 - [ ] **Test (manual)**: New request appears without page refresh
-- [ ] **Commit**
 
 ---
 
@@ -437,7 +413,6 @@ Create the in-container wrapper script that communicates with the request server
   - Print stdout/stderr appropriately
   - Exit with command's exit code
 - [ ] **Test (unit)**: Script syntax check (`bash -n`)
-- [ ] **Commit**
 
 ### 4.7.2 Handle response statuses
 - [ ] `approved` or `auto_approved`: print output, exit with exit_code
@@ -445,19 +420,16 @@ Create the in-container wrapper script that communicates with the request server
 - [ ] `timeout`: print timeout message to stderr, exit 1
 - [ ] `error`: print error to stderr, exit 1
 - [ ] **Test (integration)**: Each status handled correctly
-- [ ] **Commit**
 
 ### 4.7.3 Add to container image
 - [ ] Copy `hostexec` to `/usr/local/bin/hostexec` in Dockerfile
 - [ ] Set executable permissions
 - [ ] **Test (integration)**: `hostexec` available in container
-- [ ] **Commit**
 
 ### 4.7.4 Set environment variables at container start
 - [ ] Set `CLOISTER_GUARDIAN_HOST=cloister-guardian` in container
 - [ ] `CLOISTER_TOKEN` already set (from Phase 1)
 - [ ] **Test (integration)**: Environment variables present in container
-- [ ] **Commit**
 
 ---
 
@@ -473,20 +445,17 @@ Add logging for all hostexec requests and responses.
 - [ ] Complete event: `HOSTEXEC COMPLETE ... exit=N duration=Xs`
 - [ ] Timeout event: `HOSTEXEC TIMEOUT ...`
 - [ ] Follow existing log format from config-reference.md
-- [ ] **Commit**
 
 ### 4.8.2 Integrate with existing logging
 - [ ] Use existing guardian logger
 - [ ] Log to unified audit log (`~/.local/share/cloister/audit.log`)
 - [ ] Log to per-cloister log if enabled
 - [ ] **Test (unit)**: Mock logger, verify correct format
-- [ ] **Commit**
 
 ### 4.8.3 Add structured fields
 - [ ] Include all relevant metadata: project, branch, cloister, agent
 - [ ] Include execution duration for completed commands
 - [ ] **Test (unit)**: All fields present in log output
-- [ ] **Commit**
 
 ---
 
@@ -500,25 +469,21 @@ Add logging for all hostexec requests and responses.
   - What happens when approval is needed
   - How to check if command was approved
 - [ ] **Test (manual)**: Rules file content is helpful for Claude
-- [ ] **Commit**
 
 ### 4.9.2 Update docs/guardian-api.md if needed
 - [ ] Verify API documentation matches implementation
 - [ ] Add any undocumented endpoints or fields
 - [ ] **Test (manual)**: API docs accurate
-- [ ] **Commit**
 
 ### 4.9.3 Update docs/container-image.md if needed
 - [ ] Verify hostexec script documentation matches implementation
 - [ ] Document environment variables
 - [ ] **Test (manual)**: Container image docs accurate
-- [ ] **Commit**
 
 ### 4.9.4 End-to-end verification
 - [ ] **Test (manual)**: Full flow from Claude → hostexec → approval UI → execution → output
 - [ ] **Test (manual)**: Auto-approve flow works without UI interaction
 - [ ] **Test (manual)**: Denial flow shows clear message in container
-- [ ] **Commit**
 
 ---
 
