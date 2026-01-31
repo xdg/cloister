@@ -4,19 +4,25 @@ Goal: Agents can request host commands via approval workflow. A request server r
 
 ## Testing Philosophy
 
-Tests are split into tiers based on what they require:
+Tests are split into three tiers based on what they require:
 
-| Tier | Command | What it tests | Requirements |
-|------|---------|---------------|--------------|
-| **Unit** | `make test` | Request/response parsing, pattern matching, approval logic | None (sandbox-safe) |
-| **Integration** | `make test-integration` | Socket communication, container↔guardian flow | Docker daemon |
-| **Manual** | Human verification | Approval UI interaction, real command execution | Human + browser |
+| Tier | Command | Docker | Guardian | What It Tests |
+|------|---------|--------|----------|---------------|
+| Unit | `make test` | Mocked/self-skip | In-process/mocked | Logic, handlers, protocol |
+| Integration | `make test-integration` | Real | Self-managed | Lifecycle, container ops |
+| E2E | `make test-e2e` | Real | TestMain-managed | Workflows assuming stable guardian |
+
+**Build tags:**
+- Tests in `*_integration_test.go` files use `//go:build integration` — lifecycle tests that manage their own guardian
+- Tests in `test/e2e/` use `//go:build e2e` — workflow tests that share a guardian via TestMain
+- All other tests are sandbox-safe (use httptest, t.TempDir(), mock interfaces)
+
+**Shared test helpers:** `internal/testutil/` provides `RequireDocker`, `RequireGuardian`, `CleanupContainer`, and unique name generators.
 
 **Design for testability:**
 - Request server uses `http.Handler` interface for `httptest`-based testing
 - Executor interface abstracts command execution (mock for tests, real `exec.Command` for production)
 - Pattern matching is pure logic, fully testable without I/O
-- SSE testing uses mock `http.ResponseWriter` with flusher support
 - Approval state machine testable in isolation
 
 ## Verification Checklist
