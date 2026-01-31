@@ -282,15 +282,15 @@ Ensure Claude Code works correctly inside the container. **All tests require Doc
 - [x] **Test (manual)**: Verify user settings from host `~/.claude/` are respected
 
 ### 3.4.6 Generate cloister rules file for Claude
-- [ ] After copying `~/.claude/`, write `/home/cloister/.claude/rules/cloister.md`
-- [ ] Content explains cloister environment to Claude:
+- [x] After copying `~/.claude/`, write `/home/cloister/.claude/rules/cloister.md`
+- [x] Content explains cloister environment to Claude:
   - Running in sandboxed container with `/work` as project directory
   - No direct network access; proxy allowlists documentation + package registries
   - `hostexec <command>` for operations requiring host access (git push, docker, etc.)
   - Common patterns: `hostexec git push`, `hostexec docker build`
-- [ ] Create `rules/` directory if it doesn't exist
-- [ ] Overwrites any existing `cloister.md` (cloister-controlled file)
-- [ ] **Test (integration)**: Start container, verify `/home/cloister/.claude/rules/cloister.md` exists with expected content
+- [x] Create `rules/` directory if it doesn't exist
+- [x] Overwrites any existing `cloister.md` (cloister-controlled file)
+- [x] **Test (integration)**: Start container, verify `/home/cloister/.claude/rules/cloister.md` exists with expected content
 
 ---
 

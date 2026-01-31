@@ -161,3 +161,62 @@ func TestClaudeAgent_SkipPerms_Nil_HasAlias(t *testing.T) {
 		t.Errorf("Expected .bashrc to contain %q, got: %s", expectedAlias, bashrcOutput)
 	}
 }
+
+func TestClaudeAgent_RulesFile(t *testing.T) {
+	requireDocker(t)
+
+	containerName := testContainerName("rules")
+	t.Cleanup(func() { cleanupTestContainer(containerName) })
+
+	// Create container using cloister-default image which has /home/cloister
+	_, err := docker.Run("create",
+		"--name", containerName,
+		container.DefaultImage,
+		"sleep", "infinity")
+	if err != nil {
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage, err)
+	}
+
+	// Start the container
+	if _, err := docker.Run("start", containerName); err != nil {
+		t.Fatalf("Failed to start container: %v", err)
+	}
+
+	// Create agent with default config
+	agent := NewClaudeAgent()
+	agentCfg := &config.AgentConfig{}
+
+	// Run Setup
+	_, err = agent.Setup(containerName, agentCfg)
+	if err != nil {
+		t.Fatalf("Setup() failed: %v", err)
+	}
+
+	// Verify the rules file exists at the expected path
+	rulesPath := "/home/cloister/.claude/rules/cloister.md"
+	output, err := docker.Run("exec", containerName, "cat", rulesPath)
+	if err != nil {
+		t.Fatalf("Rules file not found at %s: %v", rulesPath, err)
+	}
+
+	// Verify content contains expected key phrases
+	expectedPhrases := []string{
+		"Cloister Environment",
+		"sandbox",
+		"/work",
+		"hostexec",
+		"HTTP proxy",
+		"git push",
+	}
+
+	for _, phrase := range expectedPhrases {
+		if !strings.Contains(output, phrase) {
+			t.Errorf("Rules file missing expected phrase %q", phrase)
+		}
+	}
+
+	// Verify the content matches what we expect (not corrupted)
+	if !strings.HasPrefix(output, "# Cloister Environment") {
+		t.Errorf("Rules file has unexpected format, starts with: %q", output[:min(50, len(output))])
+	}
+}

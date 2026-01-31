@@ -2,6 +2,8 @@ package agent
 
 import (
 	"fmt"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/xdg/cloister/internal/claude"
 	"github.com/xdg/cloister/internal/config"
@@ -16,6 +18,46 @@ const (
 	settingsDir    = ".claude"
 	configFileName = ".claude.json"
 )
+
+// cloisterRulesPath is the path to the cloister rules file in the container.
+const cloisterRulesPath = containerHomeDir + "/.claude/rules/cloister.md"
+
+// cloisterRulesContent is the content of the rules file that explains the
+// cloister environment to Claude. This file is always overwritten by cloister.
+const cloisterRulesContent = `# Cloister Environment
+
+You are running inside a cloister container - a sandboxed environment for AI coding agents.
+
+## Key Facts
+
+- **Project directory**: /work (this is where you should do all your work)
+- **Network**: No direct internet access; HTTP proxy allowlists documentation sites and package registries
+- **Host access**: Use hostexec for operations that require the host machine
+
+## Using hostexec
+
+For operations that cannot run inside the container (git push, docker commands, etc.), use the hostexec wrapper. This sends a request to the host for human approval.
+
+Common patterns:
+- ` + "`hostexec git push`" + ` - push commits to remote
+- ` + "`hostexec git push origin HEAD`" + ` - push current branch
+- ` + "`hostexec docker build -t myimage .`" + ` - build Docker image on host
+- ` + "`hostexec docker compose up -d`" + ` - start services on host
+
+## What Works Inside the Container
+
+- Reading and writing files in /work
+- Running tests, linters, and build tools
+- Installing packages (npm, pip, go get, etc.)
+- Git operations that don't require network (commit, branch, merge, rebase)
+- Fetching allowed documentation and packages through the proxy
+
+## What Requires hostexec
+
+- Git push/pull (network operations)
+- Docker commands (no Docker socket in container)
+- Any command that needs host filesystem access outside /work
+`
 
 // ClaudeAgent handles setup for Claude Code in containers.
 type ClaudeAgent struct {
@@ -91,6 +133,12 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 		_ = err
 	}
 
+	// Step 1.5: Write cloister rules file
+	// This explains the cloister environment to Claude and is always overwritten
+	if err := writeCloisterRules(containerName); err != nil {
+		return nil, fmt.Errorf("failed to write cloister rules: %w", err)
+	}
+
 	// Step 2: Inject credentials (if configured)
 	var authMethod string
 	if agentCfg != nil && agentCfg.AuthMethod != "" {
@@ -148,4 +196,18 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 	}
 
 	return result, nil
+}
+
+// writeCloisterRules creates the rules directory and writes the cloister.md file.
+// This file explains the cloister environment to Claude and is always overwritten.
+func writeCloisterRules(containerName string) error {
+	// Create rules directory if it doesn't exist
+	rulesDir := filepath.Dir(cloisterRulesPath)
+	mkdirCmd := exec.Command("docker", "exec", containerName, "mkdir", "-p", rulesDir)
+	if output, err := mkdirCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create rules directory: %w: %s", err, output)
+	}
+
+	// Write the rules file
+	return WriteFileToContainer(containerName, cloisterRulesPath, cloisterRulesContent)
 }
