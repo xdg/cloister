@@ -19,7 +19,7 @@ RUN_FLAG = $(if $(RUN),-run=$(RUN))
 VERBOSE_FLAG = $(if $(VERBOSE),-v)
 
 # D2 diagram settings
-D2_SOURCES := $(wildcard docs/diagrams/*.d2)
+D2_SOURCES := $(wildcard specs/diagrams/*.d2)
 D2_SVGS := $(D2_SOURCES:.d2=.svg)
 
 .PHONY: docker install test test-race test-integration test-e2e test-all fmt lint clean diagrams clean-diagrams
@@ -62,7 +62,7 @@ clean:
 # Diagram targets
 diagrams: $(D2_SVGS)
 
-docs/diagrams/%.svg: docs/diagrams/%.d2
+specs/diagrams/%.svg: specs/diagrams/%.d2
 	d2 --pad=20 $< $@
 
 clean-diagrams:

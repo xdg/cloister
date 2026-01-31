@@ -118,7 +118,7 @@ Some sandboxes use **action control**: enumerate what the agent can do, then all
 
 ### Architecture
 
-![Network Topology](docs/diagrams/network-topology.svg)
+![Network Topology](specs/diagrams/network-topology.svg)
 
 1. **Isolated containers** run on an internal Docker network with no direct internet access
 2. **All HTTP(S) traffic** routes through cloister-guardian's allowlist proxy
@@ -143,7 +143,7 @@ cloister project edit my-project
 # Add domains under proxy.allow
 ```
 
-See [docs/config-reference.md](docs/config-reference.md) for the full schema.
+See [specs/config-reference.md](specs/config-reference.md) for the full schema.
 
 ## Current Limitations
 
@@ -153,7 +153,7 @@ Cloister is in active development. Current limitations include:
 - **No git worktree support** — Each worktree currently needs its own cloister
 - **No devcontainer integration** — Custom devcontainer.json configs not yet honored
 
-See [docs/implementation-phases.md](docs/implementation-phases.md) for the full roadmap.
+See [specs/implementation-phases.md](specs/implementation-phases.md) for the full roadmap.
 
 ## Contributing
 

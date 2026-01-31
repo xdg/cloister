@@ -8,7 +8,7 @@ import (
 // defaultConfigTemplate is the commented YAML template for the default global config.
 // Using a template string provides control over comments and formatting.
 const defaultConfigTemplate = `# Cloister global configuration
-# See https://github.com/xdg/cloister/docs/config-reference.md for full documentation
+# See https://github.com/xdg/cloister/specs/config-reference.md for full documentation
 
 # Proxy configuration
 proxy:

@@ -7,10 +7,8 @@ It's ironic that a project devoted to AI coding agents is taking such a step, bu
 ## Issues Welcome
 
 Well-thought-out issues are welcome, particularly if they include:
-
-- A [Short, Self Contained, Correct, Example](https://sscce.org/) demonstrating the problem
+- A [Short, Self Contained, Correct, Example](https://sscce.org/) to reproduce the problem
 - An LLM prompt that would help diagnose or fix the issue
-- Clear steps to reproduce
 
 ## Security
 

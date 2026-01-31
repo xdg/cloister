@@ -487,12 +487,12 @@ Add logging for all hostexec requests and responses.
   - How to check if command was approved
 - [ ] **Test (manual)**: Rules file content is helpful for Claude
 
-### 4.10.2 Update docs/guardian-api.md if needed
+### 4.10.2 Update specs/guardian-api.md if needed
 - [ ] Verify API documentation matches implementation
 - [ ] Add any undocumented endpoints or fields
 - [ ] **Test (manual)**: API docs accurate
 
-### 4.10.3 Update docs/container-image.md if needed
+### 4.10.3 Update specs/container-image.md if needed
 - [ ] Verify hostexec script documentation matches implementation
 - [ ] Document environment variables
 - [ ] **Test (manual)**: Container image docs accurate

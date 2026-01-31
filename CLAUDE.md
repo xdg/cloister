@@ -118,12 +118,12 @@ Tests are split into three tiers based on what they require:
 
 | Document | Contents |
 |----------|----------|
-| [cloister-spec.md](docs/cloister-spec.md) | Main specification: threat model, architecture, security analysis |
-| [cli-workflows.md](docs/cli-workflows.md) | CLI commands and workflow examples |
-| [agent-configuration.md](docs/agent-configuration.md) | AI agent auth setup (Claude, Codex, etc.) |
-| [guardian-api.md](docs/guardian-api.md) | Guardian endpoint reference |
-| [container-image.md](docs/container-image.md) | Default Dockerfile and hostexec |
-| [devcontainer-integration.md](docs/devcontainer-integration.md) | Devcontainer security and configuration |
-| [config-reference.md](docs/config-reference.md) | Full configuration schema |
-| [implementation-phases.md](docs/implementation-phases.md) | Development roadmap |
-| [leash-cloister-comparison.md](docs/leash-cloister-comparison.md) | Comparison with similar tools |
+| [cloister-spec.md](specs/cloister-spec.md) | Main specification: threat model, architecture, security analysis |
+| [cli-workflows.md](specs/cli-workflows.md) | CLI commands and workflow examples |
+| [agent-configuration.md](specs/agent-configuration.md) | AI agent auth setup (Claude, Codex, etc.) |
+| [guardian-api.md](specs/guardian-api.md) | Guardian endpoint reference |
+| [container-image.md](specs/container-image.md) | Default Dockerfile and hostexec |
+| [devcontainer-integration.md](specs/devcontainer-integration.md) | Devcontainer security and configuration |
+| [config-reference.md](specs/config-reference.md) | Full configuration schema |
+| [implementation-phases.md](specs/implementation-phases.md) | Development roadmap |
+| [comparison-leash.md](specs/comparison-leash.md) | Comparison with similar tools |
