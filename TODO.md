@@ -308,9 +308,9 @@ Ensure Claude Code works correctly inside the container. **All tests require Doc
 - [x] Note env var fallback is deprecated
 
 ### 3.5.3 Remove Phase 1 workaround comments
-- [ ] Remove "TEMPORARY: Phase 1 workaround" comments from `internal/token/credentials.go`
-- [ ] Update function docs to reflect new behavior
-- [ ] **Test (unit)**: `make lint` passes
+- [x] Remove "TEMPORARY: Phase 1 workaround" comments from `internal/token/credentials.go`
+- [x] Update function docs to reflect new behavior
+- [x] **Test (unit)**: `make lint` passes
 
 ### 3.5.4 Add migration notes to CHANGELOG or docs
 - [ ] Document how to migrate from env vars to config: just run `cloister setup claude`

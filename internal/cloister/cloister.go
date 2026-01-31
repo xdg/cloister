@@ -256,14 +256,15 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		agentImpl = agent.Get(agentName)
 	}
 
-	// Fall back to env vars if no agent config with auth method
+	// Fall back to env vars if no agent config with auth method.
+	// Using deprecated functions intentionally - this is the fallback path.
 	if agentCfg == nil || agentCfg.AuthMethod == "" {
-		usedEnvVars := token.CredentialEnvVarsUsed()
+		usedEnvVars := token.CredentialEnvVarsUsed() //nolint:staticcheck // intentional fallback
 		if len(usedEnvVars) > 0 {
 			fmt.Fprintf(deps.stderr, "Warning: Using %s from environment.\n", usedEnvVars[0])
 			fmt.Fprintln(deps.stderr, "Run 'cloister setup claude' to store credentials in config.")
 		}
-		envVars = append(envVars, token.CredentialEnvVars()...)
+		envVars = append(envVars, token.CredentialEnvVars()...) //nolint:staticcheck // intentional fallback
 	}
 
 	cfg := &container.Config{

@@ -5,9 +5,10 @@ import "os"
 // credentialEnvVarNames lists the host environment variables to pass through
 // to containers for AI agent authentication.
 //
-// TEMPORARY: This direct credential passthrough is a Phase 1 workaround.
-// In Phase 3, credentials will be managed via `cloister setup claude` and
-// stored in the cloister config, removing the dependency on host env vars.
+// Deprecated: This direct credential passthrough is a fallback mechanism.
+// Prefer config-based credential management via agent-specific setup commands
+// (e.g., `cloister setup claude`). Host env var passthrough remains available
+// for backward compatibility when no config-based credentials are set.
 var credentialEnvVarNames = []string{
 	"ANTHROPIC_API_KEY",
 	"CLAUDE_CODE_OAUTH_TOKEN",
@@ -16,11 +17,11 @@ var credentialEnvVarNames = []string{
 // CredentialEnvVars returns environment variables for AI agent credentials
 // that are set on the host system. Only non-empty values are included.
 //
-// TEMPORARY: This is a Phase 1 workaround for credential injection.
-// In Phase 3, this will be replaced by credential management via
-// `cloister setup claude` which stores credentials in the cloister config.
+// Deprecated: This is a fallback mechanism for credential injection.
+// Prefer config-based credential management via agent-specific setup commands.
+// This function is still used when no config-based credentials are set.
 //
-// Currently passes through:
+// Passes through:
 //   - ANTHROPIC_API_KEY: API key for Anthropic API access
 //   - CLAUDE_CODE_OAUTH_TOKEN: OAuth token for Claude Code authentication
 func CredentialEnvVars() []string {
@@ -36,6 +37,8 @@ func CredentialEnvVars() []string {
 // CredentialEnvVarsUsed returns the names of credential environment variables
 // that are set on the host system. This is used to generate deprecation warnings
 // when falling back to host env vars instead of config-based credentials.
+//
+// Deprecated: This is a fallback mechanism. Prefer config-based credentials.
 func CredentialEnvVarsUsed() []string {
 	var names []string
 	for _, name := range credentialEnvVarNames {
