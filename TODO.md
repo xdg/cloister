@@ -1,6 +1,6 @@
-# Phase 3: Claude Code Integration
+# Phase 4: Host Execution (hostexec)
 
-Goal: Claude Code works inside cloister with no manual setup. A wizard handles credential configuration, and credentials are injected from config rather than host environment variables.
+Goal: Agents can request host commands via approval workflow. A request server receives commands from containers, auto-approves or queues for human review, and executes via a host process communicating over a Unix socket.
 
 ## Testing Philosophy
 
@@ -8,19 +8,20 @@ Tests are split into tiers based on what they require:
 
 | Tier | Command | What it tests | Requirements |
 |------|---------|---------------|--------------|
-| **Unit** | `make test` | Pure logic, mocked I/O, config parsing | None (sandbox-safe) |
-| **Integration** | `make test-integration` | Container creation, env var injection | Docker daemon |
-| **Manual** | Human verification | Real TTY input, actual Claude API calls | Human + credentials |
+| **Unit** | `make test` | Request/response parsing, pattern matching, approval logic | None (sandbox-safe) |
+| **Integration** | `make test-integration` | Socket communication, container↔guardian flow | Docker daemon |
+| **Manual** | Human verification | Approval UI interaction, real command execution | Human + browser |
 
 **Design for testability:**
-- Factor interactive I/O through interfaces (`io.Reader`/`io.Writer`) for unit testing
-- Use `t.TempDir()` for config file tests (avoids touching real `~/.config`)
-- Mock `container.Manager` interface to verify env vars without Docker
-- Integration tests use `//go:build integration` tag
+- Request server uses `http.Handler` interface for `httptest`-based testing
+- Executor interface abstracts command execution (mock for tests, real `exec.Command` for production)
+- Pattern matching is pure logic, fully testable without I/O
+- SSE testing uses mock `http.ResponseWriter` with flusher support
+- Approval state machine testable in isolation
 
 ## Verification Checklist
 
-Before marking Phase 3 complete:
+Before marking Phase 4 complete:
 
 **Automated (`make test`):**
 1. All unit tests pass
@@ -29,36 +30,21 @@ Before marking Phase 3 complete:
 4. `make test-race` passes
 
 **Automated (`make test-integration`):**
-5. Integration tests pass (credential injection, file creation, ~/.claude/ settings copy)
+5. Request server integration tests pass
+6. Guardian↔executor socket communication tests pass
+7. hostexec wrapper tests pass
 
-**Manual — test each auth method:**
+**Manual — test approval flow:**
+8. `hostexec docker compose ps` → auto-approves (if configured), output returned
+9. `hostexec docker compose up -d` → appears in approval UI
+10. Click Approve → command executes, output returned to container
+11. Click Deny → container receives denial message
+12. Wait 5 minutes without action → request times out
 
-*Option 1: Existing login (macOS):*
-6. Run `cloister setup claude`, select "Use existing Claude login"
-7. Verify keychain extraction succeeds (or errors clearly if not logged in)
-8. `cloister start` → `cat /home/cloister/.claude/.credentials.json` → credentials present
-9. Run `claude` command → API call succeeds (token refresh works)
-
-*Option 1: Existing login (Linux):*
-10. Verify setup detects `~/.claude/.credentials.json` (or errors if missing)
-11. `cloister start` → credentials file copied to container
-
-*Option 2: Long-lived OAuth token:*
-12. Run `cloister setup claude`, select "Long-lived OAuth token"
-13. Paste token from `claude setup-token` (verify hidden input)
-14. `cloister start` → `echo $CLAUDE_CODE_OAUTH_TOKEN` → token visible
-15. Run `claude` command → API call succeeds
-
-*Option 3: API key:*
-16. Run `cloister setup claude`, select "API key"
-17. Paste API key (verify hidden input)
-18. `cloister start` → `echo $ANTHROPIC_API_KEY` → key visible
-19. Run `claude` command → API call succeeds
-
-*Common verification:*
-20. Run `ls -la /home/cloister/.claude/` → user settings present (minus .credentials.json on macOS)
-21. Run `cat /home/cloister/.claude.json` → onboarding config present (generated)
-22. Run `type claude` → shows alias with `--dangerously-skip-permissions`
+**Manual — test security:**
+13. Request with invalid token → rejected
+14. Request with mismatched workdir → rejected
+15. Verify socket permissions (not world-writable)
 
 ## Dependencies Between Phases
 
@@ -68,286 +54,459 @@ Phase 1 (MVP + Guardian) ✓
        ▼
 Phase 2 (Config) ✓
        │
-       ▼
-Phase 3 (Claude Integration) ◄── CURRENT
+       ├─► Phase 3 (Claude Integration) ✓
        │
-       ├─► Phase 4 (hostexec) [parallel path from Phase 2]
-       │
-       ▼
-Phase 5 (Worktrees)
-       │
-       ▼
-Phase 6 (Domain Approval)
-       │
-       ▼
-Phase 7 (Polish)
+       └─► Phase 4 (hostexec) ◄── CURRENT
+               │
+               ▼
+         Phase 5 (Worktrees)
+               │
+               ▼
+         Phase 6 (Domain Approval)
+               │
+               ▼
+         Phase 7 (Polish)
 ```
 
 ---
 
-## Phase 3.1: Config Schema Updates
+## Phase 4.1: Request Server Foundation
 
-Extend the configuration types to support credential storage. **All tests sandbox-safe.**
+Add the request server (:9998) to the guardian container for receiving hostexec commands.
 
-### 3.1.1 Add credential fields to AgentConfig
-- [x] In `internal/config/types.go`, extend `AgentConfig` with credential fields:
+### 4.1.1 Define request/response types
+- [ ] Create `internal/guardian/request/types.go` with request and response structs:
   ```go
-  type AgentConfig struct {
-      Command    string   `yaml:"command,omitempty"`
-      Env        []string `yaml:"env,omitempty"`
-      AuthMethod string   `yaml:"auth_method,omitempty"`  // "existing", "token", or "api_key"
-      Token      string   `yaml:"token,omitempty"`        // long-lived OAuth token
-      APIKey     string   `yaml:"api_key,omitempty"`      // Anthropic API key
-      SkipPerms  *bool    `yaml:"skip_permissions,omitempty"` // default true
+  type CommandRequest struct {
+      Cmd string `json:"cmd"`
+  }
+  type CommandResponse struct {
+      Status   string `json:"status"`              // "approved", "auto_approved", "denied", "timeout", "error"
+      Pattern  string `json:"pattern,omitempty"`   // Matched pattern (for auto_approved)
+      Reason   string `json:"reason,omitempty"`    // Denial/timeout reason
+      ExitCode int    `json:"exit_code,omitempty"` // Command exit code
+      Stdout   string `json:"stdout,omitempty"`
+      Stderr   string `json:"stderr,omitempty"`
   }
   ```
-- [x] **Test (unit)**: YAML round-trip: marshal config with new fields, unmarshal, verify values
+- [ ] **Test (unit)**: JSON marshal/unmarshal round-trip for all response variants
 
-### 3.1.2 Add defaults for agents.claude in default config
-- [x] In `internal/config/defaults.go`, add default `agents.claude` entry with `skip_permissions: true`
-- [x] Ensure default config creates agents map if missing
-- [x] **Test (unit)**: `DefaultGlobalConfig()` returns config with `agents["claude"].SkipPerms == true`
+### 4.1.2 Implement token-based authentication middleware
+- [ ] Create `internal/guardian/request/auth.go` with middleware that:
+  - Extracts `X-Cloister-Token` header
+  - Looks up token in guardian's token registry
+  - Returns 401 if missing/invalid
+  - Attaches cloister metadata to request context
+- [ ] **Test (unit)**: Missing header → 401; invalid token → 401; valid token → context populated
 
-### 3.1.3 Add config validation for agent credentials
-- [x] In `internal/config/validate.go`, add validation:
-  - Error if `auth_method` set but required field missing (e.g., `token` for "token" method)
-  - Warn if `auth_method` not set and no host env vars (no auth configured)
-  - Validate `auth_method` is one of: "existing", "token", "api_key"
-- [x] **Test (unit)**: Validation returns expected errors/warnings for each case
-
----
-
-## Phase 3.2: Setup Command
-
-Create the interactive setup wizard for Claude credentials.
-
-### 3.2.1 Create setup command structure
-- [x] Create `internal/cmd/setup.go` with `setup` parent command
-- [x] Create `internal/cmd/setup_claude.go` with `setup claude` subcommand
-- [x] Wire up to root command: `cloister setup claude`
-- [x] **Test (unit)**: `rootCmd.Commands()` includes setup; setup has claude subcommand
-
-### 3.2.2 Implement auth method prompt
-- [x] Define `Prompter` interface: `Prompt(prompt string, options []string, defaultIdx int) (int, error)`
-- [x] Implement `StdinPrompter` for real use, `MockPrompter` for tests
-- [x] Prompt user to select authentication method:
-  ```
-  Select authentication method:
-    1. Use existing Claude login (recommended)
-    2. Long-lived OAuth token (from `claude setup-token`)
-    3. API key (from console.anthropic.com)
-  ```
-- [x] Default to option 1 if user just presses Enter
-- [x] **Test (unit)**: Mock prompter returns expected selection; default works
-
-### 3.2.3 Implement "existing login" option (option 1)
-- [x] Create `internal/claude/credentials.go` package for credential extraction
-- [x] Detect platform: `runtime.GOOS`
-- [x] **macOS path:**
-  - [x] Run `security find-generic-password -s 'Claude Code-credentials' -a "$(whoami)" -w`
-  - [x] Parse JSON response to extract credentials
-  - [x] Store extracted JSON in config at `agents.claude.credentials_json` (or separate file)
-  - [x] Error if command fails → "Run `claude login` first"
-- [x] **Linux path:**
-  - [x] Check if `~/.claude/.credentials.json` exists
-  - [x] Store path reference in config (will be copied at container start)
-  - [x] Error if file missing → "Run `claude login` first"
-- [x] **Test (unit)**: Mock exec.Command for keychain; mock filesystem for Linux
-- [x] **Test (manual)**: macOS keychain extraction works; Linux file detection works
-
-### 3.2.4 Implement token/API key options (options 2 & 3)
-- [x] Define `CredentialReader` interface: `ReadCredential(prompt string) (string, error)`
-- [x] Implement `TerminalCredentialReader` using `golang.org/x/term` for hidden input
-- [x] Implement `MockCredentialReader` that reads from provided string
-- [x] For OAuth token: "Paste your OAuth token (from `claude setup-token`):"
-- [x] For API key: "Paste your API key (from console.anthropic.com):"
-- [x] **Test (unit)**: Mock reader returns provided credential
-- [x] **Test (manual)**: Real terminal hides input while typing
-
-### 3.2.5 Implement skip-permissions prompt
-- [x] Prompt: "Skip Claude's built-in permission prompts? (recommended inside cloister) [Y/n]:"
-- [x] Default to yes (Y) if user just presses Enter
-- [x] **Test (unit)**: Empty input → true; "n" → false; "N" → false; "y" → true
-
-### 3.2.6 Save credentials to config
-- [x] Load existing global config (or create default)
-- [x] Based on auth method, update appropriate config field:
-  - Option 1: `agents.claude.auth_method: "existing"` (credentials extracted at start)
-  - Option 2: `agents.claude.auth_method: "token"`, `agents.claude.token: "..."`
-  - Option 3: `agents.claude.auth_method: "api_key"`, `agents.claude.api_key: "..."`
-- [x] Update `agents.claude.skip_permissions`
-- [x] Write config back with `config.WriteGlobalConfig()`
-- [x] Print success message with config path
-- [x] **Test (unit)**: Use `t.TempDir()` for config path; verify YAML contains expected values
-
-### 3.2.7 Handle existing credentials
-- [x] Check if credentials already exist in config
-- [x] If yes, prompt: "Credentials already configured. Replace? [y/N]:"
-- [x] Default to no (N) to prevent accidental overwrite
-- [x] **Test (unit)**: Existing creds + "N" input → config unchanged; "y" → replaced
+### 4.1.3 Create request server skeleton
+- [ ] Create `internal/guardian/request/server.go` with:
+  - `NewServer(tokenRegistry, patternMatcher, executor)` constructor
+  - `POST /request` handler (returns placeholder response for now)
+  - Bind to port 9998 on `cloister-net`
+- [ ] Wire into guardian startup in `internal/guardian/guardian.go`
+- [ ] **Test (unit)**: Server starts, `/request` endpoint responds
+- [ ] **Test (integration)**: Container can reach request server via `cloister-guardian:9998`
 
 ---
 
-## Phase 3.3: Credential Injection
+## Phase 4.2: Pattern Matching and Auto-Approval
 
-Platform-aware credential injection into containers.
+Implement command pattern matching for auto-approve and manual-approve decisions.
 
-### 3.3.1 Create credential injection interface
-- [x] In `internal/claude/inject.go`, define credential injection logic
-- [x] Three injection modes based on `auth_method`:
-  - `"existing"`: Write `.credentials.json` file to container
-  - `"token"`: Set `CLAUDE_CODE_OAUTH_TOKEN` env var
-  - `"api_key"`: Set `ANTHROPIC_API_KEY` env var
-- [x] **Test (unit)**: Each mode produces correct injection config
-
-### 3.3.2 Implement "existing login" injection
-- [x] **macOS:** Re-extract from Keychain at container start (credentials may have refreshed)
-- [x] **Linux:** Read `~/.claude/.credentials.json` from host
-- [x] Write credentials to container at `/home/cloister/.claude/.credentials.json`
-- [x] Use Docker copy or volume mount (prefer copy to avoid host file mutation issues)
-- [x] **Test (unit)**: Mock keychain/filesystem, verify correct JSON produced
-- [x] **Test (integration)**: Container has valid `.credentials.json`
-
-### 3.3.3 Implement token/API key injection
-- [x] For token: set `CLAUDE_CODE_OAUTH_TOKEN` env var on container
-- [x] For API key: set `ANTHROPIC_API_KEY` env var on container
-- [x] **Test (unit)**: Verify correct env vars passed to container.Manager
-- [x] **Test (integration)**: `printenv` inside container shows expected var
-
-### 3.3.4 Update container start to use new injection
-- [x] In `internal/cloister/cloister.go`, load global config
-- [x] Call `claude.InjectCredentials()` to get injection config
-- [x] Pass to container manager (env vars and/or files to create)
-- [x] **Test (unit)**: Mock `container.Manager`, verify correct injection config passed
-
-### 3.3.5 Deprecate host env var passthrough
-- [x] If no config credentials and host env vars present, use as fallback
-- [x] Print deprecation warning:
+### 4.2.1 Define pattern matcher interface
+- [ ] Create `internal/guardian/patterns/matcher.go` with:
+  ```go
+  type Matcher interface {
+      Match(cmd string) MatchResult
+  }
+  type MatchResult struct {
+      Action  Action  // AutoApprove, ManualApprove, Deny
+      Pattern string  // The matched pattern (if any)
+  }
+  type Action int
+  const (
+      Deny Action = iota
+      AutoApprove
+      ManualApprove
+  )
   ```
-  Warning: Using ANTHROPIC_API_KEY from environment.
-  Run 'cloister setup claude' to store credentials in config.
-  ```
-- [x] Only warn once per `cloister start` invocation
-- [x] **Test (unit)**: Capture stderr, verify warning present when using env fallback
+- [ ] **Test (unit)**: Interface compiles, MatchResult struct works
 
-### 3.3.6 Handle credential refresh errors
-- [x] If macOS keychain extraction fails at start, error with clear message
-- [x] If Linux `.credentials.json` missing, error with clear message
-- [x] Suggest running `claude login` or `cloister setup claude` again
-- [x] **Test (unit)**: Verify error messages for each failure mode
+### 4.2.2 Implement regex-based pattern matcher
+- [ ] Create `RegexMatcher` that:
+  - Compiles patterns from config at construction time
+  - Checks auto_approve patterns first (return AutoApprove on match)
+  - Checks manual_approve patterns second (return ManualApprove on match)
+  - Returns Deny if no pattern matches
+- [ ] Handle regex compilation errors gracefully (log and skip invalid patterns)
+- [ ] **Test (unit)**: `docker compose ps` matches `^docker compose ps$` → AutoApprove
+- [ ] **Test (unit)**: `docker compose up -d` matches `^docker compose (up|down|restart|build).*$` → ManualApprove
+- [ ] **Test (unit)**: `rm -rf /` matches nothing → Deny
+- [ ] **Test (unit)**: Invalid regex pattern → logged, skipped
+
+### 4.2.3 Load patterns from config
+- [ ] Add config parsing for `approval.auto_approve` and `approval.manual_approve` in `internal/config`
+- [ ] Pass patterns to `RegexMatcher` during guardian initialization
+- [ ] Support per-project pattern additions (merged with global)
+- [ ] **Test (unit)**: Config with patterns → matcher initialized correctly
+- [ ] **Test (unit)**: Project patterns merge with global patterns
+
+### 4.2.4 Integrate pattern matcher into request handler
+- [ ] In `/request` handler, call `matcher.Match(cmd)`
+- [ ] If AutoApprove: proceed to execution immediately
+- [ ] If ManualApprove: queue for approval (Phase 4.3)
+- [ ] If Deny: return denial response immediately
+- [ ] **Test (unit)**: Auto-approve pattern → executes without approval queue
+- [ ] **Test (unit)**: Manual-approve pattern → queued (mocked)
+- [ ] **Test (unit)**: No match → denied immediately
 
 ---
 
-## Phase 3.4: Container Configuration
+## Phase 4.3: Approval Queue and Pending Requests
 
-Ensure Claude Code works correctly inside the container. **All tests require Docker.**
+Implement the in-memory queue for pending approval requests.
 
-### 3.4.1 Copy ~/.claude/ settings from host
-- [x] Copy host `~/.claude/` directory into container at `/home/cloister/.claude/`
-- [x] Exclude machine-local files (debug/, statsig/, history, etc.) via rsync patterns
-- [x] Handle missing directory gracefully (first-time users won't have it)
-- [x] Copy is one-way (host → container); changes inside container don't persist
-- [x] **Test (unit)**: `TestInjectUserSettings_MissingClaudeDir` verifies nil return when dir missing
-- [x] **Test (integration)**: `TestInjectUserSettings_IntegrationWithContainer` verifies copy and ownership
-
-### 3.4.2 Generate ~/.claude.json in container
-- [x] Generate `/home/cloister/.claude.json` (separate from `.claude/` directory):
-  ```json
-  {
-    "hasCompletedOnboarding": true,
-    "bypassPermissionsModeAccepted": true
+### 4.3.1 Create approval queue data structure
+- [ ] Create `internal/guardian/approval/queue.go` with:
+  ```go
+  type PendingRequest struct {
+      ID        string
+      Cloister  string
+      Project   string
+      Branch    string
+      Agent     string
+      Cmd       string
+      Timestamp time.Time
+      Response  chan<- CommandResponse  // Channel to send result back
+  }
+  type Queue struct {
+      // Thread-safe queue operations
   }
   ```
-- [x] File must exist before user shell starts
-- [x] This is generated, not copied (we control onboarding behavior)
-- [x] **Test (integration)**: Start container, `cat /home/cloister/.claude.json`, verify JSON content
+- [ ] Implement `Add(request) string` (returns ID)
+- [ ] Implement `Get(id) (*PendingRequest, bool)`
+- [ ] Implement `Remove(id)`
+- [ ] Implement `List() []PendingRequest` (for UI)
+- [ ] Generate request IDs with `crypto/rand` (8 bytes hex)
+- [ ] **Test (unit)**: Add/Get/Remove/List operations work correctly
+- [ ] **Test (unit)**: Concurrent access is safe (use `-race`)
 
-### 3.4.3 Create claude alias for --dangerously-skip-permissions
-- [x] Pass `skip_permissions` setting to container (env var or mount)
-- [x] If enabled (default), entrypoint adds to `/home/cloister/.bashrc`:
-  ```bash
-  alias claude='claude --dangerously-skip-permissions'
-  ```
-- [x] Only add if not already present (idempotent)
-- [x] **Test (integration)**: Start container, run `bash -ic 'type claude'`, verify alias shown
+### 4.3.2 Add timeout handling
+- [ ] Start timeout goroutine when request is added
+- [ ] On timeout: remove from queue, send timeout response on channel
+- [ ] Cancel timeout when request is approved/denied
+- [ ] Default timeout: 5 minutes (configurable in config)
+- [ ] **Test (unit)**: Request times out → timeout response sent
+- [ ] **Test (unit)**: Approved before timeout → no timeout response
 
-### 3.4.4 Handle skip_permissions=false case
-- [x] If user sets `skip_permissions: false` in config, don't create alias
-- [x] Claude will use its normal permission prompts
-- [x] **Test (integration)**: Start container with skip_permissions=false, verify no alias
-
-### 3.4.5 End-to-end Claude verification
-- [x] **Test (manual)**: Inside container, run `claude --version` → prints version
-- [x] **Test (manual)**: Run `claude "say hello"` → API call succeeds, response shown
-- [x] **Test (manual)**: Verify user settings from host `~/.claude/` are respected
-
-### 3.4.6 Generate cloister rules file for Claude
-- [x] After copying `~/.claude/`, write `/home/cloister/.claude/rules/cloister.md`
-- [x] Content explains cloister environment to Claude:
-  - Running in sandboxed container with `/work` as project directory
-  - No direct network access; proxy allowlists documentation + package registries
-  - `hostexec <command>` for operations requiring host access (git push, docker, etc.)
-  - Common patterns: `hostexec git push`, `hostexec docker build`
-- [x] Create `rules/` directory if it doesn't exist
-- [x] Overwrites any existing `cloister.md` (cloister-controlled file)
-- [x] **Test (integration)**: Start container, verify `/home/cloister/.claude/rules/cloister.md` exists with expected content
+### 4.3.3 Integrate queue into request handler
+- [ ] For ManualApprove matches:
+  - Create response channel
+  - Add to queue with metadata from token lookup
+  - Block waiting on response channel
+  - Return response to client
+- [ ] **Test (unit)**: Handler blocks until approval received
+- [ ] **Test (unit)**: Handler returns timeout response after timeout
 
 ---
 
-## Phase 3.5: Documentation and Cleanup
+## Phase 4.4: Host Executor
 
-### 3.5.1 Update README with new setup flow
-- [x] Replace manual env var instructions with `cloister setup claude`
-- [x] Document both OAuth and API key flows
-- [x] Remove "Phase 1 limitation" notes about manual credential setup
+Implement the host-side process that executes approved commands.
 
-### 3.5.2 Update docs/agent-configuration.md
-- [x] Add complete setup wizard documentation
-- [x] Document credential priority order (config > env vars)
-- [x] Document skip_permissions option and why it defaults to true
-- [x] Note env var fallback is deprecated
+### 4.4.1 Define executor interface
+- [ ] Create `internal/executor/executor.go` with:
+  ```go
+  type Executor interface {
+      Execute(ctx context.Context, req ExecuteRequest) ExecuteResponse
+  }
+  type ExecuteRequest struct {
+      Token     string
+      Command   string
+      Args      []string
+      Workdir   string
+      Env       map[string]string
+      TimeoutMs int
+  }
+  type ExecuteResponse struct {
+      Status   string // "completed", "timeout", "error"
+      ExitCode int
+      Stdout   string
+      Stderr   string
+      Error    string
+  }
+  ```
+- [ ] **Test (unit)**: Types compile and serialize correctly
 
-### 3.5.3 Remove Phase 1 workaround comments
-- [x] Remove "TEMPORARY: Phase 1 workaround" comments from `internal/token/credentials.go`
-- [x] Update function docs to reflect new behavior
-- [x] **Test (unit)**: `make lint` passes
+### 4.4.2 Implement command executor
+- [ ] Create `RealExecutor` that uses `os/exec`:
+  - Parse command string into executable + args (shell-free)
+  - Set working directory
+  - Merge environment variables
+  - Capture stdout/stderr
+  - Respect timeout via context
+- [ ] Return appropriate error for executable not found
+- [ ] **Test (unit)**: Execute `echo hello` → stdout contains "hello"
+- [ ] **Test (unit)**: Execute nonexistent command → error response
+- [ ] **Test (unit)**: Timeout → partial output + timeout status
 
-### 3.5.4 Add migration notes to CHANGELOG or docs
-- [x] Document how to migrate from env vars to config: just run `cloister setup claude`
-- [x] Note that env vars still work as fallback (deprecated, removal in Phase 7)
+### 4.4.3 Implement Unix socket listener
+- [ ] Create `internal/executor/socket.go` with socket server:
+  - Listen on `~/.local/share/cloister/hostexec.sock`
+  - Create parent directory if needed
+  - Set socket permissions (0600)
+  - Accept connections, spawn goroutine per connection
+  - Read newline-delimited JSON request
+  - Validate shared secret
+  - Validate token against registry
+  - Validate workdir matches token's registered worktree
+  - Execute command
+  - Write JSON response
+  - Close connection
+- [ ] **Test (unit)**: Mock socket, verify request/response flow
+- [ ] **Test (integration)**: Real socket communication works
+
+### 4.4.4 Implement shared secret validation
+- [ ] Generate 32-byte secret at guardian start
+- [ ] Pass to executor process via environment variable
+- [ ] Pass to guardian container via environment variable
+- [ ] Verify secret on every request
+- [ ] Reject with "invalid secret" if mismatch
+- [ ] **Test (unit)**: Wrong secret → rejected
+- [ ] **Test (unit)**: Correct secret → proceeds
+
+### 4.4.5 Implement workdir validation
+- [ ] Look up token in registry to get registered worktree path
+- [ ] Compare request workdir against registered path
+- [ ] Reject with "workdir mismatch" if different
+- [ ] **Test (unit)**: Matching workdir → proceeds
+- [ ] **Test (unit)**: Mismatched workdir → rejected with clear error
+
+### 4.4.6 Start executor with guardian
+- [ ] Add `cloister guardian start` to spawn executor process
+- [ ] Create socket before starting guardian container
+- [ ] Bind-mount socket into guardian container at `/var/run/hostexec.sock`
+- [ ] Pass shared secret to both processes
+- [ ] Graceful shutdown: stop executor when guardian stops
+- [ ] **Test (integration)**: `guardian start` creates socket and executor runs
+- [ ] **Test (integration)**: `guardian stop` cleans up socket and executor
+
+---
+
+## Phase 4.5: Guardian↔Executor Communication
+
+Connect the guardian container to the host executor via the Unix socket.
+
+### 4.5.1 Create executor client in guardian
+- [ ] Create `internal/guardian/executor/client.go`:
+  - Connect to socket at `/var/run/hostexec.sock`
+  - Send execute request as JSON
+  - Read response
+  - Close connection
+- [ ] Handle connection errors gracefully
+- [ ] **Test (unit)**: Mock socket, verify wire format
+- [ ] **Test (integration)**: Guardian can execute command via socket
+
+### 4.5.2 Wire executor client into request flow
+- [ ] After approval (auto or manual), call executor client
+- [ ] Map executor response to command response
+- [ ] Return to waiting request handler
+- [ ] **Test (unit)**: Approved request → executor called → response returned
+
+### 4.5.3 Handle executor errors
+- [ ] Connection refused → return error response
+- [ ] Timeout → return timeout response with partial output
+- [ ] Command failed → return response with exit code and stderr
+- [ ] **Test (unit)**: Each error case produces correct response
+
+---
+
+## Phase 4.6: Approval Server and Web UI
+
+Implement the approval server (:9999) with htmx-based UI for human review.
+
+### 4.6.1 Create approval server skeleton
+- [ ] Create `internal/guardian/approval/server.go`:
+  - `GET /` → serve HTML UI
+  - `GET /pending` → list pending requests (JSON)
+  - `POST /approve/{id}` → approve request
+  - `POST /deny/{id}` → deny request with optional reason
+- [ ] Bind to `127.0.0.1:9999` (localhost only)
+- [ ] Wire into guardian startup
+- [ ] **Test (unit)**: Endpoints respond correctly
+
+### 4.6.2 Implement pending requests list
+- [ ] `GET /pending` returns JSON array of pending requests
+- [ ] Include: id, cloister, project, branch, agent, cmd, timestamp
+- [ ] **Test (unit)**: Queue with requests → JSON contains all fields
+
+### 4.6.3 Implement approve endpoint
+- [ ] `POST /approve/{id}`:
+  - Look up request in queue
+  - Return 404 if not found
+  - Send approved response on request's channel
+  - Remove from queue
+  - Return success JSON
+- [ ] **Test (unit)**: Approve existing request → response sent, removed from queue
+- [ ] **Test (unit)**: Approve nonexistent → 404
+
+### 4.6.4 Implement deny endpoint
+- [ ] `POST /deny/{id}`:
+  - Accept optional `reason` in request body
+  - Send denied response on request's channel
+  - Remove from queue
+  - Return success JSON
+- [ ] Default reason: "Denied by user"
+- [ ] **Test (unit)**: Deny with reason → reason in response
+- [ ] **Test (unit)**: Deny without reason → default reason used
+
+### 4.6.5 Create HTML templates
+- [ ] Create `internal/guardian/approval/templates/` with embedded templates:
+  - `index.html` — main page with pending requests list
+  - `request.html` — single request partial (for htmx updates)
+- [ ] Use `embed.FS` for single-binary distribution
+- [ ] Style with minimal inline CSS (no build step)
+- [ ] **Test (unit)**: Templates parse without error
+
+### 4.6.6 Integrate htmx
+- [ ] Embed htmx.min.js (~14kb) via `embed.FS`
+- [ ] Serve at `/static/htmx.min.js`
+- [ ] Include in `index.html` template
+- [ ] **Test (unit)**: Static file served correctly
+
+### 4.6.7 Implement approve/deny buttons
+- [ ] Add htmx buttons to request template:
+  - Approve: `hx-post="/approve/{id}" hx-swap="outerHTML"`
+  - Deny: `hx-post="/deny/{id}" hx-swap="outerHTML"`
+- [ ] Return updated HTML partial showing result
+- [ ] **Test (manual)**: Click Approve → request disappears, shows "Approved"
+- [ ] **Test (manual)**: Click Deny → request disappears, shows "Denied"
+
+### 4.6.8 Implement SSE for real-time updates
+- [ ] Create `GET /events` SSE endpoint
+- [ ] Broadcast events when:
+  - New request added to queue
+  - Request approved/denied/timed out
+- [ ] Client subscribes on page load
+- [ ] Use htmx SSE extension for updates
+- [ ] **Test (unit)**: SSE endpoint sends correctly formatted events
+- [ ] **Test (manual)**: New request appears without page refresh
+
+---
+
+## Phase 4.7: hostexec Wrapper
+
+Create the in-container wrapper script that communicates with the request server.
+
+### 4.7.1 Create hostexec script
+- [ ] Create `docker/hostexec` bash script (per container-image.md spec):
+  - Validate `CLOISTER_GUARDIAN_HOST` and `CLOISTER_TOKEN` are set
+  - Validate at least one argument provided
+  - Send POST to `http://${CLOISTER_GUARDIAN_HOST}:9998/request`
+  - Include `X-Cloister-Token` header
+  - Use `--max-time 300` for 5-minute timeout
+  - Parse JSON response with jq
+  - Print stdout/stderr appropriately
+  - Exit with command's exit code
+- [ ] **Test (unit)**: Script syntax check (`bash -n`)
+
+### 4.7.2 Handle response statuses
+- [ ] `approved` or `auto_approved`: print output, exit with exit_code
+- [ ] `denied`: print reason to stderr, exit 1
+- [ ] `timeout`: print timeout message to stderr, exit 1
+- [ ] `error`: print error to stderr, exit 1
+- [ ] **Test (integration)**: Each status handled correctly
+
+### 4.7.3 Add to container image
+- [ ] Copy `hostexec` to `/usr/local/bin/hostexec` in Dockerfile
+- [ ] Set executable permissions
+- [ ] **Test (integration)**: `hostexec` available in container
+
+### 4.7.4 Set environment variables at container start
+- [ ] Set `CLOISTER_GUARDIAN_HOST=cloister-guardian` in container
+- [ ] `CLOISTER_TOKEN` already set (from Phase 1)
+- [ ] **Test (integration)**: Environment variables present in container
+
+---
+
+## Phase 4.8: Audit Logging
+
+Add logging for all hostexec requests and responses.
+
+### 4.8.1 Define audit log format
+- [ ] Request event: `HOSTEXEC REQUEST project=X branch=Y cloister=Z cmd="..."`
+- [ ] Auto-approve event: `HOSTEXEC AUTO_APPROVE ... pattern="^..."`
+- [ ] Approve event: `HOSTEXEC APPROVE ... user="..."` (user from approval UI)
+- [ ] Deny event: `HOSTEXEC DENY ... reason="..."`
+- [ ] Complete event: `HOSTEXEC COMPLETE ... exit=N duration=Xs`
+- [ ] Timeout event: `HOSTEXEC TIMEOUT ...`
+- [ ] Follow existing log format from config-reference.md
+
+### 4.8.2 Integrate with existing logging
+- [ ] Use existing guardian logger
+- [ ] Log to unified audit log (`~/.local/share/cloister/audit.log`)
+- [ ] Log to per-cloister log if enabled
+- [ ] **Test (unit)**: Mock logger, verify correct format
+
+### 4.8.3 Add structured fields
+- [ ] Include all relevant metadata: project, branch, cloister, agent
+- [ ] Include execution duration for completed commands
+- [ ] **Test (unit)**: All fields present in log output
+
+---
+
+## Phase 4.9: Documentation and Integration
+
+### 4.9.1 Update ~/.claude/rules/cloister.md
+- [ ] Review and update the rules file created in Phase 3.4.6
+- [ ] Ensure hostexec usage instructions are accurate:
+  - When to use hostexec (git push, docker build, etc.)
+  - Common patterns (`hostexec git push`, `hostexec docker compose up -d`)
+  - What happens when approval is needed
+  - How to check if command was approved
+- [ ] **Test (manual)**: Rules file content is helpful for Claude
+
+### 4.9.2 Update docs/guardian-api.md if needed
+- [ ] Verify API documentation matches implementation
+- [ ] Add any undocumented endpoints or fields
+- [ ] **Test (manual)**: API docs accurate
+
+### 4.9.3 Update docs/container-image.md if needed
+- [ ] Verify hostexec script documentation matches implementation
+- [ ] Document environment variables
+- [ ] **Test (manual)**: Container image docs accurate
+
+### 4.9.4 End-to-end verification
+- [ ] **Test (manual)**: Full flow from Claude → hostexec → approval UI → execution → output
+- [ ] **Test (manual)**: Auto-approve flow works without UI interaction
+- [ ] **Test (manual)**: Denial flow shows clear message in container
 
 ---
 
 ## Not In Scope (Deferred to Later Phases)
 
-### Phase 4: Host Execution
-- hostexec wrapper
-- Request server (:9998) and approval server (:9999)
-- Approval web UI with htmx
-- Auto-approve and manual-approve pattern execution
-- Review and update `~/.claude/rules/cloister.md` content (from 3.4.6) with accurate hostexec usage
-
 ### Phase 5: Worktree Support
 - `cloister start -b <branch>` creates managed worktrees
 - Worktree cleanup and management
+- Multiple cloisters for same project on different branches
 
 ### Phase 6: Domain Approval Flow
 - Proxy holds connection for unlisted domains
-- Interactive domain approval with persistence options
+- Interactive domain approval with persistence options (session/project/global)
+- Pending domain requests in approval UI
 
 ### Phase 7: Polish
-- Shell completion
-- Read-only reference mounts
-- Audit logging
-- Detached mode, non-git support
-- Remove env var fallback (require config-based credentials)
+- Shell completion (bash, zsh, fish)
+- Read-only reference mounts (`/refs`)
+- Audit logging improvements (currently basic in Phase 4.8)
+- Detached mode (`cloister start -d`)
+- Non-git directory support with `--allow-no-git`
 - Multi-arch Docker image builds (linux/amd64, linux/arm64)
+- Guardian API versioning
+- Remove env var credential fallback
 
 ### Future: Devcontainer Integration
 - Devcontainer.json discovery and image building
 - Security overrides for mounts and capabilities
-
-### Other Agents
-- `cloister setup codex` (OpenAI)
-- `cloister setup gemini` (Google)
-- Generic agent credential framework
+- Feature allowlisting
