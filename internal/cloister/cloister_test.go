@@ -3,12 +3,10 @@ package cloister
 import (
 	"bytes"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/xdg/cloister/internal/claude"
+	"github.com/xdg/cloister/internal/agent"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 )
@@ -33,26 +31,6 @@ func TestStartOptions_Fields(t *testing.T) {
 	}
 	if opts.Image != "custom:latest" {
 		t.Errorf("Image = %q, want %q", opts.Image, "custom:latest")
-	}
-}
-
-func TestInjectUserSettings_MissingClaudeDir(t *testing.T) {
-	// Test that injectUserSettings returns nil when ~/.claude/ doesn't exist.
-	// Skip if ~/.claude exists to avoid slow copy operation - integration tests
-	// cover the real behavior.
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("Failed to get home dir: %v", err)
-	}
-	claudeDir := filepath.Join(homeDir, ".claude")
-	if _, err := os.Stat(claudeDir); err == nil {
-		t.Skip("~/.claude exists - skipping to avoid slow copy; integration tests cover this")
-	}
-
-	// ~/.claude doesn't exist, so injectUserSettings should return nil (no-op)
-	err = injectUserSettings("nonexistent-container-12345")
-	if err != nil {
-		t.Errorf("Expected nil when ~/.claude doesn't exist, got: %v", err)
 	}
 }
 
@@ -196,15 +174,14 @@ func TestApplyOptions_DefaultsToRealImplementations(t *testing.T) {
 		t.Errorf("applyOptions().guardian is %T, want defaultGuardianManager", deps.guardian)
 	}
 
-	// Verify new dependencies are also set
+	// Verify config loader is set
 	if deps.configLoader == nil {
 		t.Fatal("applyOptions().configLoader is nil")
 	}
-	if deps.credentialInjector == nil {
-		t.Fatal("applyOptions().credentialInjector is nil")
-	}
-	if deps.fileCopier == nil {
-		t.Fatal("applyOptions().fileCopier is nil")
+
+	// Verify agent is nil by default (resolved later based on config)
+	if deps.agent != nil {
+		t.Errorf("applyOptions().agent should be nil by default, got %T", deps.agent)
 	}
 }
 
@@ -237,42 +214,29 @@ func (m *mockConfigLoader) LoadGlobalConfig() (*config.GlobalConfig, error) {
 	return m.config, m.err
 }
 
-// mockCredentialInjector is a test double for CredentialInjector.
-type mockCredentialInjector struct {
-	called         bool
-	receivedConfig *config.AgentConfig
-	result         *claude.InjectionConfig
-	err            error
-}
-
-func (m *mockCredentialInjector) InjectCredentials(cfg *config.AgentConfig) (*claude.InjectionConfig, error) {
-	m.called = true
-	m.receivedConfig = cfg
-	return m.result, m.err
-}
-
-// mockFileCopier is a test double for FileCopier.
-type mockFileCopier struct {
-	calls []fileCopyCall
-	err   error
-}
-
-type fileCopyCall struct {
+// mockAgent is a test double for agent.Agent.
+type mockAgent struct {
+	name          string
+	setupCalled   bool
+	setupCfg      *config.AgentConfig
+	setupResult   *agent.SetupResult
+	setupErr      error
 	containerName string
-	destPath      string
-	content       string
-	uid           string
-	gid           string
 }
 
-func (m *mockFileCopier) WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid string) error {
-	m.calls = append(m.calls, fileCopyCall{containerName, destPath, content, uid, gid})
-	return m.err
+func (m *mockAgent) Name() string {
+	return m.name
 }
 
-// TestStart_WithTokenAuth verifies that token-based credentials are passed as env vars.
+func (m *mockAgent) Setup(containerName string, agentCfg *config.AgentConfig) (*agent.SetupResult, error) {
+	m.setupCalled = true
+	m.containerName = containerName
+	m.setupCfg = agentCfg
+	return m.setupResult, m.setupErr
+}
+
+// TestStart_WithTokenAuth verifies that token-based credentials trigger agent setup.
 func TestStart_WithTokenAuth(t *testing.T) {
-	// Set up mocks
 	mockMgr := &mockManager{createResult: "container-123"}
 	mockGuard := &mockGuardian{}
 	mockCfgLoader := &mockConfigLoader{
@@ -285,15 +249,14 @@ func TestStart_WithTokenAuth(t *testing.T) {
 			},
 		},
 	}
-	mockInjector := &mockCredentialInjector{
-		result: &claude.InjectionConfig{
+	mockAgt := &mockAgent{
+		name: "claude",
+		setupResult: &agent.SetupResult{
 			EnvVars: map[string]string{
 				"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-test-token",
 			},
-			Files: map[string]string{},
 		},
 	}
-	mockCopier := &mockFileCopier{}
 
 	// Use t.TempDir() to avoid touching real token store
 	t.Setenv("HOME", t.TempDir())
@@ -309,67 +272,33 @@ func TestStart_WithTokenAuth(t *testing.T) {
 		WithManager(mockMgr),
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
+		WithAgent(mockAgt),
 	)
 	if err != nil {
 		t.Fatalf("Start() returned error: %v", err)
 	}
 
-	// Verify credential injector was called with correct config
-	if !mockInjector.called {
-		t.Error("credentialInjector.InjectCredentials() was not called")
+	// Verify agent setup was called with correct config
+	if !mockAgt.setupCalled {
+		t.Error("agent.Setup() was not called")
 	}
-	if mockInjector.receivedConfig == nil {
-		t.Fatal("credentialInjector received nil config")
+	if mockAgt.setupCfg == nil {
+		t.Fatal("agent.Setup() received nil config")
 	}
-	if mockInjector.receivedConfig.AuthMethod != "token" {
-		t.Errorf("receivedConfig.AuthMethod = %q, want %q", mockInjector.receivedConfig.AuthMethod, "token")
+	if mockAgt.setupCfg.AuthMethod != "token" {
+		t.Errorf("setupCfg.AuthMethod = %q, want %q", mockAgt.setupCfg.AuthMethod, "token")
 	}
-	if mockInjector.receivedConfig.Token != "sk-ant-oat01-test-token" {
-		t.Errorf("receivedConfig.Token = %q, want %q", mockInjector.receivedConfig.Token, "sk-ant-oat01-test-token")
+	if mockAgt.setupCfg.Token != "sk-ant-oat01-test-token" {
+		t.Errorf("setupCfg.Token = %q, want %q", mockAgt.setupCfg.Token, "sk-ant-oat01-test-token")
 	}
 
-	// Verify env vars were passed to container
+	// Verify container was created
 	if mockMgr.createConfig == nil {
 		t.Fatal("manager.Create() was not called")
 	}
-	envVars := mockMgr.createConfig.EnvVars
-	found := false
-	for _, env := range envVars {
-		if env == "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-test-token" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Errorf("CLAUDE_CODE_OAUTH_TOKEN not found in container env vars: %v", envVars)
-	}
-
-	// Verify only ~/.claude.json was copied (token auth uses env vars for credentials)
-	if len(mockCopier.calls) != 1 {
-		t.Errorf("expected 1 file copy for token auth, got %d", len(mockCopier.calls))
-	}
-	if len(mockCopier.calls) > 0 {
-		call := mockCopier.calls[0]
-		if call.destPath != "/home/cloister/.claude.json" {
-			t.Errorf("destPath = %q, want %q", call.destPath, "/home/cloister/.claude.json")
-		}
-		// Verify forced values are set
-		if !strings.Contains(call.content, `"hasCompletedOnboarding": true`) {
-			t.Errorf("~/.claude.json missing hasCompletedOnboarding: %s", call.content)
-		}
-		if !strings.Contains(call.content, `"bypassPermissionsModeAccepted": true`) {
-			t.Errorf("~/.claude.json missing bypassPermissionsModeAccepted: %s", call.content)
-		}
-		// Should NOT contain oauthAccount for token auth
-		if strings.Contains(call.content, `"oauthAccount"`) {
-			t.Errorf("~/.claude.json should not contain oauthAccount for token auth: %s", call.content)
-		}
-	}
 }
 
-// TestStart_WithAPIKeyAuth verifies that API key credentials are passed as env vars.
+// TestStart_WithAPIKeyAuth verifies that API key credentials trigger agent setup.
 func TestStart_WithAPIKeyAuth(t *testing.T) {
 	mockMgr := &mockManager{createResult: "container-123"}
 	mockGuard := &mockGuardian{}
@@ -383,15 +312,14 @@ func TestStart_WithAPIKeyAuth(t *testing.T) {
 			},
 		},
 	}
-	mockInjector := &mockCredentialInjector{
-		result: &claude.InjectionConfig{
+	mockAgt := &mockAgent{
+		name: "claude",
+		setupResult: &agent.SetupResult{
 			EnvVars: map[string]string{
 				"ANTHROPIC_API_KEY": "sk-ant-api01-test-key",
 			},
-			Files: map[string]string{},
 		},
 	}
-	mockCopier := &mockFileCopier{}
 
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -406,31 +334,23 @@ func TestStart_WithAPIKeyAuth(t *testing.T) {
 		WithManager(mockMgr),
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
+		WithAgent(mockAgt),
 	)
 	if err != nil {
 		t.Fatalf("Start() returned error: %v", err)
 	}
 
-	// Verify env vars were passed to container
-	envVars := mockMgr.createConfig.EnvVars
-	found := false
-	for _, env := range envVars {
-		if env == "ANTHROPIC_API_KEY=sk-ant-api01-test-key" {
-			found = true
-			break
-		}
+	// Verify agent setup was called
+	if !mockAgt.setupCalled {
+		t.Error("agent.Setup() was not called")
 	}
-	if !found {
-		t.Errorf("ANTHROPIC_API_KEY not found in container env vars: %v", envVars)
+	if mockAgt.setupCfg.AuthMethod != "api_key" {
+		t.Errorf("setupCfg.AuthMethod = %q, want %q", mockAgt.setupCfg.AuthMethod, "api_key")
 	}
 }
 
-// TestStart_WithExistingAuth verifies that "existing" auth injects credential files.
+// TestStart_WithExistingAuth verifies that "existing" auth triggers agent setup.
 func TestStart_WithExistingAuth(t *testing.T) {
-	credJSON := `{"claudeAiOauth":{"accessToken":"test-access","refreshToken":"test-refresh"}}`
-
 	mockMgr := &mockManager{createResult: "container-123"}
 	mockGuard := &mockGuardian{}
 	mockCfgLoader := &mockConfigLoader{
@@ -442,15 +362,10 @@ func TestStart_WithExistingAuth(t *testing.T) {
 			},
 		},
 	}
-	mockInjector := &mockCredentialInjector{
-		result: &claude.InjectionConfig{
-			EnvVars: map[string]string{},
-			Files: map[string]string{
-				"/home/cloister/.claude/.credentials.json": credJSON,
-			},
-		},
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
 	}
-	mockCopier := &mockFileCopier{}
 
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -465,42 +380,18 @@ func TestStart_WithExistingAuth(t *testing.T) {
 		WithManager(mockMgr),
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
+		WithAgent(mockAgt),
 	)
 	if err != nil {
 		t.Fatalf("Start() returned error: %v", err)
 	}
 
-	// Verify files were copied to container (credentials + ~/.claude.json)
-	if len(mockCopier.calls) != 2 {
-		t.Fatalf("expected 2 file copies, got %d", len(mockCopier.calls))
+	// Verify agent setup was called
+	if !mockAgt.setupCalled {
+		t.Error("agent.Setup() was not called")
 	}
-
-	// First call should be credentials file
-	credCall := mockCopier.calls[0]
-	if credCall.destPath != "/home/cloister/.claude/.credentials.json" {
-		t.Errorf("destPath = %q, want %q", credCall.destPath, "/home/cloister/.claude/.credentials.json")
-	}
-	if credCall.content != credJSON {
-		t.Errorf("content = %q, want %q", credCall.content, credJSON)
-	}
-	// Container name should match generated name
-	if !strings.HasPrefix(credCall.containerName, "cloister-") {
-		t.Errorf("containerName = %q, expected prefix 'cloister-'", credCall.containerName)
-	}
-
-	// Second call should be ~/.claude.json
-	configCall := mockCopier.calls[1]
-	if configCall.destPath != "/home/cloister/.claude.json" {
-		t.Errorf("destPath = %q, want %q", configCall.destPath, "/home/cloister/.claude.json")
-	}
-	// Verify forced values are set
-	if !strings.Contains(configCall.content, `"hasCompletedOnboarding": true`) {
-		t.Errorf("~/.claude.json missing hasCompletedOnboarding: %s", configCall.content)
-	}
-	if !strings.Contains(configCall.content, `"bypassPermissionsModeAccepted": true`) {
-		t.Errorf("~/.claude.json missing bypassPermissionsModeAccepted: %s", configCall.content)
+	if mockAgt.setupCfg.AuthMethod != "existing" {
+		t.Errorf("setupCfg.AuthMethod = %q, want %q", mockAgt.setupCfg.AuthMethod, "existing")
 	}
 }
 
@@ -518,13 +409,10 @@ func TestStart_NoConfigFallsBackToEnvVars(t *testing.T) {
 			},
 		},
 	}
-	mockInjector := &mockCredentialInjector{
-		result: &claude.InjectionConfig{
-			EnvVars: map[string]string{},
-			Files:   map[string]string{},
-		},
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
 	}
-	mockCopier := &mockFileCopier{}
 
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -542,16 +430,15 @@ func TestStart_NoConfigFallsBackToEnvVars(t *testing.T) {
 		WithManager(mockMgr),
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
+		WithAgent(mockAgt),
 	)
 	if err != nil {
 		t.Fatalf("Start() returned error: %v", err)
 	}
 
-	// Credential injector should NOT be called (no auth method configured)
-	if mockInjector.called {
-		t.Error("credentialInjector.InjectCredentials() should not be called when no auth method configured")
+	// Agent setup should still be called (with nil auth method)
+	if !mockAgt.setupCalled {
+		t.Error("agent.Setup() was not called")
 	}
 
 	// Host env var should be passed through (Phase 1 fallback behavior)
@@ -568,8 +455,8 @@ func TestStart_NoConfigFallsBackToEnvVars(t *testing.T) {
 	}
 }
 
-// TestStart_CredentialInjectionError verifies error handling when injection fails.
-func TestStart_CredentialInjectionError(t *testing.T) {
+// TestStart_AgentSetupError verifies error handling when agent setup fails.
+func TestStart_AgentSetupError(t *testing.T) {
 	mockMgr := &mockManager{createResult: "container-123"}
 	mockGuard := &mockGuardian{}
 	mockCfgLoader := &mockConfigLoader{
@@ -581,10 +468,10 @@ func TestStart_CredentialInjectionError(t *testing.T) {
 			},
 		},
 	}
-	mockInjector := &mockCredentialInjector{
-		err: errors.New("keychain access denied"),
+	mockAgt := &mockAgent{
+		name:     "claude",
+		setupErr: errors.New("keychain access denied"),
 	}
-	mockCopier := &mockFileCopier{}
 
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -599,68 +486,14 @@ func TestStart_CredentialInjectionError(t *testing.T) {
 		WithManager(mockMgr),
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
+		WithAgent(mockAgt),
 	)
 
 	if err == nil {
-		t.Fatal("Start() should return error when credential injection fails")
-	}
-	if !strings.Contains(err.Error(), "credential injection failed") {
-		t.Errorf("error = %q, expected to contain 'credential injection failed'", err.Error())
+		t.Fatal("Start() should return error when agent setup fails")
 	}
 	if !strings.Contains(err.Error(), "keychain access denied") {
 		t.Errorf("error = %q, expected to contain 'keychain access denied'", err.Error())
-	}
-}
-
-// TestStart_FileCopyError verifies error handling when file copy fails.
-func TestStart_FileCopyError(t *testing.T) {
-	mockMgr := &mockManager{createResult: "container-123"}
-	mockGuard := &mockGuardian{}
-	mockCfgLoader := &mockConfigLoader{
-		config: &config.GlobalConfig{
-			Agents: map[string]config.AgentConfig{
-				"claude": {
-					AuthMethod: "existing",
-				},
-			},
-		},
-	}
-	mockInjector := &mockCredentialInjector{
-		result: &claude.InjectionConfig{
-			EnvVars: map[string]string{},
-			Files: map[string]string{
-				"/home/cloister/.claude/.credentials.json": "{}",
-			},
-		},
-	}
-	mockCopier := &mockFileCopier{
-		err: errors.New("docker exec failed"),
-	}
-
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	opts := StartOptions{
-		ProjectPath: "/path/to/project",
-		ProjectName: "testproject",
-		BranchName:  "main",
-	}
-
-	_, _, err := Start(opts,
-		WithManager(mockMgr),
-		WithGuardian(mockGuard),
-		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
-	)
-
-	if err == nil {
-		t.Fatal("Start() should return error when file copy fails")
-	}
-	if !strings.Contains(err.Error(), "failed to write credential file") {
-		t.Errorf("error = %q, expected to contain 'failed to write credential file'", err.Error())
 	}
 }
 
@@ -676,13 +509,10 @@ func TestStart_EnvFallback_PrintsDeprecationWarning(t *testing.T) {
 			},
 		},
 	}
-	mockInjector := &mockCredentialInjector{
-		result: &claude.InjectionConfig{
-			EnvVars: map[string]string{},
-			Files:   map[string]string{},
-		},
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
 	}
-	mockCopier := &mockFileCopier{}
 
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -703,8 +533,7 @@ func TestStart_EnvFallback_PrintsDeprecationWarning(t *testing.T) {
 		WithManager(mockMgr),
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
+		WithAgent(mockAgt),
 		WithStderr(&stderrBuf),
 	)
 	if err != nil {
@@ -732,13 +561,10 @@ func TestStart_EnvFallback_PrintsWarningForOAuthToken(t *testing.T) {
 			},
 		},
 	}
-	mockInjector := &mockCredentialInjector{
-		result: &claude.InjectionConfig{
-			EnvVars: map[string]string{},
-			Files:   map[string]string{},
-		},
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
 	}
-	mockCopier := &mockFileCopier{}
 
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -758,8 +584,7 @@ func TestStart_EnvFallback_PrintsWarningForOAuthToken(t *testing.T) {
 		WithManager(mockMgr),
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
+		WithAgent(mockAgt),
 		WithStderr(&stderrBuf),
 	)
 	if err != nil {
@@ -784,13 +609,10 @@ func TestStart_EnvFallback_NoWarningWhenNoEnvVars(t *testing.T) {
 			},
 		},
 	}
-	mockInjector := &mockCredentialInjector{
-		result: &claude.InjectionConfig{
-			EnvVars: map[string]string{},
-			Files:   map[string]string{},
-		},
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
 	}
-	mockCopier := &mockFileCopier{}
 
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -810,8 +632,7 @@ func TestStart_EnvFallback_NoWarningWhenNoEnvVars(t *testing.T) {
 		WithManager(mockMgr),
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
+		WithAgent(mockAgt),
 		WithStderr(&stderrBuf),
 	)
 	if err != nil {
@@ -839,15 +660,14 @@ func TestStart_ConfigCredentials_NoDeprecationWarning(t *testing.T) {
 			},
 		},
 	}
-	mockInjector := &mockCredentialInjector{
-		result: &claude.InjectionConfig{
+	mockAgt := &mockAgent{
+		name: "claude",
+		setupResult: &agent.SetupResult{
 			EnvVars: map[string]string{
 				"ANTHROPIC_API_KEY": "config-api-key",
 			},
-			Files: map[string]string{},
 		},
 	}
-	mockCopier := &mockFileCopier{}
 
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
@@ -867,8 +687,7 @@ func TestStart_ConfigCredentials_NoDeprecationWarning(t *testing.T) {
 		WithManager(mockMgr),
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
-		WithCredentialInjector(mockInjector),
-		WithFileCopier(mockCopier),
+		WithAgent(mockAgt),
 		WithStderr(&stderrBuf),
 	)
 	if err != nil {
@@ -882,162 +701,46 @@ func TestStart_ConfigCredentials_NoDeprecationWarning(t *testing.T) {
 	}
 }
 
-// TestInjectClaudeJSON_ExistingAuthIncludesOAuthAccount verifies that oauthAccount
-// is copied from host when using "existing" auth method.
-func TestInjectClaudeJSON_ExistingAuthIncludesOAuthAccount(t *testing.T) {
-	// Create temp home with ~/.claude.json containing oauthAccount
-	tempHome := t.TempDir()
-	hostClaudeJSON := `{
-		"userID": "test-user-id-12345",
-		"lastOnboardingVersion": "2.1.0",
-		"oauthAccount": {
-			"accountUuid": "test-account-uuid",
-			"emailAddress": "test@example.com",
-			"organizationUuid": "test-org-uuid"
+// TestStart_AgentReceivesContainerName verifies agent receives correct container name.
+func TestStart_AgentReceivesContainerName(t *testing.T) {
+	mockMgr := &mockManager{createResult: "container-123"}
+	mockGuard := &mockGuardian{}
+	mockCfgLoader := &mockConfigLoader{
+		config: &config.GlobalConfig{
+			Agents: map[string]config.AgentConfig{
+				"claude": {
+					AuthMethod: "token",
+					Token:      "test-token",
+				},
+			},
 		},
-		"projects": {
-			"/host/path": {"hasTrustDialogAccepted": true}
-		}
-	}`
-	if err := os.WriteFile(filepath.Join(tempHome, ".claude.json"), []byte(hostClaudeJSON), 0644); err != nil {
-		t.Fatalf("Failed to create test ~/.claude.json: %v", err)
+	}
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
 	}
 
-	// Override home directory
-	oldHomeDirFunc := userHomeDirFunc
-	userHomeDirFunc = func() (string, error) { return tempHome, nil }
-	defer func() { userHomeDirFunc = oldHomeDirFunc }()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	mockCopier := &mockFileCopier{}
+	opts := StartOptions{
+		ProjectPath: "/path/to/project",
+		ProjectName: "testproject",
+		BranchName:  "main",
+	}
 
-	// Call with "existing" auth method
-	err := injectClaudeJSON("test-container", mockCopier, "existing")
+	_, _, err := Start(opts,
+		WithManager(mockMgr),
+		WithGuardian(mockGuard),
+		WithConfigLoader(mockCfgLoader),
+		WithAgent(mockAgt),
+	)
 	if err != nil {
-		t.Fatalf("injectClaudeJSON() returned error: %v", err)
+		t.Fatalf("Start() returned error: %v", err)
 	}
 
-	if len(mockCopier.calls) != 1 {
-		t.Fatalf("expected 1 file copy, got %d", len(mockCopier.calls))
-	}
-
-	content := mockCopier.calls[0].content
-
-	// Should contain forced values
-	if !strings.Contains(content, `"hasCompletedOnboarding": true`) {
-		t.Errorf("missing hasCompletedOnboarding: %s", content)
-	}
-	if !strings.Contains(content, `"bypassPermissionsModeAccepted": true`) {
-		t.Errorf("missing bypassPermissionsModeAccepted: %s", content)
-	}
-	if !strings.Contains(content, `"installMethod": "native"`) {
-		t.Errorf("missing installMethod: %s", content)
-	}
-
-	// Should contain copied identity fields
-	if !strings.Contains(content, `"userID": "test-user-id-12345"`) {
-		t.Errorf("missing userID: %s", content)
-	}
-	if !strings.Contains(content, `"lastOnboardingVersion": "2.1.0"`) {
-		t.Errorf("missing lastOnboardingVersion: %s", content)
-	}
-
-	// Should contain oauthAccount for "existing" auth
-	if !strings.Contains(content, `"oauthAccount"`) {
-		t.Errorf("missing oauthAccount for existing auth: %s", content)
-	}
-	if !strings.Contains(content, `"emailAddress": "test@example.com"`) {
-		t.Errorf("oauthAccount missing emailAddress: %s", content)
-	}
-
-	// Should NOT contain projects (host-specific paths)
-	if strings.Contains(content, `"projects"`) {
-		t.Errorf("should not contain projects: %s", content)
-	}
-}
-
-// TestInjectClaudeJSON_TokenAuthExcludesOAuthAccount verifies that oauthAccount
-// is NOT copied when using "token" auth method.
-func TestInjectClaudeJSON_TokenAuthExcludesOAuthAccount(t *testing.T) {
-	// Create temp home with ~/.claude.json containing oauthAccount
-	tempHome := t.TempDir()
-	hostClaudeJSON := `{
-		"userID": "test-user-id-12345",
-		"oauthAccount": {
-			"accountUuid": "test-account-uuid",
-			"emailAddress": "test@example.com"
-		}
-	}`
-	if err := os.WriteFile(filepath.Join(tempHome, ".claude.json"), []byte(hostClaudeJSON), 0644); err != nil {
-		t.Fatalf("Failed to create test ~/.claude.json: %v", err)
-	}
-
-	// Override home directory
-	oldHomeDirFunc := userHomeDirFunc
-	userHomeDirFunc = func() (string, error) { return tempHome, nil }
-	defer func() { userHomeDirFunc = oldHomeDirFunc }()
-
-	mockCopier := &mockFileCopier{}
-
-	// Call with "token" auth method
-	err := injectClaudeJSON("test-container", mockCopier, "token")
-	if err != nil {
-		t.Fatalf("injectClaudeJSON() returned error: %v", err)
-	}
-
-	if len(mockCopier.calls) != 1 {
-		t.Fatalf("expected 1 file copy, got %d", len(mockCopier.calls))
-	}
-
-	content := mockCopier.calls[0].content
-
-	// Should contain userID (identity, not tied to auth method)
-	if !strings.Contains(content, `"userID": "test-user-id-12345"`) {
-		t.Errorf("missing userID: %s", content)
-	}
-
-	// Should NOT contain oauthAccount for "token" auth
-	if strings.Contains(content, `"oauthAccount"`) {
-		t.Errorf("should not contain oauthAccount for token auth: %s", content)
-	}
-}
-
-// TestInjectClaudeJSON_NoHostFile verifies that ~/.claude.json is generated
-// even when host file doesn't exist.
-func TestInjectClaudeJSON_NoHostFile(t *testing.T) {
-	// Create empty temp home (no ~/.claude.json)
-	tempHome := t.TempDir()
-
-	// Override home directory
-	oldHomeDirFunc := userHomeDirFunc
-	userHomeDirFunc = func() (string, error) { return tempHome, nil }
-	defer func() { userHomeDirFunc = oldHomeDirFunc }()
-
-	mockCopier := &mockFileCopier{}
-
-	err := injectClaudeJSON("test-container", mockCopier, "existing")
-	if err != nil {
-		t.Fatalf("injectClaudeJSON() returned error: %v", err)
-	}
-
-	if len(mockCopier.calls) != 1 {
-		t.Fatalf("expected 1 file copy, got %d", len(mockCopier.calls))
-	}
-
-	content := mockCopier.calls[0].content
-
-	// Should still contain forced values
-	if !strings.Contains(content, `"hasCompletedOnboarding": true`) {
-		t.Errorf("missing hasCompletedOnboarding: %s", content)
-	}
-	if !strings.Contains(content, `"bypassPermissionsModeAccepted": true`) {
-		t.Errorf("missing bypassPermissionsModeAccepted: %s", content)
-	}
-	if !strings.Contains(content, `"installMethod": "native"`) {
-		t.Errorf("missing installMethod: %s", content)
-	}
-
-	// Should NOT contain identity fields (no host file to copy from)
-	if strings.Contains(content, `"userID"`) {
-		t.Errorf("should not contain userID when host file missing: %s", content)
+	// Verify agent received the container name
+	if !strings.HasPrefix(mockAgt.containerName, "cloister-") {
+		t.Errorf("agent.containerName = %q, expected prefix 'cloister-'", mockAgt.containerName)
 	}
 }

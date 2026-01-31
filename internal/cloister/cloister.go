@@ -3,24 +3,18 @@
 package cloister
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"os"
-	"os/exec"
-	"path/filepath"
 
-	"github.com/xdg/cloister/internal/claude"
+	"github.com/xdg/cloister/internal/agent"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
 	"github.com/xdg/cloister/internal/token"
 )
-
-// containerHomeDir is the home directory for the cloister user inside containers.
-const containerHomeDir = "/home/cloister"
 
 // ContainerManager is the interface for container operations.
 // This allows injecting mock implementations for testing.
@@ -43,36 +37,6 @@ type defaultConfigLoader struct{}
 
 func (defaultConfigLoader) LoadGlobalConfig() (*config.GlobalConfig, error) {
 	return config.LoadGlobalConfig()
-}
-
-// CredentialInjector is the interface for injecting credentials into containers.
-// This allows injecting mock implementations for testing.
-type CredentialInjector interface {
-	InjectCredentials(cfg *config.AgentConfig) (*claude.InjectionConfig, error)
-}
-
-// defaultCredentialInjector implements CredentialInjector using the real claude package.
-type defaultCredentialInjector struct {
-	injector *claude.Injector
-}
-
-func (d *defaultCredentialInjector) InjectCredentials(cfg *config.AgentConfig) (*claude.InjectionConfig, error) {
-	return d.injector.InjectCredentials(cfg)
-}
-
-// FileCopier is the interface for copying files to containers.
-// This allows injecting mock implementations for testing.
-type FileCopier interface {
-	// WriteFileToContainerWithOwner writes a file with the specified ownership.
-	// Uses tar piping which doesn't require extra container capabilities.
-	WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid string) error
-}
-
-// defaultFileCopier implements FileCopier using docker commands.
-type defaultFileCopier struct{}
-
-func (defaultFileCopier) WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid string) error {
-	return docker.WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid)
 }
 
 // GuardianManager is the interface for guardian operations.
@@ -107,13 +71,12 @@ func (defaultGuardianManager) RevokeToken(token string) error {
 type Option func(*options)
 
 type options struct {
-	manager            ContainerManager
-	guardian           GuardianManager
-	configLoader       ConfigLoader
-	credentialInjector CredentialInjector
-	fileCopier         FileCopier
-	stderr             io.Writer
-	globalConfig       *config.GlobalConfig // Pre-loaded config (avoids double-load)
+	manager      ContainerManager
+	guardian     GuardianManager
+	configLoader ConfigLoader
+	agent        agent.Agent
+	stderr       io.Writer
+	globalConfig *config.GlobalConfig // Pre-loaded config (avoids double-load)
 }
 
 // WithManager sets a custom container manager for dependency injection.
@@ -140,19 +103,11 @@ func WithConfigLoader(c ConfigLoader) Option {
 	}
 }
 
-// WithCredentialInjector sets a custom credential injector for dependency injection.
-// If not set, the real claude.Injector is used.
-func WithCredentialInjector(c CredentialInjector) Option {
+// WithAgent sets a custom agent for dependency injection.
+// If not set, the agent is looked up from the registry based on config.
+func WithAgent(a agent.Agent) Option {
 	return func(o *options) {
-		o.credentialInjector = c
-	}
-}
-
-// WithFileCopier sets a custom file copier for dependency injection.
-// If not set, docker.WriteFileToContainer is used.
-func WithFileCopier(f FileCopier) Option {
-	return func(o *options) {
-		o.fileCopier = f
+		o.agent = a
 	}
 }
 
@@ -187,12 +142,7 @@ func applyOptions(opts ...Option) *options {
 	if o.configLoader == nil {
 		o.configLoader = defaultConfigLoader{}
 	}
-	if o.credentialInjector == nil {
-		o.credentialInjector = &defaultCredentialInjector{injector: claude.NewInjector()}
-	}
-	if o.fileCopier == nil {
-		o.fileCopier = defaultFileCopier{}
-	}
+	// Note: o.agent is resolved later in Start() based on config, unless explicitly set
 	if o.stderr == nil {
 		o.stderr = os.Stderr
 	}
@@ -279,10 +229,8 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		}
 	}()
 
-	// Step 6: Load global config and get credential injection config for Claude
+	// Step 6: Load global config to determine agent and get agent config
 	envVars := token.ProxyEnvVars(tok, "")
-	var injectionConfig *claude.InjectionConfig
-	var authMethod string // Track auth method for ~/.claude.json generation
 
 	// Use pre-loaded config if available, otherwise load it
 	globalCfg := deps.globalConfig
@@ -294,31 +242,22 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		}
 	}
 
+	// Resolve agent: use injected agent, or look up from registry
+	// For now, default to "claude" agent - this will be configurable later
+	agentImpl := deps.agent
+	agentName := "claude"
+	var agentCfg *config.AgentConfig
 	if globalCfg != nil {
-		if claudeCfg, ok := globalCfg.Agents["claude"]; ok && claudeCfg.AuthMethod != "" {
-			// Config has Claude credentials configured - use them
-			authMethod = claudeCfg.AuthMethod
-			injectionConfig, err = deps.credentialInjector.InjectCredentials(&claudeCfg)
-			if err != nil {
-				return "", "", fmt.Errorf("credential injection failed: %w", err)
-			}
-
-			// Add env vars from injection config
-			for key, value := range injectionConfig.EnvVars {
-				envVars = append(envVars, key+"="+value)
-			}
-		} else {
-			// No config credentials - fall back to host env vars (Phase 1 behavior)
-			// This is deprecated - print warning once per Start() call
-			usedEnvVars := token.CredentialEnvVarsUsed()
-			if len(usedEnvVars) > 0 {
-				fmt.Fprintf(deps.stderr, "Warning: Using %s from environment.\n", usedEnvVars[0])
-				fmt.Fprintln(deps.stderr, "Run 'cloister setup claude' to store credentials in config.")
-			}
-			envVars = append(envVars, token.CredentialEnvVars()...)
+		if cfg, ok := globalCfg.Agents[agentName]; ok {
+			agentCfg = &cfg
 		}
-	} else {
-		// Config load failed - fall back to host env vars
+	}
+	if agentImpl == nil {
+		agentImpl = agent.Get(agentName)
+	}
+
+	// Fall back to env vars if no agent config with auth method
+	if agentCfg == nil || agentCfg.AuthMethod == "" {
 		usedEnvVars := token.CredentialEnvVarsUsed()
 		if len(usedEnvVars) > 0 {
 			fmt.Fprintf(deps.stderr, "Warning: Using %s from environment.\n", usedEnvVars[0])
@@ -350,231 +289,29 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		}
 	}()
 
-	// Step 8: Start the container (needed for docker exec chown in later steps)
+	// Step 8: Start the container (needed for docker exec in agent setup)
 	err = deps.manager.StartContainer(containerName)
 	if err != nil {
 		return "", "", err
 	}
 
-	// Step 9: Inject user settings (~/.claude/) into the container
-	// This is a one-way snapshot - writes inside container are isolated
-	// After copying, chown to cloister user (docker cp preserves host uid)
-	if copyErr := injectUserSettings(containerName); copyErr != nil {
-		// Log but don't fail - missing settings is not fatal
-		// (user might not have ~/.claude/ on a fresh install)
-		_ = copyErr
-	}
-
-	// Step 10: Inject credential files into the container (for "existing" auth method)
-	// Uses tar piping to set ownership during copy (no extra capabilities needed)
-	if injectionConfig != nil {
-		for destPath, content := range injectionConfig.Files {
-			if writeErr := deps.fileCopier.WriteFileToContainerWithOwner(containerName, destPath, content, "1000", "1000"); writeErr != nil {
-				return "", "", fmt.Errorf("failed to write credential file %s: %w", destPath, writeErr)
+	// Step 9: Run agent-specific setup (settings, credentials, config files)
+	if agentImpl != nil {
+		setupResult, setupErr := agentImpl.Setup(containerName, agentCfg)
+		if setupErr != nil {
+			return "", "", setupErr
+		}
+		// Add any env vars from agent setup to the container
+		// Note: These are already set during container creation, but we track them
+		// for future use (e.g., if we need to pass them to docker exec)
+		if setupResult != nil {
+			for key, value := range setupResult.EnvVars {
+				envVars = append(envVars, key+"="+value)
 			}
 		}
-	}
-
-	// Step 11: Generate ~/.claude.json with identity fields and forced values
-	// This ensures consistent userID, skips onboarding, and accepts bypass-permissions mode
-	if writeErr := injectClaudeJSON(containerName, deps.fileCopier, authMethod); writeErr != nil {
-		return "", "", fmt.Errorf("failed to write ~/.claude.json: %w", writeErr)
 	}
 
 	return containerID, tok, nil
-}
-
-// userHomeDirFunc returns the user's home directory.
-// Can be overridden in tests to use a mock home directory.
-var userHomeDirFunc = os.UserHomeDir
-
-// settingsExcludePatterns lists directories/files to exclude when copying ~/.claude/
-// These are machine-local files that don't need to be in the container.
-// Based on ~/.claude/.gitignore patterns.
-var settingsExcludePatterns = []string{
-	".update.lock",
-	"cache",
-	"debug/",
-	"downloads/",
-	"file-history/",
-	"history.jsonl",
-	"plans/",
-	"plugins/install-counts-cache.json",
-	"projects/",
-	"session-env/",
-	"shell-snapshots/",
-	"stats-cache.json",
-	"statsig/",
-	"tasks/",
-	"telemetry",
-	"todos/",
-}
-
-// injectUserSettings copies the host's ~/.claude/ directory into the container.
-// This provides a one-way snapshot so the agent inherits user's settings, skills,
-// memory, and CLAUDE.md. Writes inside the container are isolated and do not
-// modify the host config.
-//
-// Symlinks are dereferenced during copy so that settings stored in dotfiles
-// repositories (e.g., ~/.claude -> ~/dotfiles/claude) work correctly inside
-// the container where the original symlink target doesn't exist.
-//
-// Machine-local files (debug logs, history, todos, etc.) are excluded to keep
-// the copy fast and avoid leaking sensitive conversation history.
-//
-// Returns nil if ~/.claude/ doesn't exist on the host (fresh install).
-// Returns an error only if the directory exists but cannot be copied.
-func injectUserSettings(containerName string) error {
-	// Get the user's home directory
-	homeDir, err := userHomeDirFunc()
-	if err != nil {
-		return err
-	}
-
-	claudeDir := filepath.Join(homeDir, ".claude")
-
-	// Check if ~/.claude/ exists
-	info, err := os.Stat(claudeDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			// Directory doesn't exist - this is fine, just skip
-			return nil
-		}
-		return err
-	}
-
-	// Ensure it's a directory
-	if !info.IsDir() {
-		// ~/.claude is a file, not a directory - skip
-		return nil
-	}
-
-	// Create a temp directory to hold the filtered copy
-	tmpDir, err := os.MkdirTemp("", "cloister-claude-settings-*")
-	if err != nil {
-		return fmt.Errorf("failed to create temp directory: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	tmpClaudeDir := filepath.Join(tmpDir, ".claude")
-
-	// Try rsync first (fast, supports exclusions natively)
-	// Fall back to cp -rL if rsync isn't available
-	if err := copyWithRsync(claudeDir, tmpClaudeDir); err != nil {
-		// rsync failed or not available, fall back to cp (which has no exclusion support)
-		log.Printf("cloister: warning: rsync failed, falling back to cp (exclusions will not apply): %v", err)
-		if err := copyWithCp(claudeDir, tmpClaudeDir); err != nil {
-			return err
-		}
-	}
-
-	// Clear any pre-existing ~/.claude in the container (from image build)
-	// This ensures tar copy replaces rather than merges with installer-created dirs
-	clearCmd := exec.Command("docker", "exec", containerName, "rm", "-rf", containerHomeDir+"/.claude")
-	if output, err := clearCmd.CombinedOutput(); err != nil {
-		log.Printf("cloister: warning: failed to clear existing .claude: %v: %s", err, output)
-	}
-
-	// Copy the filtered directory to the container home (creates .claude there)
-	// Uses tar piping which sets ownership during copy (no extra capabilities needed)
-	return docker.CopyToContainerWithOwner(tmpClaudeDir, containerName, containerHomeDir, "1000", "1000")
-}
-
-// copyWithRsync copies src to dest using rsync with exclusions and symlink dereferencing.
-// Returns an error if rsync is not available or fails.
-func copyWithRsync(src, dest string) error {
-	args := []string{
-		"-rL",             // recursive, dereference symlinks
-		"--copy-dirlinks", // also dereference symlinks to directories
-	}
-	for _, pattern := range settingsExcludePatterns {
-		args = append(args, "--exclude="+pattern)
-	}
-	// rsync needs trailing slash on source to copy contents, not the directory itself
-	args = append(args, src+"/", dest)
-
-	cmd := exec.Command("rsync", args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("rsync failed: %w: %s", err, output)
-	}
-	return nil
-}
-
-// copyWithCp copies src to dest using cp -rL (no exclusion support).
-// This is the fallback when rsync is not available.
-func copyWithCp(src, dest string) error {
-	cmd := exec.Command("cp", "-rL", src, dest)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("cp failed: %w: %s", err, output)
-	}
-	return nil
-}
-
-// containerClaudeJSONPath is the path to the Claude config file in the container.
-const containerClaudeJSONPath = "/home/cloister/.claude.json"
-
-// claudeJSONFieldsToCopy lists the top-level fields from ~/.claude.json that should
-// be copied to the container. These are identity fields that ensure consistent user ID.
-// Host-specific fields like "projects" (which contains paths that don't exist in the
-// container) are excluded.
-var claudeJSONFieldsToCopy = []string{
-	"userID",
-	"lastOnboardingVersion",
-}
-
-// injectClaudeJSON generates ~/.claude.json in the container with:
-// - Fields copied from host: userID, lastOnboardingVersion
-// - Fields forced to specific values: hasCompletedOnboarding, bypassPermissionsModeAccepted, installMethod
-// - Conditional fields: oauthAccount (only when using "existing" auth method)
-//
-// This ensures consistent user identity, skips onboarding prompts, and accepts
-// bypass-permissions mode (since cloister is the sandbox, not Claude's permission system).
-//
-// Returns nil if ~/.claude.json doesn't exist on host (fresh install) - we still
-// generate the file with forced values. Returns error only if writing to container fails.
-func injectClaudeJSON(containerName string, fileCopier FileCopier, authMethod string) error {
-	// Start with forced values that ensure smooth operation in the container
-	config := map[string]any{
-		"hasCompletedOnboarding":        true,
-		"bypassPermissionsModeAccepted": true,
-		"installMethod":                 "native",
-	}
-
-	// Try to read host's ~/.claude.json to copy identity fields
-	homeDir, err := userHomeDirFunc()
-	if err == nil {
-		claudeJSONPath := filepath.Join(homeDir, ".claude.json")
-		if content, err := os.ReadFile(claudeJSONPath); err == nil {
-			var hostConfig map[string]any
-			if json.Unmarshal(content, &hostConfig) == nil {
-				// Copy identity fields from host
-				for _, field := range claudeJSONFieldsToCopy {
-					if value, ok := hostConfig[field]; ok {
-						config[field] = value
-					}
-				}
-
-				// Copy oauthAccount only when using "existing" auth method
-				// (it's tied to the credentials being injected)
-				if authMethod == claude.AuthMethodExisting {
-					if oauthAccount, ok := hostConfig["oauthAccount"]; ok {
-						config["oauthAccount"] = oauthAccount
-					}
-				}
-			}
-		}
-	}
-
-	// Marshal the config
-	configJSON, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal claude.json: %w", err)
-	}
-
-	// Write to container
-	return fileCopier.WriteFileToContainerWithOwner(containerName, containerClaudeJSONPath, string(configJSON)+"\n", "1000", "1000")
 }
 
 // Stop orchestrates stopping a cloister container with proper cleanup:

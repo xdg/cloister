@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xdg/cloister/internal/agent"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
@@ -414,7 +415,7 @@ func TestCopyToContainerWithOwner(t *testing.T) {
 	}
 
 	// Verify the cloister user can read the files
-	output, err = docker.Run("exec", "--user", "cloister", containerName, "cat", settingsPath)
+	_, err = docker.Run("exec", "--user", "cloister", containerName, "cat", settingsPath)
 	if err != nil {
 		t.Errorf("Cloister user cannot read settings.json: %v", err)
 	}
@@ -445,9 +446,9 @@ func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
 	}
 
 	// Override home directory for this test
-	origHomeDir := userHomeDirFunc
-	userHomeDirFunc = func() (string, error) { return mockHome, nil }
-	t.Cleanup(func() { userHomeDirFunc = origHomeDir })
+	origHomeDir := agent.UserHomeDirFunc
+	agent.UserHomeDirFunc = func() (string, error) { return mockHome, nil }
+	t.Cleanup(func() { agent.UserHomeDirFunc = origHomeDir })
 
 	// Create a test container
 	projectName := testProjectName()
@@ -481,9 +482,9 @@ func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
 	}
 
 	// Inject settings into container (uses tar piping for correct ownership)
-	err = injectUserSettings(containerName)
+	err = agent.CopyDirToContainer(containerName, ".claude", nil)
 	if err != nil {
-		t.Fatalf("injectUserSettings() failed: %v", err)
+		t.Fatalf("CopyDirToContainer() failed: %v", err)
 	}
 
 	// Check each test file exists at correct path with correct ownership

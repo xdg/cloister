@@ -40,7 +40,7 @@ test-integration:
 test-all: test-integration
 
 lint:
-	golangci-lint run
+	golangci-lint run --build-tags=integration
 
 clean:
 	rm -f $(BINARY)
