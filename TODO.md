@@ -324,10 +324,10 @@ Connect the guardian container to the host executor via the Unix socket.
 - [x] **Test (unit)**: Approved request → executor called → response returned
 
 ### 4.5.3 Handle executor errors
-- [ ] Connection refused → return error response
-- [ ] Timeout → return timeout response with partial output
-- [ ] Command failed → return response with exit code and stderr
-- [ ] **Test (unit)**: Each error case produces correct response
+- [x] Connection refused → return error response
+- [x] Timeout → return timeout response with partial output
+- [x] Command failed → return response with exit code and stderr
+- [x] **Test (unit)**: Each error case produces correct response
 
 ---
 
