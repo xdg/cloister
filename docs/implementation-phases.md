@@ -177,6 +177,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - `cloister start -d` (detached mode)
 - Non-git directory support with `--allow-no-git`
 - Guardian API versioning (CLI checks compatibility with container image)
+- Structured logging: warnings/errors to stderr, debug diagnostics to file (default location or `--debuglog=<path>`)
 
 **Verification:**
 - `CLOISTER_IMAGE=cloister:latest cloister start` → uses local dev image
