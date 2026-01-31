@@ -3,6 +3,7 @@ BINARY := cloister
 CMD_PATH := ./cmd/cloister
 GO_FILES := $(shell find . -name '*.go' -type f -not -name '*_test.go' -not -path './test/*')
 GO_MOD_FILES := go.mod go.sum
+GO_VERSION := $(shell grep '^go ' go.mod | cut -d' ' -f2 | cut -d. -f1,2)
 
 # Test settings
 #   COUNT=1    - bust cache, COUNT=N for flakiness testing
@@ -30,7 +31,7 @@ $(BINARY): $(GO_FILES) $(GO_MOD_FILES)
 build: $(BINARY)
 
 docker:
-	docker build -t cloister:latest .
+	docker build --build-arg GO_VERSION=$(GO_VERSION) -t cloister:latest .
 
 install:
 	go install $(CMD_PATH)

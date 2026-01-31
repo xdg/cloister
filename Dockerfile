@@ -1,3 +1,14 @@
+# Build stage: compile cloister binary
+ARG GO_VERSION=1.25
+FROM golang:${GO_VERSION} AS builder
+WORKDIR /build
+COPY go.mod go.sum ./
+RUN go mod download
+COPY cmd/ cmd/
+COPY internal/ internal/
+RUN CGO_ENABLED=0 go build -o cloister ./cmd/cloister
+
+# Runtime stage
 FROM ubuntu:24.04
 
 ARG TARGETARCH
@@ -77,19 +88,6 @@ RUN apt-get update && apt-get install -y sudo \
     && echo 'cloister ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/cloister \
     && chmod 0440 /etc/sudoers.d/cloister
 
-# Build cloister binary from source (for guardian mode inside the container)
-WORKDIR /tmp/cloister-build
-COPY go.mod go.sum ./
-RUN go mod download
-COPY cmd/ cmd/
-COPY internal/ internal/
-RUN go build -o /usr/local/bin/cloister ./cmd/cloister \
-    && rm -rf /tmp/cloister-build
-
-# hostexec wrapper for host command execution
-COPY hostexec /usr/local/bin/hostexec
-RUN chmod +x /usr/local/bin/hostexec
-
 # Switch to unprivileged user for Claude Code installation
 USER cloister
 WORKDIR /home/cloister
@@ -110,6 +108,17 @@ RUN echo '{"hasCompletedOnboarding": true, "bypassPermissionsModeAccepted": true
 
 # 3. Clean up backup files created during install/config
 RUN rm -f /home/cloister/.claude.json.backup.*
+
+# hostexec wrapper for host command execution (rarely changes, so cache-friendly here)
+USER root
+COPY hostexec /usr/local/bin/hostexec
+RUN chmod +x /usr/local/bin/hostexec
+
+# Copy cloister binary from builder (this layer changes on source updates)
+COPY --from=builder /build/cloister /usr/local/bin/cloister
+
+# Switch back to unprivileged user
+USER cloister
 
 # Working directory for projects
 WORKDIR /work
