@@ -87,6 +87,7 @@ Tests are split into two tiers based on what they require:
 | `make test-race` | Run unit tests with race detector |
 | `make test-integration` | Run all tests including Docker integration tests |
 | `make test-all` | Alias for `test-integration` |
+| `make fmt` | Format code with `goimports` (run before commits) |
 | `make lint` | Run `golangci-lint` |
 | `make clean` | Remove built binary |
 | `make diagrams` | Generate SVG diagrams from D2 sources |
@@ -98,7 +99,8 @@ Tests are split into two tiers based on what they require:
 
 | Package | Purpose |
 |---------|---------|
-| `internal/cloister` | High-level orchestration for starting/stopping cloister containers with guardian integration. Coordinates token registration, container creation, and user settings injection. |
+| `internal/agent` | Agent interface and utilities for AI agent setup in containers. Defines the `Agent` interface, provides helper functions (`CopyDirToContainer`, `WriteFileToContainer`, `MergeJSONConfig`), and includes the `ClaudeAgent` implementation. |
+| `internal/cloister` | High-level orchestration for starting/stopping cloister containers with guardian integration. Coordinates token registration, container creation, and agent setup. |
 | `internal/cmd` | CLI command implementations using cobra. Handles `start`, `stop`, `list`, `config`, `project`, and `guardian` subcommands. |
 | `internal/config` | Configuration types, YAML parsing, validation, and merging. Manages global config (`~/.config/cloister/config.yaml`) and per-project configs. |
 | `internal/container` | Docker container lifecycle management. Creates containers with security constraints, manages start/stop/attach operations. |

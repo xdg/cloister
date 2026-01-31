@@ -16,7 +16,7 @@ RUN_FLAG = $(if $(RUN),-run=$(RUN))
 D2_SOURCES := $(wildcard docs/diagrams/*.d2)
 D2_SVGS := $(D2_SOURCES:.d2=.svg)
 
-.PHONY: build docker install test test-race test-integration test-all lint clean diagrams clean-diagrams
+.PHONY: build docker install test test-race test-integration test-all fmt lint clean diagrams clean-diagrams
 
 # Go targets
 build:
@@ -38,6 +38,9 @@ test-integration:
 	go test -tags=integration $(COUNT_FLAG) $(RUN_FLAG) -p 1 $(PKG)
 
 test-all: test-integration
+
+fmt:
+	goimports -w .
 
 lint:
 	golangci-lint run --build-tags=integration
