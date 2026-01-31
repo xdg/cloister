@@ -216,6 +216,8 @@ func StartWithOptions(opts StartOptions) error {
 	// Build docker run arguments
 	// Port 9997 is exposed to the host for the token management API
 	// (used by CLI to register/revoke tokens)
+	// Port 9999 is exposed to the host for the approval web UI
+	// (used by humans to approve/deny hostexec requests)
 	// Token directory is mounted read-only for recovery on restart
 	// Config directory is mounted read-only for allowlist configuration
 	// XDG_CONFIG_HOME=/etc so ConfigDir() returns /etc/cloister/
@@ -224,6 +226,7 @@ func StartWithOptions(opts StartOptions) error {
 		"--name", ContainerName,
 		"--network", docker.CloisterNetworkName,
 		"-p", "127.0.0.1:9997:9997",
+		"-p", "127.0.0.1:9999:9999",
 		"-e", "XDG_CONFIG_HOME=/etc",
 		"-v", hostTokenDir + ":" + ContainerTokenDir + ":ro",
 		"-v", hostConfigDir + ":" + ContainerConfigDir + ":ro",

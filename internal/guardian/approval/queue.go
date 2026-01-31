@@ -43,6 +43,7 @@ type Queue struct {
 	requests map[string]*PendingRequest
 	cancels  map[string]context.CancelFunc // Cancel functions for timeout goroutines
 	timeout  time.Duration
+	events   *EventHub // Optional event hub for SSE broadcasting
 }
 
 // NewQueue creates a new empty approval queue with the default timeout.

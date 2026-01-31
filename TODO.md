@@ -52,6 +52,8 @@ Before marking Phase 4 complete:
 14. Request with mismatched workdir → rejected
 15. Verify socket permissions (not world-writable)
 
+DO NOT PROCEED TO THE NEXT ITEM IF MANUAL TESTS ARE NOT COMPLETE.
+
 After each subphase is complete and all of its tests pass, commit relevant new
 and changed files as a single, atomic commit.
 
@@ -336,61 +338,61 @@ Connect the guardian container to the host executor via the Unix socket.
 Implement the approval server (:9999) with htmx-based UI for human review.
 
 ### 4.6.1 Create approval server skeleton
-- [ ] Create `internal/guardian/approval/server.go`:
+- [x] Create `internal/guardian/approval/server.go`:
   - `GET /` → serve HTML UI
   - `GET /pending` → list pending requests (JSON)
   - `POST /approve/{id}` → approve request
   - `POST /deny/{id}` → deny request with optional reason
-- [ ] Bind to `127.0.0.1:9999` (localhost only)
-- [ ] Wire into guardian startup
-- [ ] **Test (unit)**: Endpoints respond correctly
+- [x] Bind to `127.0.0.1:9999` (localhost only)
+- [x] Wire into guardian startup
+- [x] **Test (unit)**: Endpoints respond correctly
 
 ### 4.6.2 Implement pending requests list
-- [ ] `GET /pending` returns JSON array of pending requests
-- [ ] Include: id, cloister, project, branch, agent, cmd, timestamp
-- [ ] **Test (unit)**: Queue with requests → JSON contains all fields
+- [x] `GET /pending` returns JSON array of pending requests
+- [x] Include: id, cloister, project, branch, agent, cmd, timestamp
+- [x] **Test (unit)**: Queue with requests → JSON contains all fields
 
 ### 4.6.3 Implement approve endpoint
-- [ ] `POST /approve/{id}`:
+- [x] `POST /approve/{id}`:
   - Look up request in queue
   - Return 404 if not found
   - Send approved response on request's channel
   - Remove from queue
   - Return success JSON
-- [ ] **Test (unit)**: Approve existing request → response sent, removed from queue
-- [ ] **Test (unit)**: Approve nonexistent → 404
+- [x] **Test (unit)**: Approve existing request → response sent, removed from queue
+- [x] **Test (unit)**: Approve nonexistent → 404
 
 ### 4.6.4 Implement deny endpoint
-- [ ] `POST /deny/{id}`:
+- [x] `POST /deny/{id}`:
   - Accept optional `reason` in request body
   - Send denied response on request's channel
   - Remove from queue
   - Return success JSON
-- [ ] Default reason: "Denied by user"
-- [ ] **Test (unit)**: Deny with reason → reason in response
-- [ ] **Test (unit)**: Deny without reason → default reason used
+- [x] Default reason: "Denied by user"
+- [x] **Test (unit)**: Deny with reason → reason in response
+- [x] **Test (unit)**: Deny without reason → default reason used
 
 ### 4.6.5 Create HTML templates
-- [ ] Create `internal/guardian/approval/templates/` with embedded templates:
+- [x] Create `internal/guardian/approval/templates/` with embedded templates:
   - `index.html` — main page with pending requests list
   - `request.html` — single request partial (for htmx updates)
-- [ ] Use `embed.FS` for single-binary distribution
-- [ ] Style with minimal inline CSS (no build step)
-- [ ] **Test (unit)**: Templates parse without error
+- [x] Use `embed.FS` for single-binary distribution
+- [x] Style with minimal inline CSS (no build step)
+- [x] **Test (unit)**: Templates parse without error
 
 ### 4.6.6 Integrate htmx
-- [ ] Embed htmx.min.js (~14kb) via `embed.FS`
-- [ ] Serve at `/static/htmx.min.js`
-- [ ] Include in `index.html` template
-- [ ] **Test (unit)**: Static file served correctly
+- [x] Embed htmx.min.js (~14kb) via `embed.FS`
+- [x] Serve at `/static/htmx.min.js`
+- [x] Include in `index.html` template
+- [x] **Test (unit)**: Static file served correctly
 
 ### 4.6.7 Implement approve/deny buttons
-- [ ] Add htmx buttons to request template:
+- [x] Add htmx buttons to request template:
   - Approve: `hx-post="/approve/{id}" hx-swap="outerHTML"`
   - Deny: `hx-post="/deny/{id}" hx-swap="outerHTML"`
-- [ ] Return updated HTML partial showing result
-- [ ] **Test (manual)**: Click Approve → request disappears, shows "Approved"
-- [ ] **Test (manual)**: Click Deny → request disappears, shows "Denied"
+- [x] Return updated HTML partial showing result
+- [x] **Test (manual)**: Click Approve → request disappears, shows "Approved"
+- [x] **Test (manual)**: Click Deny → request disappears, shows "Denied"
 
 ### 4.6.8 Implement SSE for real-time updates
 - [ ] Create `GET /events` SSE endpoint

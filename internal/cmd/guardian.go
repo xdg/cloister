@@ -19,6 +19,7 @@ import (
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian"
+	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
 	"github.com/xdg/cloister/internal/guardian/request"
 	"github.com/xdg/cloister/internal/token"
@@ -334,8 +335,15 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	log.Printf("Loaded approval patterns: %d auto-approve, %d manual-approve",
 		len(autoApprovePatterns), len(manualApprovePatterns))
 
+	// Create the approval queue for pending requests
+	approvalQueue := approval.NewQueue()
+
 	// Executor is nil for now (Phase 4.4)
 	reqServer := request.NewServer(requestTokenLookup, regexMatcher, nil)
+	reqServer.Queue = approvalQueue
+
+	// Create the approval server for the web UI (localhost only)
+	approvalServer := approval.NewServer(approvalQueue)
 
 	// Start the proxy server
 	if err := proxy.Start(); err != nil {
@@ -367,6 +375,19 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	log.Printf("Guardian request server listening on %s", reqServer.ListenAddr())
 
+	// Start the approval server for web UI (localhost only)
+	if err := approvalServer.Start(); err != nil {
+		// Clean up other servers on failure
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = proxy.Stop(ctx)
+		_ = api.Stop(ctx)
+		_ = reqServer.Stop(ctx)
+		return fmt.Errorf("failed to start approval server: %w", err)
+	}
+
+	log.Printf("Guardian approval server listening on %s", approvalServer.ListenAddr())
+
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -379,10 +400,11 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	defer cancel()
 
 	// Stop all servers
-	var proxyErr, apiErr, reqErr error
+	var proxyErr, apiErr, reqErr, approvalErr error
 	proxyErr = proxy.Stop(ctx)
 	apiErr = api.Stop(ctx)
 	reqErr = reqServer.Stop(ctx)
+	approvalErr = approvalServer.Stop(ctx)
 
 	if proxyErr != nil {
 		return fmt.Errorf("error during proxy shutdown: %w", proxyErr)
@@ -392,6 +414,9 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	}
 	if reqErr != nil {
 		return fmt.Errorf("error during request server shutdown: %w", reqErr)
+	}
+	if approvalErr != nil {
+		return fmt.Errorf("error during approval server shutdown: %w", approvalErr)
 	}
 
 	log.Println("Guardian servers stopped")

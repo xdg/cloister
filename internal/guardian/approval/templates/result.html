@@ -1,0 +1,8 @@
+{{define "result"}}
+<li class="request request-{{.Status}}" id="request-{{.ID}}">
+    <div class="request-result">
+        <span class="result-status">{{if eq .Status "approved"}}Approved{{else}}Denied{{end}}</span>
+        <span class="result-cmd">{{.Cmd}}</span>
+    </div>
+</li>
+{{end}}

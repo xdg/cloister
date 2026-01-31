@@ -1,0 +1,17 @@
+{{define "request"}}
+<li class="request" id="request-{{.ID}}">
+    <div class="request-header">
+        <div class="request-meta">
+            <span><strong>{{.Cloister}}</strong></span>
+            <span>{{.Project}}/{{.Branch}}</span>
+            {{if .Agent}}<span>agent: {{.Agent}}</span>{{end}}
+        </div>
+        <div class="request-time">{{.Timestamp}}</div>
+    </div>
+    <div class="request-cmd">{{.Cmd}}</div>
+    <div class="request-actions">
+        <button class="btn btn-approve" hx-post="/approve/{{.ID}}" hx-swap="outerHTML" hx-target="closest .request">Approve</button>
+        <button class="btn btn-deny" hx-post="/deny/{{.ID}}" hx-swap="outerHTML" hx-target="closest .request">Deny</button>
+    </div>
+</li>
+{{end}}
