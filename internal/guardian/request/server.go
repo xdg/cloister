@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
 )
 
@@ -51,6 +52,10 @@ type Server struct {
 	// Executor executes approved commands.
 	// If nil, commands will return a "not implemented" response.
 	Executor Executor
+
+	// Queue holds pending requests awaiting human approval.
+	// If nil, ManualApprove commands will be denied.
+	Queue *approval.Queue
 
 	server   *http.Server
 	listener net.Listener
@@ -164,8 +169,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = info // Will be used for logging and approval queue in later phases
-
 	// If no pattern matcher is configured, deny all commands
 	if s.PatternMatcher == nil {
 		s.writeJSON(w, http.StatusOK, CommandResponse{
@@ -192,11 +195,48 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	case patterns.ManualApprove:
 		// Manual approval required: queue for human review
-		// Phase 4.3 will add the approval queue.
-		// For now, return a placeholder "awaiting approval" response.
-		s.writeJSON(w, http.StatusAccepted, CommandResponse{
-			Status: "awaiting_approval",
-			Reason: "command requires manual approval (approval queue not yet implemented)",
+		if s.Queue == nil {
+			s.writeJSON(w, http.StatusOK, CommandResponse{
+				Status: "denied",
+				Reason: "manual approval required but approval queue not configured",
+			})
+			return
+		}
+
+		// Create a buffered response channel to avoid blocking the approval sender
+		respChan := make(chan approval.Response, 1)
+
+		// Create pending request with metadata from token lookup
+		pendingReq := &approval.PendingRequest{
+			Cloister:  info.CloisterName,
+			Project:   info.ProjectName,
+			Branch:    "", // Not available from token; may be added later
+			Agent:     "", // Not available from token; may be added later
+			Cmd:       req.Cmd,
+			Timestamp: time.Now(),
+			Response:  respChan,
+		}
+
+		// Add to queue (this starts the timeout goroutine)
+		_, err := s.Queue.Add(pendingReq)
+		if err != nil {
+			s.writeJSON(w, http.StatusInternalServerError, CommandResponse{
+				Status: "error",
+				Reason: "failed to queue request for approval",
+			})
+			return
+		}
+
+		// Block waiting for approval, denial, or timeout
+		approvalResp := <-respChan
+		// Convert approval.Response to CommandResponse (same structure)
+		s.writeJSON(w, http.StatusOK, CommandResponse{
+			Status:   approvalResp.Status,
+			Pattern:  approvalResp.Pattern,
+			Reason:   approvalResp.Reason,
+			ExitCode: approvalResp.ExitCode,
+			Stdout:   approvalResp.Stdout,
+			Stderr:   approvalResp.Stderr,
 		})
 
 	case patterns.Deny:

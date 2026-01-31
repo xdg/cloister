@@ -8,7 +8,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
 )
 
@@ -328,7 +330,7 @@ func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 	}
 }
 
-func TestServer_HandleRequest_ManualApprove(t *testing.T) {
+func TestServer_HandleRequest_ManualApprove_NilQueue(t *testing.T) {
 	lookup := mockTokenLookup(map[string]TokenInfo{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
@@ -339,6 +341,7 @@ func TestServer_HandleRequest_ManualApprove(t *testing.T) {
 		},
 	}
 
+	// Server with nil queue - should deny manual approval requests
 	server := NewServer(lookup, matcher, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
@@ -351,9 +354,8 @@ func TestServer_HandleRequest_ManualApprove(t *testing.T) {
 	rr := httptest.NewRecorder()
 	handler.ServeHTTP(rr, req)
 
-	// Should return 202 Accepted for pending approval
-	if rr.Code != http.StatusAccepted {
-		t.Errorf("expected status %d, got %d", http.StatusAccepted, rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 
 	var resp CommandResponse
@@ -361,11 +363,11 @@ func TestServer_HandleRequest_ManualApprove(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.Status != "awaiting_approval" {
-		t.Errorf("expected status 'awaiting_approval', got %q", resp.Status)
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q", resp.Status)
 	}
-	if !strings.Contains(resp.Reason, "manual approval") {
-		t.Errorf("expected reason to contain 'manual approval', got %q", resp.Reason)
+	if !strings.Contains(resp.Reason, "approval queue not configured") {
+		t.Errorf("expected reason to contain 'approval queue not configured', got %q", resp.Reason)
 	}
 }
 
@@ -443,5 +445,242 @@ func TestServer_HandleRequest_NoPatternMatcher(t *testing.T) {
 	}
 	if !strings.Contains(resp.Reason, "no approval patterns configured") {
 		t.Errorf("expected reason to contain 'no approval patterns configured', got %q", resp.Reason)
+	}
+}
+
+func TestServer_HandleRequest_ManualApprove_BlocksUntilApproval(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"docker compose up -d": {Action: patterns.ManualApprove, Pattern: "^docker compose (up|down).*$"},
+		},
+	}
+
+	// Create server with an approval queue
+	queue := approval.NewQueue()
+	server := NewServer(lookup, matcher, nil)
+	server.Queue = queue
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "docker compose up -d"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	// Run the request handler in a goroutine since it will block
+	done := make(chan struct{})
+	rr := httptest.NewRecorder()
+
+	go func() {
+		handler.ServeHTTP(rr, req)
+		close(done)
+	}()
+
+	// Wait a bit to ensure the request is queued
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify request is in the queue
+	pending := queue.List()
+	if len(pending) != 1 {
+		t.Fatalf("expected 1 pending request, got %d", len(pending))
+	}
+
+	if pending[0].Cloister != "test-cloister" {
+		t.Errorf("expected cloister 'test-cloister', got %q", pending[0].Cloister)
+	}
+	if pending[0].Project != "test-project" {
+		t.Errorf("expected project 'test-project', got %q", pending[0].Project)
+	}
+	if pending[0].Cmd != "docker compose up -d" {
+		t.Errorf("expected cmd 'docker compose up -d', got %q", pending[0].Cmd)
+	}
+
+	// Get the actual request to send approval response
+	actualReq, ok := queue.Get(pending[0].ID)
+	if !ok {
+		t.Fatal("failed to get pending request by ID")
+	}
+
+	// Send approval response
+	actualReq.Response <- approval.Response{
+		Status:   "approved",
+		ExitCode: 0,
+		Stdout:   "containers started",
+	}
+	queue.Remove(pending[0].ID)
+
+	// Wait for handler to complete
+	select {
+	case <-done:
+		// Handler completed
+	case <-time.After(1 * time.Second):
+		t.Fatal("handler did not complete after approval")
+	}
+
+	// Verify response
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+	if resp.ExitCode != 0 {
+		t.Errorf("expected exit_code 0, got %d", resp.ExitCode)
+	}
+	if resp.Stdout != "containers started" {
+		t.Errorf("expected stdout 'containers started', got %q", resp.Stdout)
+	}
+}
+
+func TestServer_HandleRequest_ManualApprove_Timeout(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"docker compose up -d": {Action: patterns.ManualApprove, Pattern: "^docker compose (up|down).*$"},
+		},
+	}
+
+	// Create server with a very short timeout queue
+	queue := approval.NewQueueWithTimeout(100 * time.Millisecond)
+	server := NewServer(lookup, matcher, nil)
+	server.Queue = queue
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "docker compose up -d"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	// Run the request handler in a goroutine
+	done := make(chan struct{})
+	rr := httptest.NewRecorder()
+
+	go func() {
+		handler.ServeHTTP(rr, req)
+		close(done)
+	}()
+
+	// Wait for timeout (should be ~100ms + some margin)
+	select {
+	case <-done:
+		// Handler completed due to timeout
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("handler did not complete after timeout")
+	}
+
+	// Verify timeout response
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "timeout" {
+		t.Errorf("expected status 'timeout', got %q", resp.Status)
+	}
+	if resp.Reason == "" {
+		t.Error("expected non-empty reason for timeout")
+	}
+
+	// Queue should be empty after timeout
+	if queue.Len() != 0 {
+		t.Errorf("queue should be empty after timeout, got len=%d", queue.Len())
+	}
+}
+
+func TestServer_HandleRequest_ManualApprove_Denied(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"docker compose up -d": {Action: patterns.ManualApprove, Pattern: "^docker compose (up|down).*$"},
+		},
+	}
+
+	// Create server with an approval queue
+	queue := approval.NewQueue()
+	server := NewServer(lookup, matcher, nil)
+	server.Queue = queue
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "docker compose up -d"}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	// Run the request handler in a goroutine
+	done := make(chan struct{})
+	rr := httptest.NewRecorder()
+
+	go func() {
+		handler.ServeHTTP(rr, req)
+		close(done)
+	}()
+
+	// Wait a bit to ensure the request is queued
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify request is in the queue
+	pending := queue.List()
+	if len(pending) != 1 {
+		t.Fatalf("expected 1 pending request, got %d", len(pending))
+	}
+
+	// Get the actual request to send denial response
+	actualReq, ok := queue.Get(pending[0].ID)
+	if !ok {
+		t.Fatal("failed to get pending request by ID")
+	}
+
+	// Send denial response
+	actualReq.Response <- approval.Response{
+		Status: "denied",
+		Reason: "Denied by user: not safe",
+	}
+	queue.Remove(pending[0].ID)
+
+	// Wait for handler to complete
+	select {
+	case <-done:
+		// Handler completed
+	case <-time.After(1 * time.Second):
+		t.Fatal("handler did not complete after denial")
+	}
+
+	// Verify denial response
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q", resp.Status)
+	}
+	if resp.Reason != "Denied by user: not safe" {
+		t.Errorf("expected reason 'Denied by user: not safe', got %q", resp.Reason)
 	}
 }

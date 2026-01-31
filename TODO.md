@@ -168,7 +168,7 @@ Implement command pattern matching for auto-approve and manual-approve decisions
 Implement the in-memory queue for pending approval requests.
 
 ### 4.3.1 Create approval queue data structure
-- [ ] Create `internal/guardian/approval/queue.go` with:
+- [x] Create `internal/guardian/approval/queue.go` with:
   ```go
   type PendingRequest struct {
       ID        string
@@ -184,30 +184,30 @@ Implement the in-memory queue for pending approval requests.
       // Thread-safe queue operations
   }
   ```
-- [ ] Implement `Add(request) string` (returns ID)
-- [ ] Implement `Get(id) (*PendingRequest, bool)`
-- [ ] Implement `Remove(id)`
-- [ ] Implement `List() []PendingRequest` (for UI)
-- [ ] Generate request IDs with `crypto/rand` (8 bytes hex)
-- [ ] **Test (unit)**: Add/Get/Remove/List operations work correctly
-- [ ] **Test (unit)**: Concurrent access is safe (use `-race`)
+- [x] Implement `Add(request) string` (returns ID)
+- [x] Implement `Get(id) (*PendingRequest, bool)`
+- [x] Implement `Remove(id)`
+- [x] Implement `List() []PendingRequest` (for UI)
+- [x] Generate request IDs with `crypto/rand` (8 bytes hex)
+- [x] **Test (unit)**: Add/Get/Remove/List operations work correctly
+- [x] **Test (unit)**: Concurrent access is safe (use `-race`)
 
 ### 4.3.2 Add timeout handling
-- [ ] Start timeout goroutine when request is added
-- [ ] On timeout: remove from queue, send timeout response on channel
-- [ ] Cancel timeout when request is approved/denied
-- [ ] Default timeout: 5 minutes (configurable in config)
-- [ ] **Test (unit)**: Request times out → timeout response sent
-- [ ] **Test (unit)**: Approved before timeout → no timeout response
+- [x] Start timeout goroutine when request is added
+- [x] On timeout: remove from queue, send timeout response on channel
+- [x] Cancel timeout when request is approved/denied
+- [x] Default timeout: 5 minutes (configurable in config)
+- [x] **Test (unit)**: Request times out → timeout response sent
+- [x] **Test (unit)**: Approved before timeout → no timeout response
 
 ### 4.3.3 Integrate queue into request handler
-- [ ] For ManualApprove matches:
+- [x] For ManualApprove matches:
   - Create response channel
   - Add to queue with metadata from token lookup
   - Block waiting on response channel
   - Return response to client
-- [ ] **Test (unit)**: Handler blocks until approval received
-- [ ] **Test (unit)**: Handler returns timeout response after timeout
+- [x] **Test (unit)**: Handler blocks until approval received
+- [x] **Test (unit)**: Handler returns timeout response after timeout
 
 ---
 
