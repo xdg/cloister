@@ -281,28 +281,28 @@ Implement the host-side process that executes approved commands.
 - [x] **Commit**
 
 ### 4.4.4 Implement shared secret validation
-- [ ] Generate 32-byte secret at guardian start
-- [ ] Pass to executor process via environment variable
-- [ ] Pass to guardian container via environment variable
-- [ ] Verify secret on every request
-- [ ] Reject with "invalid secret" if mismatch
-- [ ] **Test (unit)**: Wrong secret → rejected
-- [ ] **Test (unit)**: Correct secret → proceeds
-- [ ] **Commit**
+- [x] Verify secret on every request (socket.go handleConnection)
+- [x] Reject with "invalid secret" if mismatch
+- [x] **Test (unit)**: Wrong secret → rejected (TestSocketServerInvalidSecret)
+- [x] **Test (unit)**: Correct secret → proceeds (TestSocketServerValidRequest)
+- [x] **Commit** (included in Phase 4.4.1-4.4.3 commit)
 
 ### 4.4.5 Implement workdir validation
-- [ ] Look up token in registry to get registered worktree path
-- [ ] Compare request workdir against registered path
-- [ ] Reject with "workdir mismatch" if different
-- [ ] **Test (unit)**: Matching workdir → proceeds
-- [ ] **Test (unit)**: Mismatched workdir → rejected with clear error
-- [ ] **Commit**
+- [x] Compare request workdir against registered path (via injected WorkdirValidator)
+- [x] Reject with "workdir mismatch" if different
+- [x] **Test (unit)**: Matching workdir → proceeds (TestSocketServerWorkdirValidation)
+- [x] **Test (unit)**: Mismatched workdir → rejected with clear error
+- [x] **Commit** (included in Phase 4.4.1-4.4.3 commit)
 
 ### 4.4.6 Start executor with guardian
+- [ ] Generate 32-byte secret at guardian start (use token.Generate())
 - [ ] Add `cloister guardian start` to spawn executor process
 - [ ] Create socket before starting guardian container
 - [ ] Bind-mount socket into guardian container at `/var/run/hostexec.sock`
-- [ ] Pass shared secret to both processes
+- [ ] Pass shared secret to executor process via environment variable
+- [ ] Pass shared secret to guardian container via environment variable
+- [ ] Wire TokenValidator to look up token in registry for worktree path
+- [ ] Wire WorkdirValidator to compare workdir against registered worktree
 - [ ] Graceful shutdown: stop executor when guardian stops
 - [ ] **Test (integration)**: `guardian start` creates socket and executor runs
 - [ ] **Test (integration)**: `guardian stop` cleans up socket and executor
