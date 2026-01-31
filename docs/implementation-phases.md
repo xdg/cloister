@@ -58,7 +58,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 
 ---
 
-## Phase 3: Claude Code Integration
+## Phase 3: Claude Code Integration (COMPLETE)
 
 **Goal:** Claude Code works inside cloister with no manual setup.
 
