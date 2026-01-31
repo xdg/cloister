@@ -271,8 +271,8 @@ cloister guardian stop            # Stop guardian
 │   ├── frontend.yaml
 │   └── shared-lib.yaml
 └── tokens/                    # Active cloister tokens (survives guardian restart)
-    ├── af3b2c1d...yaml        # Token file with cloister metadata
-    └── b7e4f8a2...yaml
+    ├── cloister-my-api        # Token file with cloister metadata (JSON)
+    └── cloister-frontend
 
 ~/.local/share/cloister/
 ├── hostexec.sock              # Unix socket for host command execution
@@ -339,15 +339,34 @@ All cloisters share `cloister-net` and communicate through the guardian. The gua
 For host command execution, approved requests flow from the guardian container to the host process via a Unix socket (`hostexec.sock`), which is bind-mounted into the container.
 
 **Token lifecycle:**
+
+| Responsibility | Owner | Notes |
+|----------------|-------|-------|
+| Generate token | CLI | 32 bytes, hex-encoded |
+| Persist token to disk | CLI | `~/.config/cloister/tokens/<cloister>` (JSON) |
+| Register token (in-memory) | CLI → Guardian API | POST /tokens |
+| Validate tokens at runtime | Guardian | In-memory registry |
+| Load tokens on startup | Guardian | Read-only mount from host |
+| Deregister token (in-memory) | CLI → Guardian API | DELETE /tokens/{token} |
+| Delete token from disk | CLI | On `cloister stop` |
+| Cleanup stale tokens | CLI | Future: `cloister gc` |
+
+The guardian container mounts the token directory read-only. This is intentional:
+the guardian handles potentially compromised AI-generated requests and must not
+have write access to host resources. All persistence is CLI's responsibility.
+
 1. CLI generates a cryptographically random token (32 bytes, hex-encoded) when creating a cloister
-2. Token is passed to the container via environment variable and registered with the guardian
-3. Guardian persists token → cloister metadata to `~/.config/cloister/tokens/<token>.yaml`
-4. Guardian loads all tokens from disk on startup, enabling restart without losing cloister associations
-5. All requests must include the token:
+2. Token is passed to the container via environment variable
+3. CLI persists token → cloister metadata to `~/.config/cloister/tokens/<cloister>` (JSON format)
+4. CLI registers token with guardian via POST /tokens (in-memory only)
+5. Guardian loads all tokens from disk on startup, enabling restart without losing cloister associations
+6. All requests must include the token:
    - Proxy requests use standard `Proxy-Authorization` header (token as password in Basic auth)
    - Hostexec requests use `X-Cloister-Token` header
-6. Guardian uses the token as the authoritative identity, ignoring any claimed name in request bodies
-7. When a cloister is destroyed (`cloister stop`), CLI calls DELETE /register/{token} and guardian removes the token file
+7. Guardian uses the token as the authoritative identity, ignoring any claimed name in request bodies
+8. When a cloister is destroyed (`cloister stop`), CLI:
+   - Calls DELETE /tokens/{token} to deregister from guardian (in-memory)
+   - Removes the token file from disk
 
 For proxy requests, the token is provided via standard HTTP proxy authentication because the custom `X-Cloister-Token` header (used for hostexec) can't be configured for all the possible clients that might need it. The container environment includes:
 

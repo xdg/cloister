@@ -9,7 +9,14 @@ import (
 
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
+	"github.com/xdg/cloister/internal/guardian"
 )
+
+// testContainerInfo holds info about a test container with optional proxy auth.
+type testContainerInfo struct {
+	Name  string // Container name
+	Token string // Proxy auth token (empty if unauthenticated)
+}
 
 // createTestContainer creates a container on cloister-net for testing.
 // The container runs sleep infinity and is cleaned up when the test ends.
@@ -35,6 +42,26 @@ func createTestContainer(t *testing.T, suffix string) string {
 	time.Sleep(100 * time.Millisecond)
 
 	return containerName
+}
+
+// createAuthenticatedTestContainer creates a container with a registered proxy token.
+// The token is registered with the guardian and cleaned up when the test ends.
+// Returns container info including the token for proxy authentication.
+func createAuthenticatedTestContainer(t *testing.T, suffix string) testContainerInfo {
+	t.Helper()
+
+	containerName := createTestContainer(t, suffix)
+
+	// Register a token for this container
+	token := fmt.Sprintf("test-token-%s-%d", suffix, time.Now().UnixNano())
+	if err := guardian.RegisterToken(token, containerName, "test-project"); err != nil {
+		t.Fatalf("Failed to register token: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = guardian.RevokeToken(token)
+	})
+
+	return testContainerInfo{Name: containerName, Token: token}
 }
 
 // waitForPort waits for a port to become reachable from inside a container.
