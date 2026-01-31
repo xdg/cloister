@@ -98,11 +98,19 @@ func (c *Client) doRequest(method, path string, body any, result any, acceptedSt
 
 // RegisterToken registers a new token with the guardian.
 // The token will be associated with the given cloister and project names.
+// Deprecated: Use RegisterTokenFull to include the worktree path.
 func (c *Client) RegisterToken(token, cloisterName, projectName string) error {
+	return c.RegisterTokenFull(token, cloisterName, projectName, "")
+}
+
+// RegisterTokenFull registers a new token with the guardian.
+// The token will be associated with the given cloister, project, and worktree path.
+func (c *Client) RegisterTokenFull(token, cloisterName, projectName, worktreePath string) error {
 	body := registerTokenRequest{
 		Token:    token,
 		Cloister: cloisterName,
 		Project:  projectName,
+		Worktree: worktreePath,
 	}
 
 	if err := c.doRequest(http.MethodPost, "/tokens", body, nil, http.StatusCreated); err != nil {

@@ -23,6 +23,7 @@ const DefaultAPIPort = 9997
 type TokenInfo struct {
 	CloisterName string
 	ProjectName  string
+	WorktreePath string
 }
 
 // TokenRegistry defines the interface for token management operations.
@@ -31,6 +32,7 @@ type TokenRegistry interface {
 	TokenValidator
 	Register(token, cloisterName string)
 	RegisterWithProject(token, cloisterName, projectName string)
+	RegisterFull(token, cloisterName, projectName, worktreePath string)
 	Revoke(token string) bool
 	List() map[string]TokenInfo
 	Count() int
@@ -128,6 +130,7 @@ type registerTokenRequest struct {
 	Token    string `json:"token"`
 	Cloister string `json:"cloister"`
 	Project  string `json:"project,omitempty"`
+	Worktree string `json:"worktree,omitempty"`
 }
 
 // tokenInfo represents a single token in the list response.
@@ -135,6 +138,7 @@ type tokenInfo struct {
 	Token    string `json:"token"`
 	Cloister string `json:"cloister"`
 	Project  string `json:"project,omitempty"`
+	Worktree string `json:"worktree,omitempty"`
 }
 
 // listTokensResponse is the response body for GET /tokens.
@@ -170,7 +174,7 @@ func (a *APIServer) handleRegisterToken(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	a.Registry.RegisterWithProject(req.Token, req.Cloister, req.Project)
+	a.Registry.RegisterFull(req.Token, req.Cloister, req.Project, req.Worktree)
 
 	a.writeJSON(w, http.StatusCreated, statusResponse{Status: "registered"})
 }
@@ -208,6 +212,7 @@ func (a *APIServer) handleListTokens(w http.ResponseWriter, _ *http.Request) {
 			Token:    t,
 			Cloister: info.CloisterName,
 			Project:  info.ProjectName,
+			Worktree: info.WorktreePath,
 		})
 	}
 

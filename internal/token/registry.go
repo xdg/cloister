@@ -8,6 +8,7 @@ import (
 type TokenInfo struct {
 	CloisterName string
 	ProjectName  string
+	WorktreePath string // Absolute path to the worktree on the host
 }
 
 // Registry is a thread-safe in-memory store mapping tokens to token info.
@@ -35,12 +36,25 @@ func (r *Registry) Register(token, cloisterName string) {
 
 // RegisterWithProject adds a token with its associated cloister and project names.
 // If the token already exists, its info is updated.
+// Deprecated: Use RegisterFull to include the worktree path.
 func (r *Registry) RegisterWithProject(token, cloisterName, projectName string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.tokens[token] = TokenInfo{
 		CloisterName: cloisterName,
 		ProjectName:  projectName,
+	}
+}
+
+// RegisterFull adds a token with all associated metadata.
+// If the token already exists, its info is updated.
+func (r *Registry) RegisterFull(token, cloisterName, projectName, worktreePath string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.tokens[token] = TokenInfo{
+		CloisterName: cloisterName,
+		ProjectName:  projectName,
+		WorktreePath: worktreePath,
 	}
 }
 

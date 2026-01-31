@@ -11,8 +11,9 @@ import (
 
 // tokenFile is the JSON structure for persisted tokens.
 type tokenFile struct {
-	Token   string `json:"token"`
-	Project string `json:"project,omitempty"`
+	Token    string `json:"token"`
+	Project  string `json:"project,omitempty"`
+	Worktree string `json:"worktree,omitempty"`
 }
 
 // DefaultTokenDir returns the default directory for token storage.
@@ -42,9 +43,16 @@ func NewStore(dir string) (*Store, error) {
 
 // Save persists a token for a cloister.
 // Overwrites any existing token for the same cloister name.
+// Deprecated: Use SaveFull to include the worktree path.
 func (s *Store) Save(cloisterName, token, projectName string) error {
+	return s.SaveFull(cloisterName, token, projectName, "")
+}
+
+// SaveFull persists a token for a cloister with all metadata.
+// Overwrites any existing token for the same cloister name.
+func (s *Store) SaveFull(cloisterName, token, projectName, worktreePath string) error {
 	path := filepath.Join(s.dir, cloisterName)
-	data, err := json.Marshal(tokenFile{Token: token, Project: projectName})
+	data, err := json.Marshal(tokenFile{Token: token, Project: projectName, Worktree: worktreePath})
 	if err != nil {
 		return fmt.Errorf("failed to marshal token: %w", err)
 	}
@@ -97,6 +105,7 @@ func (s *Store) Load() (map[string]TokenInfo, error) {
 			tokens[tf.Token] = TokenInfo{
 				CloisterName: cloisterName,
 				ProjectName:  tf.Project,
+				WorktreePath: tf.Worktree,
 			}
 			continue
 		}

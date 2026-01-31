@@ -26,6 +26,14 @@ func (r *mockRegistry) RegisterWithProject(token, cloisterName, projectName stri
 	r.tokens[token] = TokenInfo{CloisterName: cloisterName, ProjectName: projectName}
 }
 
+func (r *mockRegistry) RegisterFull(token, cloisterName, projectName, worktreePath string) {
+	r.tokens[token] = TokenInfo{
+		CloisterName: cloisterName,
+		ProjectName:  projectName,
+		WorktreePath: worktreePath,
+	}
+}
+
 func (r *mockRegistry) Validate(token string) bool {
 	_, ok := r.tokens[token]
 	return ok

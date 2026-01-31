@@ -46,7 +46,12 @@ type GuardianManager interface {
 	EnsureRunning() error
 
 	// RegisterToken registers a token with the guardian for a cloister.
+	// Deprecated: Use RegisterTokenFull for worktree path validation.
 	RegisterToken(token, cloisterName, projectName string) error
+
+	// RegisterTokenFull registers a token with the guardian for a cloister.
+	// Includes the worktree path for hostexec workdir validation.
+	RegisterTokenFull(token, cloisterName, projectName, worktreePath string) error
 
 	// RevokeToken revokes a token from the guardian.
 	RevokeToken(token string) error
@@ -61,6 +66,10 @@ func (defaultGuardianManager) EnsureRunning() error {
 
 func (defaultGuardianManager) RegisterToken(token, cloisterName, projectName string) error {
 	return guardian.RegisterToken(token, cloisterName, projectName)
+}
+
+func (defaultGuardianManager) RegisterTokenFull(token, cloisterName, projectName, worktreePath string) error {
+	return guardian.RegisterTokenFull(token, cloisterName, projectName, worktreePath)
 }
 
 func (defaultGuardianManager) RevokeToken(token string) error {
@@ -209,12 +218,13 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	if err != nil {
 		return "", "", err
 	}
-	if err := store.Save(containerName, tok, opts.ProjectName); err != nil {
+	if err := store.SaveFull(containerName, tok, opts.ProjectName, opts.ProjectPath); err != nil {
 		return "", "", err
 	}
 
 	// Step 5: Register the token with guardian (with project name for per-project allowlist)
-	if err := deps.guardian.RegisterToken(tok, containerName, opts.ProjectName); err != nil {
+	// Include worktree path for hostexec workdir validation
+	if err := deps.guardian.RegisterTokenFull(tok, containerName, opts.ProjectName, opts.ProjectPath); err != nil {
 		// Clean up persisted token on failure
 		_ = store.Remove(containerName)
 		return "", "", err

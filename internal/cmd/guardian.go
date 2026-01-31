@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"os/signal"
 	"strings"
 	"syscall"
@@ -17,6 +18,7 @@ import (
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
+	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian"
 	"github.com/xdg/cloister/internal/guardian/patterns"
 	"github.com/xdg/cloister/internal/guardian/request"
@@ -58,9 +60,58 @@ var guardianStartCmd = &cobra.Command{
 			return nil
 		}
 
-		// Start the guardian
+		// Clean up any stale executor state
+		if err := executor.CleanupStaleState(); err != nil {
+			log.Printf("Warning: failed to clean up stale executor state: %v", err)
+		}
+
+		// Generate shared secret for executor authentication
+		secret := token.Generate()
+
+		// Get socket path
+		socketPath, err := guardian.HostSocketPath()
+		if err != nil {
+			return fmt.Errorf("failed to get socket path: %w", err)
+		}
+
+		// Start the executor process in the background
+		fmt.Println("Starting executor...")
+		executablePath, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("failed to get executable path: %w", err)
+		}
+
+		executorCmd := exec.Command(executablePath, "executor", "run")
+		executorCmd.Env = append(os.Environ(), guardian.SharedSecretEnvVar+"="+secret)
+		// Detach from parent process group
+		executorCmd.SysProcAttr = &syscall.SysProcAttr{
+			Setpgid: true,
+		}
+
+		if err := executorCmd.Start(); err != nil {
+			return fmt.Errorf("failed to start executor: %w", err)
+		}
+
+		// Wait a moment for the socket to be created
+		time.Sleep(100 * time.Millisecond)
+
+		// Verify socket was created
+		if _, err := os.Stat(socketPath); err != nil {
+			// Executor may have failed to start, try to clean up
+			_ = executorCmd.Process.Kill()
+			return fmt.Errorf("executor failed to create socket: %w", err)
+		}
+
+		// Start the guardian container with executor socket mounted
 		fmt.Println("Starting guardian...")
-		if err := guardian.Start(); err != nil {
+		opts := guardian.StartOptions{
+			SocketPath:   socketPath,
+			SharedSecret: secret,
+		}
+		if err := guardian.StartWithOptions(opts); err != nil {
+			// Clean up executor if guardian fails to start
+			_ = executorCmd.Process.Kill()
+			_ = executor.RemoveDaemonState()
 			if errors.Is(err, guardian.ErrGuardianAlreadyRunning) {
 				fmt.Println("Guardian is already running")
 				return nil
@@ -121,6 +172,23 @@ Warns if there are running cloister containers that depend on the guardian.`,
 			fmt.Fprintln(os.Stderr)
 		}
 
+		// Stop the executor first
+		fmt.Println("Stopping executor...")
+		state, err := executor.LoadDaemonState()
+		if err != nil {
+			log.Printf("Warning: failed to load executor state: %v", err)
+		} else if state != nil {
+			if err := executor.StopDaemon(state); err != nil {
+				log.Printf("Warning: failed to stop executor: %v", err)
+			}
+			// Give it a moment to shut down gracefully
+			time.Sleep(100 * time.Millisecond)
+			// Clean up state file
+			if err := executor.RemoveDaemonState(); err != nil {
+				log.Printf("Warning: failed to remove executor state: %v", err)
+			}
+		}
+
 		// Stop the guardian
 		fmt.Println("Stopping guardian...")
 		if err := guardian.Stop(); err != nil {
@@ -172,6 +240,18 @@ var guardianStatusCmd = &cobra.Command{
 			fmt.Printf("Active tokens: %d\n", len(tokens))
 		}
 
+		// Check executor status
+		state, err := executor.LoadDaemonState()
+		if err != nil {
+			fmt.Printf("Executor: (unable to retrieve: %v)\n", err)
+		} else if state == nil {
+			fmt.Println("Executor: not running")
+		} else if executor.IsDaemonRunning(state) {
+			fmt.Printf("Executor: running (PID %d)\n", state.PID)
+		} else {
+			fmt.Println("Executor: not running (stale state)")
+		}
+
 		return nil
 	},
 }
@@ -220,7 +300,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			log.Printf("Warning: failed to load tokens: %v", err)
 		} else {
 			for tok, info := range tokens {
-				registry.RegisterWithProject(tok, info.CloisterName, info.ProjectName)
+				registry.RegisterFull(tok, info.CloisterName, info.ProjectName, info.WorktreePath)
 			}
 			if len(tokens) > 0 {
 				log.Printf("Recovered %d tokens from disk", len(tokens))
@@ -444,9 +524,14 @@ func (r *registryAdapter) List() map[string]guardian.TokenInfo {
 		result[k] = guardian.TokenInfo{
 			CloisterName: v.CloisterName,
 			ProjectName:  v.ProjectName,
+			WorktreePath: v.WorktreePath,
 		}
 	}
 	return result
+}
+
+func (r *registryAdapter) RegisterFull(tok, cloisterName, projectName, worktreePath string) {
+	r.Registry.RegisterFull(tok, cloisterName, projectName, worktreePath)
 }
 
 // formatDuration formats a duration in a human-readable way.

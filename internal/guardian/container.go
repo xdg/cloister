@@ -144,6 +144,17 @@ func IsRunning() (bool, error) {
 	return state != nil && state.State == "running", nil
 }
 
+// StartOptions configures guardian container startup.
+type StartOptions struct {
+	// SocketPath is the path to the hostexec socket on the host.
+	// If empty, the socket is not mounted.
+	SocketPath string
+
+	// SharedSecret is the secret for authenticating executor requests.
+	// If empty, the executor is not enabled.
+	SharedSecret string
+}
+
 // Start starts the guardian container if it is not already running.
 // The container is configured with:
 //   - Connection to cloister-net (internal network) for proxy traffic
@@ -153,6 +164,12 @@ func IsRunning() (bool, error) {
 //
 // Returns ErrGuardianAlreadyRunning if the container is already running.
 func Start() error {
+	return StartWithOptions(StartOptions{})
+}
+
+// StartWithOptions starts the guardian container with additional options.
+// See Start for container configuration details.
+func StartWithOptions(opts StartOptions) error {
 	// Check if container already exists
 	state, err := getContainerState()
 	if err != nil {
@@ -210,9 +227,20 @@ func Start() error {
 		"-e", "XDG_CONFIG_HOME=/etc",
 		"-v", hostTokenDir + ":" + ContainerTokenDir + ":ro",
 		"-v", hostConfigDir + ":" + ContainerConfigDir + ":ro",
-		DefaultImage,
-		"cloister", "guardian", "run",
 	}
+
+	// Add executor socket mount if provided
+	if opts.SocketPath != "" {
+		args = append(args, "-v", opts.SocketPath+":"+ContainerSocketPath)
+	}
+
+	// Add shared secret environment variable if provided
+	if opts.SharedSecret != "" {
+		args = append(args, "-e", SharedSecretEnvVar+"="+opts.SharedSecret)
+	}
+
+	// Add image and command
+	args = append(args, DefaultImage, "cloister", "guardian", "run")
 
 	// Create and start the container
 	_, err = defaultDockerOps.Run(args...)
@@ -353,12 +381,21 @@ func withGuardianClient() (*Client, error) {
 // RegisterToken registers a token with the guardian for a cloister.
 // The guardian must be running before calling this function.
 // The projectName is used for per-project allowlist lookups.
+// Deprecated: Use RegisterTokenFull to include the worktree path.
 func RegisterToken(token, cloisterName, projectName string) error {
+	return RegisterTokenFull(token, cloisterName, projectName, "")
+}
+
+// RegisterTokenFull registers a token with the guardian for a cloister.
+// The guardian must be running before calling this function.
+// The projectName is used for per-project allowlist lookups.
+// The worktreePath is the absolute path to the project on the host, used for hostexec validation.
+func RegisterTokenFull(token, cloisterName, projectName, worktreePath string) error {
 	client, err := withGuardianClient()
 	if err != nil {
 		return err
 	}
-	return client.RegisterToken(token, cloisterName, projectName)
+	return client.RegisterTokenFull(token, cloisterName, projectName, worktreePath)
 }
 
 // RevokeToken revokes a token from the guardian.

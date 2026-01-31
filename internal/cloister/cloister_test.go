@@ -187,9 +187,10 @@ func TestApplyOptions_DefaultsToRealImplementations(t *testing.T) {
 
 // mockGuardian is a test double for GuardianManager that always succeeds.
 type mockGuardian struct {
-	ensureRunningErr error
-	registerTokenErr error
-	revokeTokenErr   error
+	ensureRunningErr     error
+	registerTokenErr     error
+	registerTokenFullErr error
+	revokeTokenErr       error
 }
 
 func (m *mockGuardian) EnsureRunning() error {
@@ -197,6 +198,13 @@ func (m *mockGuardian) EnsureRunning() error {
 }
 
 func (m *mockGuardian) RegisterToken(token, cloisterName, projectName string) error {
+	return m.registerTokenErr
+}
+
+func (m *mockGuardian) RegisterTokenFull(token, cloisterName, projectName, worktreePath string) error {
+	if m.registerTokenFullErr != nil {
+		return m.registerTokenFullErr
+	}
 	return m.registerTokenErr
 }
 

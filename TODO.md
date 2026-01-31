@@ -295,18 +295,18 @@ Implement the host-side process that executes approved commands.
 - [x] **Commit** (included in Phase 4.4.1-4.4.3 commit)
 
 ### 4.4.6 Start executor with guardian
-- [ ] Generate 32-byte secret at guardian start (use token.Generate())
-- [ ] Add `cloister guardian start` to spawn executor process
-- [ ] Create socket before starting guardian container
-- [ ] Bind-mount socket into guardian container at `/var/run/hostexec.sock`
-- [ ] Pass shared secret to executor process via environment variable
-- [ ] Pass shared secret to guardian container via environment variable
-- [ ] Wire TokenValidator to look up token in registry for worktree path
-- [ ] Wire WorkdirValidator to compare workdir against registered worktree
-- [ ] Graceful shutdown: stop executor when guardian stops
+- [x] Generate 32-byte secret at guardian start (use token.Generate())
+- [x] Add `cloister guardian start` to spawn executor process
+- [x] Create socket before starting guardian container
+- [x] Bind-mount socket into guardian container at `/var/run/hostexec.sock`
+- [x] Pass shared secret to executor process via environment variable
+- [x] Pass shared secret to guardian container via environment variable
+- [x] Wire TokenValidator to look up token in registry for worktree path
+- [x] Wire WorkdirValidator to compare workdir against registered worktree
+- [x] Graceful shutdown: stop executor when guardian stops
 - [ ] **Test (integration)**: `guardian start` creates socket and executor runs
 - [ ] **Test (integration)**: `guardian stop` cleans up socket and executor
-- [ ] **Commit**
+- [x] **Commit**
 
 ---
 
