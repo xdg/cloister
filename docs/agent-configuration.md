@@ -63,7 +63,7 @@ Key is stored in `~/.config/cloister/config.yaml` under `agents.claude.api_key` 
 
 #### Legacy: Environment Variable Fallback
 
-If no credentials are configured via `cloister setup claude`, cloister will fall back to host environment variables (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`). This is deprecated and will show a warning. Run `cloister setup claude` to migrate.
+If no credentials are configured via `cloister setup claude`, cloister will fall back to host environment variables (`CLAUDE_CODE_OAUTH_TOKEN` or `ANTHROPIC_API_KEY`). This fallback is deprecated and will be removed in a future release. A warning is shown when env vars are used. Run `cloister setup claude` to migrate.
 
 **Priority order:** Config credentials (from `cloister setup claude`) always take priority over environment variables. If both are present, the config value is used.
 

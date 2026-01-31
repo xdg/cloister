@@ -313,8 +313,8 @@ Ensure Claude Code works correctly inside the container. **All tests require Doc
 - [x] **Test (unit)**: `make lint` passes
 
 ### 3.5.4 Add migration notes to CHANGELOG or docs
-- [ ] Document how to migrate from env vars to config: just run `cloister setup claude`
-- [ ] Note that env vars still work as fallback (deprecated, removal in Phase 7)
+- [x] Document how to migrate from env vars to config: just run `cloister setup claude`
+- [x] Note that env vars still work as fallback (deprecated, removal in Phase 7)
 
 ---
 
