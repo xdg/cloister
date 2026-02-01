@@ -12,6 +12,7 @@ func TestProxyEnvVars_ContainsAllVariables(t *testing.T) {
 	expected := []string{
 		"CLOISTER_TOKEN",
 		"CLOISTER_GUARDIAN_HOST",
+		"CLOISTER_REQUEST_PORT",
 		"HTTP_PROXY",
 		"HTTPS_PROXY",
 		"http_proxy",
@@ -217,6 +218,28 @@ func TestDefaultGuardianHost_Constant(t *testing.T) {
 func TestDefaultProxyPort_Constant(t *testing.T) {
 	if DefaultProxyPort != 3128 {
 		t.Errorf("DefaultProxyPort = %d, want %d", DefaultProxyPort, 3128)
+	}
+}
+
+func TestDefaultRequestPort_Constant(t *testing.T) {
+	if DefaultRequestPort != 9998 {
+		t.Errorf("DefaultRequestPort = %d, want %d", DefaultRequestPort, 9998)
+	}
+}
+
+func TestProxyEnvVars_RequestPortValue(t *testing.T) {
+	envVars := ProxyEnvVars("token123", "")
+
+	var requestPort string
+	for _, env := range envVars {
+		if strings.HasPrefix(env, "CLOISTER_REQUEST_PORT=") {
+			requestPort = strings.TrimPrefix(env, "CLOISTER_REQUEST_PORT=")
+			break
+		}
+	}
+
+	if requestPort != "9998" {
+		t.Errorf("CLOISTER_REQUEST_PORT = %q, want %q", requestPort, "9998")
 	}
 }
 

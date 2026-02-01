@@ -117,8 +117,10 @@ When a cloister container starts, the launcher sets these environment variables:
 |----------|---------|
 | `CLOISTER_TOKEN` | Authentication token for guardian proxy and hostexec requests |
 | `CLOISTER_GUARDIAN_HOST` | Guardian container hostname (default: `cloister-guardian`) |
+| `CLOISTER_REQUEST_PORT` | Port for hostexec requests (default: `9998`) |
 | `HTTP_PROXY` / `http_proxy` | Proxy URL with embedded credentials for HTTP traffic |
 | `HTTPS_PROXY` / `https_proxy` | Proxy URL for HTTPS traffic (same as HTTP_PROXY) |
+| `NO_PROXY` / `no_proxy` | Hosts that bypass the proxy (guardian, localhost) |
 
 The proxy URL format is: `http://token:$CLOISTER_TOKEN@$CLOISTER_GUARDIAN_HOST:3128`
 
@@ -185,7 +187,7 @@ ARGS_JSON=$(printf '%s\n' "$@" | jq -R . | jq -s .)
 
 # Send request to request server and wait for response
 # Token header is authoritative; body fields are informational for logging
-response=$(curl -s -X POST "http://${CLOISTER_GUARDIAN_HOST}:9998/request" \
+response=$(curl -s -X POST "http://${CLOISTER_GUARDIAN_HOST}:${CLOISTER_REQUEST_PORT:-9998}/request" \
     -H "Content-Type: application/json" \
     -H "X-Cloister-Token: ${CLOISTER_TOKEN}" \
     -d "{\"cmd\": $(printf '%s' "$COMMAND" | jq -R .), \"args\": ${ARGS_JSON}}" \

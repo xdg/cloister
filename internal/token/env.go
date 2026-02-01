@@ -27,6 +27,10 @@ func GuardianHost() string {
 // DefaultProxyPort is the default port for the guardian proxy server.
 const DefaultProxyPort = 3128
 
+// DefaultRequestPort is the default port for the guardian request server.
+// This matches request.DefaultRequestPort but is duplicated to avoid import cycles.
+const DefaultRequestPort = 9998
+
 // ProxyEnvVars returns environment variables for configuring a container
 // to use the guardian proxy with the given token for authentication.
 //
@@ -39,6 +43,7 @@ const DefaultProxyPort = 3128
 //   - https_proxy: lowercase variant for compatibility
 //   - NO_PROXY: hosts that bypass the proxy (guardian, localhost)
 //   - no_proxy: lowercase variant for compatibility
+//   - CLOISTER_REQUEST_PORT: port for hostexec requests (default 9998)
 //
 // The proxy URL format is: http://token:$token@$host:$port
 // Using "token" as the username and the actual token as the password.
@@ -53,6 +58,7 @@ func ProxyEnvVars(token, guardianHost string) []string {
 	return []string{
 		"CLOISTER_TOKEN=" + token,
 		"CLOISTER_GUARDIAN_HOST=" + guardianHost,
+		"CLOISTER_REQUEST_PORT=" + fmt.Sprintf("%d", DefaultRequestPort),
 		"HTTP_PROXY=" + proxyURL,
 		"HTTPS_PROXY=" + proxyURL,
 		"http_proxy=" + proxyURL,
