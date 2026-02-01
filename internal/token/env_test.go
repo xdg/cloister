@@ -16,6 +16,8 @@ func TestProxyEnvVars_ContainsAllVariables(t *testing.T) {
 		"HTTPS_PROXY",
 		"http_proxy",
 		"https_proxy",
+		"NO_PROXY",
+		"no_proxy",
 	}
 
 	if len(envVars) != len(expected) {
@@ -166,6 +168,42 @@ func TestProxyEnvVars_GuardianHostEnvVar(t *testing.T) {
 
 		if guardianHost != customHost {
 			t.Errorf("CLOISTER_GUARDIAN_HOST = %q, want %q", guardianHost, customHost)
+		}
+	})
+}
+
+func TestProxyEnvVars_NoProxyValue(t *testing.T) {
+	t.Run("default host", func(t *testing.T) {
+		envVars := ProxyEnvVars("token123", "")
+		expected := "cloister-guardian,localhost,127.0.0.1"
+
+		for _, varName := range []string{"NO_PROXY", "no_proxy"} {
+			var value string
+			for _, env := range envVars {
+				if strings.HasPrefix(env, varName+"=") {
+					value = strings.TrimPrefix(env, varName+"=")
+					break
+				}
+			}
+			if value != expected {
+				t.Errorf("%s = %q, want %q", varName, value, expected)
+			}
+		}
+	})
+
+	t.Run("custom host", func(t *testing.T) {
+		envVars := ProxyEnvVars("token123", "custom-guardian")
+		expected := "custom-guardian,localhost,127.0.0.1"
+
+		var noProxy string
+		for _, env := range envVars {
+			if strings.HasPrefix(env, "NO_PROXY=") {
+				noProxy = strings.TrimPrefix(env, "NO_PROXY=")
+				break
+			}
+		}
+		if noProxy != expected {
+			t.Errorf("NO_PROXY = %q, want %q", noProxy, expected)
 		}
 	})
 }

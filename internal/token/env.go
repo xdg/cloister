@@ -19,6 +19,8 @@ const DefaultProxyPort = 3128
 //   - HTTPS_PROXY: same proxy URL (for tools that check HTTPS_PROXY)
 //   - http_proxy: lowercase variant for compatibility
 //   - https_proxy: lowercase variant for compatibility
+//   - NO_PROXY: hosts that bypass the proxy (guardian, localhost)
+//   - no_proxy: lowercase variant for compatibility
 //
 // The proxy URL format is: http://token:$token@$host:$port
 // Using "token" as the username and the actual token as the password.
@@ -28,6 +30,7 @@ func ProxyEnvVars(token, guardianHost string) []string {
 	}
 
 	proxyURL := fmt.Sprintf("http://token:%s@%s:%d", token, guardianHost, DefaultProxyPort)
+	noProxy := fmt.Sprintf("%s,localhost,127.0.0.1", guardianHost)
 
 	return []string{
 		"CLOISTER_TOKEN=" + token,
@@ -36,5 +39,7 @@ func ProxyEnvVars(token, guardianHost string) []string {
 		"HTTPS_PROXY=" + proxyURL,
 		"http_proxy=" + proxyURL,
 		"https_proxy=" + proxyURL,
+		"NO_PROXY=" + noProxy,
+		"no_proxy=" + noProxy,
 	}
 }

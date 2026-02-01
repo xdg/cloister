@@ -22,10 +22,10 @@ AI config folder/files are copied from the host because several tools read and w
 ## Security Hardening
 
 ```bash
+--cap-drop=ALL
+--security-opt=no-new-privileges
 --network cloister-net  # internal only
 ```
-
-Docker's default capability set is used (drops SYS_ADMIN, SYS_PTRACE, etc. while keeping SETUID/SETGID for sudo e.g. for apt). Cloister's security relies on network isolation and filesystem restrictions.
 
 No access to:
 - Docker socket
@@ -178,16 +178,17 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-# Build JSON request with args array only.
-# The guardian reconstructs the canonical command string from args.
-# Using jq ensures proper JSON escaping of arguments.
+# Build JSON request with both cmd (for display/pattern matching) and args (for execution)
+# Using jq ensures proper JSON escaping of arguments
+COMMAND="$*"
 ARGS_JSON=$(printf '%s\n' "$@" | jq -R . | jq -s .)
 
 # Send request to request server and wait for response
-response=$(curl -s --noproxy "*" -X POST "http://${CLOISTER_GUARDIAN_HOST}:9998/request" \
+# Token header is authoritative; body fields are informational for logging
+response=$(curl -s -X POST "http://${CLOISTER_GUARDIAN_HOST}:9998/request" \
     -H "Content-Type: application/json" \
     -H "X-Cloister-Token: ${CLOISTER_TOKEN}" \
-    -d "{\"args\": ${ARGS_JSON}}" \
+    -d "{\"cmd\": $(printf '%s' "$COMMAND" | jq -R .), \"args\": ${ARGS_JSON}}" \
     --max-time 300)
 
 status=$(echo "$response" | jq -r '.status // "error"')
