@@ -54,6 +54,27 @@ type Agent interface {
 	Setup(containerName string, agentCfg *config.AgentConfig) (*SetupResult, error)
 }
 
+// CredentialEnvProvider is an optional interface that agents can implement
+// to provide credential environment variables before the container is created.
+// This is necessary because env vars must be set at container creation time,
+// but Setup() runs after the container starts.
+type CredentialEnvProvider interface {
+	// GetCredentialEnvVars returns environment variables needed for agent authentication.
+	// This is called before container creation and must not require a running container.
+	// Returns nil map and nil error if no credentials are configured.
+	GetCredentialEnvVars(agentCfg *config.AgentConfig) (map[string]string, error)
+}
+
+// GetCredentialEnvVars returns credential env vars for an agent if it implements
+// CredentialEnvProvider. Returns nil if the agent doesn't implement the interface
+// or if no credentials are configured.
+func GetCredentialEnvVars(a Agent, agentCfg *config.AgentConfig) (map[string]string, error) {
+	if provider, ok := a.(CredentialEnvProvider); ok {
+		return provider.GetCredentialEnvVars(agentCfg)
+	}
+	return nil, nil
+}
+
 // Registry maps agent names to their implementations.
 var registry = make(map[string]Agent)
 

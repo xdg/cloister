@@ -119,6 +119,26 @@ func (a *ClaudeAgent) Name() string {
 	return agentName
 }
 
+// GetCredentialEnvVars implements CredentialEnvProvider.
+// It returns credential env vars without requiring a running container.
+func (a *ClaudeAgent) GetCredentialEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
+	if agentCfg == nil || agentCfg.AuthMethod == "" {
+		return nil, nil
+	}
+
+	injector := a.Injector
+	if injector == nil {
+		injector = claude.NewInjector()
+	}
+
+	injectionConfig, err := injector.InjectCredentials(agentCfg)
+	if err != nil {
+		return nil, fmt.Errorf("credential injection failed: %w", err)
+	}
+
+	return injectionConfig.EnvVars, nil
+}
+
 // settingsExcludePatterns lists directories/files to exclude when copying ~/.claude/
 // These are machine-local files that don't need to be in the container.
 // Based on ~/.claude/.gitignore patterns.

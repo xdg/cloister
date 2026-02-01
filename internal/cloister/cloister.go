@@ -266,9 +266,20 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		agentImpl = agent.Get(agentName)
 	}
 
-	// Fall back to env vars if no agent config with auth method.
-	// Using deprecated functions intentionally - this is the fallback path.
-	if agentCfg == nil || agentCfg.AuthMethod == "" {
+	// Get credential env vars before container creation.
+	// Env vars must be set at container creation time, so we need to
+	// compute them now rather than waiting for agent.Setup().
+	if agentCfg != nil && agentCfg.AuthMethod != "" && agentImpl != nil {
+		credEnvVars, credErr := agent.GetCredentialEnvVars(agentImpl, agentCfg)
+		if credErr != nil {
+			return "", "", fmt.Errorf("failed to get credential env vars: %w", credErr)
+		}
+		for key, value := range credEnvVars {
+			envVars = append(envVars, key+"="+value)
+		}
+	} else {
+		// Fall back to env vars if no agent config with auth method.
+		// Using deprecated functions intentionally - this is the fallback path.
 		usedEnvVars := token.CredentialEnvVarsUsed() //nolint:staticcheck // intentional fallback
 		if len(usedEnvVars) > 0 {
 			fmt.Fprintf(deps.stderr, "Warning: Using %s from environment.\n", usedEnvVars[0])
@@ -307,18 +318,12 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	}
 
 	// Step 9: Run agent-specific setup (settings, credentials, config files)
+	// Note: Credential env vars were already set during container creation (Step 6).
+	// Setup() handles file-based setup (copying settings, writing config files, etc.)
 	if agentImpl != nil {
-		setupResult, setupErr := agentImpl.Setup(containerName, agentCfg)
+		_, setupErr := agentImpl.Setup(containerName, agentCfg)
 		if setupErr != nil {
 			return "", "", setupErr
-		}
-		// Add any env vars from agent setup to the container
-		// Note: These are already set during container creation, but we track them
-		// for future use (e.g., if we need to pass them to docker exec)
-		if setupResult != nil {
-			for key, value := range setupResult.EnvVars {
-				envVars = append(envVars, key+"="+value)
-			}
 		}
 	}
 

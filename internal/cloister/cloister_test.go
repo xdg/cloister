@@ -222,7 +222,7 @@ func (m *mockConfigLoader) LoadGlobalConfig() (*config.GlobalConfig, error) {
 	return m.config, m.err
 }
 
-// mockAgent is a test double for agent.Agent.
+// mockAgent is a test double for agent.Agent and agent.CredentialEnvProvider.
 type mockAgent struct {
 	name          string
 	setupCalled   bool
@@ -230,6 +230,11 @@ type mockAgent struct {
 	setupResult   *agent.SetupResult
 	setupErr      error
 	containerName string
+
+	// credentialEnvVars is returned by GetCredentialEnvVars if set.
+	// If nil, GetCredentialEnvVars returns nil, nil.
+	credentialEnvVars map[string]string
+	credentialErr     error
 }
 
 func (m *mockAgent) Name() string {
@@ -243,7 +248,13 @@ func (m *mockAgent) Setup(containerName string, agentCfg *config.AgentConfig) (*
 	return m.setupResult, m.setupErr
 }
 
-// TestStart_WithTokenAuth verifies that token-based credentials trigger agent setup.
+// GetCredentialEnvVars implements agent.CredentialEnvProvider.
+func (m *mockAgent) GetCredentialEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
+	return m.credentialEnvVars, m.credentialErr
+}
+
+// TestStart_WithTokenAuth verifies that token-based credentials trigger agent setup
+// and that credential env vars are passed to the container at creation time.
 func TestStart_WithTokenAuth(t *testing.T) {
 	mockMgr := &mockManager{createResult: "container-123"}
 	mockGuard := &mockGuardian{}
@@ -259,6 +270,11 @@ func TestStart_WithTokenAuth(t *testing.T) {
 	}
 	mockAgt := &mockAgent{
 		name: "claude",
+		// Credential env vars returned by GetCredentialEnvVars (before container creation)
+		credentialEnvVars: map[string]string{
+			"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-test-token",
+		},
+		// Setup result (after container creation) - env vars here are redundant
 		setupResult: &agent.SetupResult{
 			EnvVars: map[string]string{
 				"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-test-token",
@@ -304,9 +320,23 @@ func TestStart_WithTokenAuth(t *testing.T) {
 	if mockMgr.createConfig == nil {
 		t.Fatal("manager.Create() was not called")
 	}
+
+	// Verify credential env vars were passed to container at creation time
+	envVars := mockMgr.createConfig.EnvVars
+	found := false
+	for _, env := range envVars {
+		if env == "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-test-token" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("CLAUDE_CODE_OAUTH_TOKEN not found in container env vars: %v", envVars)
+	}
 }
 
-// TestStart_WithAPIKeyAuth verifies that API key credentials trigger agent setup.
+// TestStart_WithAPIKeyAuth verifies that API key credentials trigger agent setup
+// and that credential env vars are passed to the container at creation time.
 func TestStart_WithAPIKeyAuth(t *testing.T) {
 	mockMgr := &mockManager{createResult: "container-123"}
 	mockGuard := &mockGuardian{}
@@ -322,6 +352,9 @@ func TestStart_WithAPIKeyAuth(t *testing.T) {
 	}
 	mockAgt := &mockAgent{
 		name: "claude",
+		credentialEnvVars: map[string]string{
+			"ANTHROPIC_API_KEY": "sk-ant-api01-test-key",
+		},
 		setupResult: &agent.SetupResult{
 			EnvVars: map[string]string{
 				"ANTHROPIC_API_KEY": "sk-ant-api01-test-key",
@@ -354,6 +387,19 @@ func TestStart_WithAPIKeyAuth(t *testing.T) {
 	}
 	if mockAgt.setupCfg.AuthMethod != "api_key" {
 		t.Errorf("setupCfg.AuthMethod = %q, want %q", mockAgt.setupCfg.AuthMethod, "api_key")
+	}
+
+	// Verify credential env vars were passed to container at creation time
+	envVars := mockMgr.createConfig.EnvVars
+	found := false
+	for _, env := range envVars {
+		if env == "ANTHROPIC_API_KEY=sk-ant-api01-test-key" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("ANTHROPIC_API_KEY not found in container env vars: %v", envVars)
 	}
 }
 
