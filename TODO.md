@@ -446,7 +446,7 @@ Complete the approval UI with real-time updates via Server-Sent Events.
 ### 4.8.2 Integrate SSE into approval UI
 - [x] Client subscribes on page load
 - [x] Use htmx SSE extension or native EventSource for updates
-- [ ] **Test (manual)**: New request appears without page refresh
+- [x] **Test (manual)**: New request appears without page refresh
 
 ---
 
