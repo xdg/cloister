@@ -44,7 +44,8 @@ A separate cloister guardian process acts as your http proxy and gatekeeper for 
 - Reading and writing files in /work
 - Normal unix tools and resources available to non-root users (e.g /tmp)
 - Running tests, linters, and build tools (build-essential, make, cmake, and common development tools are pre-installed)
-- Installing packages (npm, pip, go get, etc.)
+- Installing operating system packages via 'sudo apt-get'
+- Installing language packages (npm, pip, go get, etc.)
 - Git operations that don't require network (commit, branch, merge, rebase)
 - Fetching allowed documentation and packages through the proxy
 
@@ -143,6 +144,7 @@ func (a *ClaudeAgent) GetCredentialEnvVars(agentCfg *config.AgentConfig) (map[st
 // These are machine-local files that don't need to be in the container.
 // Based on ~/.claude/.gitignore patterns.
 var settingsExcludePatterns = []string{
+	".claude.json",
 	".update.lock",
 	"cache",
 	"debug/",
