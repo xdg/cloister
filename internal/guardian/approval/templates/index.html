@@ -146,6 +146,11 @@
     </div>
     <script>
         (function() {
+            // Request notification permission on page load
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+
             var eventSource = new EventSource('/events');
 
             eventSource.addEventListener('request-added', function(e) {
@@ -167,6 +172,29 @@
                 // Re-initialize htmx for the new content
                 if (typeof htmx !== 'undefined') {
                     htmx.process(document.getElementById('request-list'));
+                }
+
+                // Show browser notification if tab is not visible and permission granted
+                if ('Notification' in window &&
+                    Notification.permission === 'granted' &&
+                    document.visibilityState === 'hidden') {
+
+                    // Extract request info from the rendered HTML
+                    var temp = document.createElement('div');
+                    temp.innerHTML = e.data;
+                    var cloister = temp.querySelector('.request-meta strong')?.textContent || 'Unknown';
+                    var cmd = temp.querySelector('.request-cmd')?.textContent || '';
+
+                    var notification = new Notification('Cloister: Approval Requested', {
+                        body: cloister + ': ' + cmd.substring(0, 80),
+                        tag: 'cloister-request',  // Collapse multiple into one
+                        requireInteraction: false
+                    });
+
+                    notification.onclick = function() {
+                        window.focus();
+                        notification.close();
+                    };
                 }
             });
 
