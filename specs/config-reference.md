@@ -71,6 +71,30 @@ approval:
   # These bypass the approval UI and execute immediately
   # NOTE: Package installs (npm, pip, cargo, go) run inside the container
   # via proxy, not via hostexec. hostexec is for host-specific operations.
+  #
+  # PATTERN MATCHING
+  # ----------------
+  # Patterns match against the canonical command string reconstructed from
+  # the args array using shell quoting rules:
+  #
+  #   - Simple args (alphanumeric, -_./:@+= chars): used as-is
+  #   - Args with spaces or shell metacharacters: wrapped in single quotes
+  #   - Embedded single quotes: escaped using POSIX '\'' idiom
+  #
+  # The '\'' idiom works by: ending quote (') + escaped quote (\') + new quote (')
+  # The shell concatenates these adjacent strings.
+  #
+  # Examples of canonical strings:
+  #   args: ["docker", "ps"]           → "docker ps"
+  #   args: ["echo", "hello world"]    → "echo 'hello world'"
+  #   args: ["echo", "it's fine"]      → "echo 'it'\''s fine'"
+  #   args: ["git", "commit", "-m", "fix: bug"] → "git commit -m 'fix: bug'"
+  #
+  # When writing patterns for commands that may have quoted arguments:
+  #   - Use .* to match any quoted content: ^echo '.*'$
+  #   - Match specific quoted strings: ^echo 'hello world'$
+  #   - The single quotes ARE part of the canonical string
+  #
   auto_approve:
     - pattern: "^docker compose ps$"
     - pattern: "^docker compose logs.*$"

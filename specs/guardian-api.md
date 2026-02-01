@@ -171,15 +171,22 @@ The token is the sole source of cloister identity. The guardian looks up cloiste
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `cmd` | Yes | Human-readable command string for pattern matching and display |
-| `args` | Yes | Tokenized argument array for execution (`args[0]` is the command) |
+| `args` | Yes | Tokenized argument array for execution and pattern matching (`args[0]` is the command) |
+| `cmd` | No | **DEPRECATED.** Ignored by the server. Kept for backwards compatibility. |
 
-The `cmd` field is used for pattern matching and human review. The `args` array is used for actual execution via `exec` (no shell), preventing shell injection attacks. The shell has already tokenized the arguments, so we preserve that tokenization.
+The `args` array is the authoritative source for both pattern matching and execution. The guardian reconstructs a canonical command string from `args` using shell quoting rules:
+
+- Simple args (alphanumeric, `-_./:@+=`): used as-is
+- Args with spaces or special characters: wrapped in single quotes
+- Embedded single quotes: escaped using the POSIX `'\''` idiom
+
+This prevents a security vulnerability where a malicious `cmd` could pass pattern validation while `args` executes something different.
+
+**Validation:** Arguments containing NUL bytes (`\x00`) are rejected with a 400 Bad Request error, as NUL bytes cannot be safely represented in shell commands.
 
 **Request body:**
 ```json
 {
-    "cmd": "docker compose up -d",
     "args": ["docker", "compose", "up", "-d"]
 }
 ```
@@ -267,6 +274,9 @@ List pending command approval requests.
         }
     ]
 }
+```
+
+Note: The `cmd` field in pending requests is the canonical command string reconstructed from `args` using shell quoting. Arguments containing spaces or special characters are single-quoted (e.g., `echo 'hello world'`).
 ```
 
 ### POST /approve/{id}

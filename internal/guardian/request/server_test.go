@@ -83,7 +83,7 @@ func TestServer_HandleRequest_MissingToken(t *testing.T) {
 	// Create a test request handler by manually wrapping with auth middleware
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	body := `{"cmd": "echo hello"}`
+	body := `{"args": ["echo", "hello"]}`
 	req := httptest.NewRequest(http.MethodPost, "/request", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	// Note: no X-Cloister-Token header
@@ -104,7 +104,7 @@ func TestServer_HandleRequest_InvalidToken(t *testing.T) {
 	server := NewServer(lookup, nil, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	body := `{"cmd": "echo hello"}`
+	body := `{"args": ["echo", "hello"]}`
 	req := httptest.NewRequest(http.MethodPost, "/request", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(TokenHeader, "invalid-token")
@@ -145,7 +145,7 @@ func TestServer_HandleRequest_InvalidJSON(t *testing.T) {
 	}
 }
 
-func TestServer_HandleRequest_EmptyCmd(t *testing.T) {
+func TestServer_HandleRequest_EmptyArgs(t *testing.T) {
 	lookup := mockTokenLookup(map[string]TokenInfo{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
@@ -153,7 +153,7 @@ func TestServer_HandleRequest_EmptyCmd(t *testing.T) {
 	server := NewServer(lookup, nil, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	body := `{"cmd": ""}`
+	body := `{"args": []}`
 	req := httptest.NewRequest(http.MethodPost, "/request", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(TokenHeader, "valid-token")
@@ -172,8 +172,8 @@ func TestServer_HandleRequest_EmptyCmd(t *testing.T) {
 	if resp.Status != "error" {
 		t.Errorf("expected status 'error', got %q", resp.Status)
 	}
-	if !strings.Contains(resp.Reason, "cmd is required") {
-		t.Errorf("expected reason to contain 'cmd is required', got %q", resp.Reason)
+	if !strings.Contains(resp.Reason, "args is required") {
+		t.Errorf("expected reason to contain 'args is required', got %q", resp.Reason)
 	}
 }
 
@@ -185,7 +185,7 @@ func TestServer_HandleRequest_ValidRequest_NilMatcher(t *testing.T) {
 	server := NewServer(lookup, nil, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -234,7 +234,7 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 
 	// Make a real HTTP request to the running server
 	url := "http://" + server.ListenAddr() + "/request"
-	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
@@ -332,7 +332,7 @@ func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose ps", Args: []string{"docker", "compose", "ps"}}
+	cmdReq := CommandRequest{Args: []string{"docker", "compose", "ps"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -381,7 +381,7 @@ func TestServer_HandleRequest_ManualApprove_NilQueue(t *testing.T) {
 	server := NewServer(lookup, matcher, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
+	cmdReq := CommandRequest{Args: []string{"docker", "compose", "up", "-d"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -423,7 +423,7 @@ func TestServer_HandleRequest_Deny(t *testing.T) {
 	server := NewServer(lookup, matcher, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "rm -rf /", Args: []string{"rm", "-rf", "/"}}
+	cmdReq := CommandRequest{Args: []string{"rm", "-rf", "/"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -458,7 +458,7 @@ func TestServer_HandleRequest_NoPatternMatcher(t *testing.T) {
 	server := NewServer(lookup, nil, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -512,7 +512,7 @@ func TestServer_HandleRequest_ManualApprove_BlocksUntilApproval(t *testing.T) {
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
+	cmdReq := CommandRequest{Args: []string{"docker", "compose", "up", "-d"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -604,7 +604,7 @@ func TestServer_HandleRequest_ManualApprove_Timeout(t *testing.T) {
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
+	cmdReq := CommandRequest{Args: []string{"docker", "compose", "up", "-d"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -667,7 +667,7 @@ func TestServer_HandleRequest_ManualApprove_Denied(t *testing.T) {
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
+	cmdReq := CommandRequest{Args: []string{"docker", "compose", "up", "-d"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -790,7 +790,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorCalled(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -837,7 +837,7 @@ func TestServer_HandleRequest_AutoApprove_NilExecutor(t *testing.T) {
 	server := NewServer(lookup, matcher, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -881,7 +881,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorError(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -932,7 +932,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorTimeout(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "slow command", Args: []string{"slow", "command"}}
+	cmdReq := CommandRequest{Args: []string{"slow", "command"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -986,7 +986,7 @@ func TestServer_HandleRequest_AutoApprove_CommandFailed(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "failing command", Args: []string{"failing", "command"}}
+	cmdReq := CommandRequest{Args: []string{"failing", "command"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1164,7 +1164,7 @@ func TestServer_HandleRequest_AuditLogging_AutoApprove(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec, auditLogger)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1223,7 +1223,7 @@ func TestServer_HandleRequest_AuditLogging_Deny(t *testing.T) {
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	// Send a command that doesn't match any pattern
-	cmdReq := CommandRequest{Cmd: "rm -rf /", Args: []string{"rm", "-rf", "/"}}
+	cmdReq := CommandRequest{Args: []string{"rm", "-rf", "/"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1268,7 +1268,7 @@ func TestServer_HandleRequest_AuditLogging_NilMatcher(t *testing.T) {
 	server := NewServer(lookup, nil, nil, auditLogger)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1317,7 +1317,7 @@ func TestServer_HandleRequest_AuditLogging_Timeout(t *testing.T) {
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
+	cmdReq := CommandRequest{Args: []string{"docker", "compose", "up", "-d"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1380,7 +1380,7 @@ func TestServer_HandleRequest_AuditLogging_NilLogger(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -1400,5 +1400,95 @@ func TestServer_HandleRequest_AuditLogging_NilLogger(t *testing.T) {
 	}
 	if resp.Status != "auto_approved" {
 		t.Errorf("expected status 'auto_approved', got %q", resp.Status)
+	}
+}
+
+// TestServer_HandleRequest_NULByteRejected verifies that arguments containing
+// NUL bytes are rejected, as they cannot be safely represented in shell commands.
+func TestServer_HandleRequest_NULByteRejected(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"echo hello": {Action: patterns.AutoApprove, Pattern: "^echo .*$"},
+		},
+	}
+
+	server := NewServer(lookup, matcher, nil, nil)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	// Request with NUL byte embedded in argument
+	cmdReq := CommandRequest{Args: []string{"echo", "hello\x00world"}}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "error" {
+		t.Errorf("expected status 'error', got %q", resp.Status)
+	}
+	if !strings.Contains(resp.Reason, "NUL") {
+		t.Errorf("expected reason to mention NUL bytes, got %q", resp.Reason)
+	}
+}
+
+// TestServer_HandleRequest_CmdFieldIgnored verifies that a malicious cmd field
+// is ignored and the canonical command is reconstructed from args only.
+// This is the key security fix - prevents validation bypass attacks.
+func TestServer_HandleRequest_CmdFieldIgnored(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	// Matcher only allows "docker ps"
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"docker ps": {Action: patterns.AutoApprove, Pattern: "^docker ps$"},
+		},
+	}
+
+	server := NewServer(lookup, matcher, nil, nil)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	// Malicious request: cmd claims "docker ps" but args say "rm -rf /"
+	// Before the fix, this would match "docker ps" pattern but execute "rm -rf /"
+	body := `{"cmd": "docker ps", "args": ["rm", "-rf", "/"]}`
+	req := httptest.NewRequest(http.MethodPost, "/request", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Command should be DENIED because canonical cmd from args is "rm -rf /"
+	// which doesn't match "docker ps" pattern
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q (security vulnerability if not denied!)", resp.Status)
+	}
+	if !strings.Contains(resp.Reason, "does not match") {
+		t.Errorf("expected reason to contain 'does not match', got %q", resp.Reason)
 	}
 }

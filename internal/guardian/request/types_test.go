@@ -11,16 +11,16 @@ func TestCommandRequestRoundTrip(t *testing.T) {
 		request CommandRequest
 	}{
 		{
-			name:    "simple_command",
-			request: CommandRequest{Cmd: "docker compose ps"},
+			name:    "simple_args",
+			request: CommandRequest{Args: []string{"docker", "compose", "ps"}},
 		},
 		{
-			name:    "command_with_args",
-			request: CommandRequest{Cmd: "docker compose up -d --build"},
+			name:    "args_with_flags",
+			request: CommandRequest{Args: []string{"docker", "compose", "up", "-d", "--build"}},
 		},
 		{
-			name:    "empty_command",
-			request: CommandRequest{Cmd: ""},
+			name:    "deprecated_cmd_still_works",
+			request: CommandRequest{Cmd: "legacy", Args: []string{"echo", "hello"}},
 		},
 	}
 
@@ -38,6 +38,14 @@ func TestCommandRequestRoundTrip(t *testing.T) {
 
 			if roundTripped.Cmd != tc.request.Cmd {
 				t.Errorf("Cmd = %q, want %q", roundTripped.Cmd, tc.request.Cmd)
+			}
+			if len(roundTripped.Args) != len(tc.request.Args) {
+				t.Errorf("Args length = %d, want %d", len(roundTripped.Args), len(tc.request.Args))
+			}
+			for i := range tc.request.Args {
+				if roundTripped.Args[i] != tc.request.Args[i] {
+					t.Errorf("Args[%d] = %q, want %q", i, roundTripped.Args[i], tc.request.Args[i])
+				}
 			}
 		})
 	}
@@ -309,8 +317,9 @@ func TestCommandResponseJSONFieldNames(t *testing.T) {
 }
 
 func TestCommandRequestJSONFieldNames(t *testing.T) {
+	// Test that args is always present (required field)
 	request := CommandRequest{
-		Cmd: "test command",
+		Args: []string{"test", "command"},
 	}
 
 	data, err := json.Marshal(&request)
@@ -323,13 +332,59 @@ func TestCommandRequestJSONFieldNames(t *testing.T) {
 		t.Fatalf("failed to unmarshal to map: %v", err)
 	}
 
-	// Verify "cmd" field is present
-	if _, ok := result["cmd"]; !ok {
-		t.Error("expected JSON field \"cmd\" not found")
+	// Verify "args" field is present
+	if _, ok := result["args"]; !ok {
+		t.Error("expected JSON field \"args\" not found")
 	}
 
-	// Verify only expected field is present
+	// Verify "cmd" is omitted when empty (omitempty)
+	if _, ok := result["cmd"]; ok {
+		t.Error("expected \"cmd\" to be omitted when empty")
+	}
+
+	// Verify only args field is present
 	if len(result) != 1 {
 		t.Errorf("expected 1 JSON field, got %d: %v", len(result), result)
+	}
+}
+
+func TestCommandRequestCmdOmitEmpty(t *testing.T) {
+	// Test that cmd is omitted when empty
+	request := CommandRequest{
+		Args: []string{"echo", "hello"},
+	}
+
+	data, err := json.Marshal(&request)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal(data, &result); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	if _, ok := result["cmd"]; ok {
+		t.Error("cmd should be omitted when empty")
+	}
+
+	// Test that cmd is present when set (for backwards compat)
+	request2 := CommandRequest{
+		Cmd:  "legacy command",
+		Args: []string{"echo", "hello"},
+	}
+
+	data2, err := json.Marshal(&request2)
+	if err != nil {
+		t.Fatalf("failed to marshal: %v", err)
+	}
+
+	var result2 map[string]interface{}
+	if err := json.Unmarshal(data2, &result2); err != nil {
+		t.Fatalf("failed to unmarshal to map: %v", err)
+	}
+
+	if _, ok := result2["cmd"]; !ok {
+		t.Error("cmd should be present when non-empty")
 	}
 }

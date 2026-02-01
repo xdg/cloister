@@ -156,14 +156,6 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Cmd == "" {
-		s.writeJSON(w, http.StatusBadRequest, CommandResponse{
-			Status: "error",
-			Reason: "cmd is required",
-		})
-		return
-	}
-
 	if len(req.Args) == 0 {
 		s.writeJSON(w, http.StatusBadRequest, CommandResponse{
 			Status: "error",
@@ -171,6 +163,22 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+
+	// Reject arguments containing NUL bytes, which cannot be safely embedded
+	// in shell arguments and could cause divergent behavior.
+	for _, arg := range req.Args {
+		if containsNUL(arg) {
+			s.writeJSON(w, http.StatusBadRequest, CommandResponse{
+				Status: "error",
+				Reason: "arguments cannot contain NUL bytes",
+			})
+			return
+		}
+	}
+
+	// Reconstruct canonical command from args for pattern matching and logging.
+	// This is the authoritative representation - cmd is ignored (deprecated).
+	cmd := canonicalCmd(req.Args)
 
 	// Get cloister info from context (set by auth middleware)
 	info, ok := CloisterInfo(r.Context())
@@ -184,11 +192,11 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log REQUEST event
-	_ = s.AuditLogger.LogRequest(info.ProjectName, "", info.CloisterName, req.Cmd)
+	_ = s.AuditLogger.LogRequest(info.ProjectName, "", info.CloisterName, cmd)
 
 	// If no pattern matcher is configured, deny all commands
 	if s.PatternMatcher == nil {
-		_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, req.Cmd, "no approval patterns configured")
+		_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, cmd, "no approval patterns configured")
 		s.writeJSON(w, http.StatusOK, CommandResponse{
 			Status: "denied",
 			Reason: "no approval patterns configured",
@@ -197,23 +205,23 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Match command against configured patterns
-	result := s.PatternMatcher.Match(req.Cmd)
+	result := s.PatternMatcher.Match(cmd)
 
 	switch result.Action {
 	case patterns.AutoApprove:
 		// Log AUTO_APPROVE event
-		_ = s.AuditLogger.LogAutoApprove(info.ProjectName, "", info.CloisterName, req.Cmd, result.Pattern)
+		_ = s.AuditLogger.LogAutoApprove(info.ProjectName, "", info.CloisterName, cmd, result.Pattern)
 		// Auto-approved: proceed to execution
 		startTime := time.Now()
 		resp := s.executeCommand(req.Args, "auto_approved", result.Pattern)
 		// Log COMPLETE event with duration
-		_ = s.AuditLogger.LogComplete(info.ProjectName, "", info.CloisterName, req.Cmd, resp.ExitCode, time.Since(startTime))
+		_ = s.AuditLogger.LogComplete(info.ProjectName, "", info.CloisterName, cmd, resp.ExitCode, time.Since(startTime))
 		s.writeJSON(w, http.StatusOK, resp)
 
 	case patterns.ManualApprove:
 		// Manual approval required: queue for human review
 		if s.Queue == nil {
-			_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, req.Cmd, "manual approval required but approval queue not configured")
+			_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, cmd, "manual approval required but approval queue not configured")
 			s.writeJSON(w, http.StatusOK, CommandResponse{
 				Status: "denied",
 				Reason: "manual approval required but approval queue not configured",
@@ -230,7 +238,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 			Project:   info.ProjectName,
 			Branch:    "", // Not available from token; may be added later
 			Agent:     "", // Not available from token; may be added later
-			Cmd:       req.Cmd,
+			Cmd:       cmd,
 			Timestamp: time.Now(),
 			Response:  respChan,
 		}
@@ -254,14 +262,14 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 			startTime := time.Now()
 			resp := s.executeCommand(req.Args, "approved", "")
 			// Log COMPLETE event with duration
-			_ = s.AuditLogger.LogComplete(info.ProjectName, "", info.CloisterName, req.Cmd, resp.ExitCode, time.Since(startTime))
+			_ = s.AuditLogger.LogComplete(info.ProjectName, "", info.CloisterName, cmd, resp.ExitCode, time.Since(startTime))
 			s.writeJSON(w, http.StatusOK, resp)
 			return
 		}
 
 		// Handle timeout specifically
 		if approvalResp.Status == "timeout" {
-			_ = s.AuditLogger.LogTimeout(info.ProjectName, "", info.CloisterName, req.Cmd)
+			_ = s.AuditLogger.LogTimeout(info.ProjectName, "", info.CloisterName, cmd)
 		}
 		// Note: DENY events for manual approval are logged by approval server
 
@@ -277,7 +285,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	case patterns.Deny:
 		// No pattern matched: deny the command
-		_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, req.Cmd, "command does not match any approval pattern")
+		_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, cmd, "command does not match any approval pattern")
 		s.writeJSON(w, http.StatusOK, CommandResponse{
 			Status: "denied",
 			Reason: "command does not match any approval pattern",

@@ -178,17 +178,16 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-# Build JSON request with both cmd (for display/pattern matching) and args (for execution)
-# Using jq ensures proper JSON escaping of arguments
-COMMAND="$*"
+# Build JSON request with args array only.
+# The guardian reconstructs the canonical command string from args.
+# Using jq ensures proper JSON escaping of arguments.
 ARGS_JSON=$(printf '%s\n' "$@" | jq -R . | jq -s .)
 
 # Send request to request server and wait for response
-# Token header is authoritative; body fields are informational for logging
 response=$(curl -s --noproxy "*" -X POST "http://${CLOISTER_GUARDIAN_HOST}:9998/request" \
     -H "Content-Type: application/json" \
     -H "X-Cloister-Token: ${CLOISTER_TOKEN}" \
-    -d "{\"cmd\": $(printf '%s' "$COMMAND" | jq -R .), \"args\": ${ARGS_JSON}}" \
+    -d "{\"args\": ${ARGS_JSON}}" \
     --max-time 300)
 
 status=$(echo "$response" | jq -r '.status // "error"')
