@@ -242,7 +242,7 @@ func TestFormatSSE(t *testing.T) {
 
 func TestServer_HandleEvents_Headers(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	// Create a request that will cancel immediately
 	ctx, cancel := context.WithCancel(context.Background())
@@ -270,7 +270,7 @@ func TestServer_HandleEvents_Headers(t *testing.T) {
 
 func TestServer_HandleEvents_ReceivesEvents(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 	server.Addr = "127.0.0.1:0"
 
 	if err := server.Start(); err != nil {
@@ -324,7 +324,7 @@ func TestServer_HandleEvents_ReceivesEvents(t *testing.T) {
 
 func TestServer_HandleEvents_ClientDisconnect(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 	server.Addr = "127.0.0.1:0"
 
 	if err := server.Start(); err != nil {
@@ -396,7 +396,7 @@ func TestServer_HandleEvents_ClientDisconnect(t *testing.T) {
 
 func TestServer_HandleEvents_ServerShutdown(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	// Test that Events.Close returns nil for Subscribe
 	server.Events.Close()

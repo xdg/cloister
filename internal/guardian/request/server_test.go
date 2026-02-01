@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xdg/cloister/internal/audit"
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
@@ -21,7 +22,7 @@ func TestNewServer(t *testing.T) {
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 
 	if server == nil {
 		t.Fatal("NewServer returned nil")
@@ -39,7 +40,7 @@ func TestServer_StartStop(t *testing.T) {
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 	server.Addr = ":0" // Use random port
 
 	// Start should succeed
@@ -77,7 +78,7 @@ func TestServer_HandleRequest_MissingToken(t *testing.T) {
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 
 	// Create a test request handler by manually wrapping with auth middleware
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
@@ -100,7 +101,7 @@ func TestServer_HandleRequest_InvalidToken(t *testing.T) {
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	body := `{"cmd": "echo hello"}`
@@ -121,7 +122,7 @@ func TestServer_HandleRequest_InvalidJSON(t *testing.T) {
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	req := httptest.NewRequest(http.MethodPost, "/request", strings.NewReader("not json"))
@@ -149,7 +150,7 @@ func TestServer_HandleRequest_EmptyCmd(t *testing.T) {
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	body := `{"cmd": ""}`
@@ -181,7 +182,7 @@ func TestServer_HandleRequest_ValidRequest_NilMatcher(t *testing.T) {
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
@@ -223,7 +224,7 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 
 	mockExec := &mockCommandExecutor{}
 
-	server := NewServer(lookup, matcher, mockExec)
+	server := NewServer(lookup, matcher, mockExec, nil)
 	server.Addr = ":0" // Use random port
 
 	if err := server.Start(); err != nil {
@@ -265,7 +266,7 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 
 func TestServer_ListenAddrBeforeStart(t *testing.T) {
 	lookup := mockTokenLookup(map[string]TokenInfo{})
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 
 	addr := server.ListenAddr()
 	if addr != "" {
@@ -328,7 +329,7 @@ func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, mockExec)
+	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "docker compose ps", Args: []string{"docker", "compose", "ps"}}
@@ -377,7 +378,7 @@ func TestServer_HandleRequest_ManualApprove_NilQueue(t *testing.T) {
 	}
 
 	// Server with nil queue - should deny manual approval requests
-	server := NewServer(lookup, matcher, nil)
+	server := NewServer(lookup, matcher, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
@@ -419,7 +420,7 @@ func TestServer_HandleRequest_Deny(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, nil)
+	server := NewServer(lookup, matcher, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "rm -rf /", Args: []string{"rm", "-rf", "/"}}
@@ -454,7 +455,7 @@ func TestServer_HandleRequest_NoPatternMatcher(t *testing.T) {
 	})
 
 	// Server with nil pattern matcher
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
@@ -507,7 +508,7 @@ func TestServer_HandleRequest_ManualApprove_BlocksUntilApproval(t *testing.T) {
 
 	// Create server with an approval queue and executor
 	queue := approval.NewQueue()
-	server := NewServer(lookup, matcher, mockExec)
+	server := NewServer(lookup, matcher, mockExec, nil)
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
@@ -599,7 +600,7 @@ func TestServer_HandleRequest_ManualApprove_Timeout(t *testing.T) {
 
 	// Create server with a very short timeout queue
 	queue := approval.NewQueueWithTimeout(100 * time.Millisecond)
-	server := NewServer(lookup, matcher, nil)
+	server := NewServer(lookup, matcher, nil, nil)
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
@@ -662,7 +663,7 @@ func TestServer_HandleRequest_ManualApprove_Denied(t *testing.T) {
 
 	// Create server with an approval queue
 	queue := approval.NewQueue()
-	server := NewServer(lookup, matcher, nil)
+	server := NewServer(lookup, matcher, nil, nil)
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
@@ -734,7 +735,7 @@ func TestServer_HandleRequest_GETReturns405(t *testing.T) {
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
-	server := NewServer(lookup, nil, nil)
+	server := NewServer(lookup, nil, nil, nil)
 	server.Addr = ":0" // Use random port
 
 	if err := server.Start(); err != nil {
@@ -786,7 +787,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorCalled(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, mockExec)
+	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
@@ -833,7 +834,7 @@ func TestServer_HandleRequest_AutoApprove_NilExecutor(t *testing.T) {
 	}
 
 	// Server with nil executor should return error
-	server := NewServer(lookup, matcher, nil)
+	server := NewServer(lookup, matcher, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
@@ -877,7 +878,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorError(t *testing.T) {
 		err: errors.New("connection refused"),
 	}
 
-	server := NewServer(lookup, matcher, mockExec)
+	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
@@ -928,7 +929,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorTimeout(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, mockExec)
+	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "slow command", Args: []string{"slow", "command"}}
@@ -982,7 +983,7 @@ func TestServer_HandleRequest_AutoApprove_CommandFailed(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, mockExec)
+	server := NewServer(lookup, matcher, mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Cmd: "failing command", Args: []string{"failing", "command"}}
@@ -1130,5 +1131,274 @@ func TestMapExecutorResponse(t *testing.T) {
 				t.Errorf("Stderr = %q, want %q", got.Stderr, tt.want.Stderr)
 			}
 		})
+	}
+}
+
+// Tests for audit logging integration
+
+func TestServer_HandleRequest_AuditLogging_AutoApprove(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"echo hello": {Action: patterns.AutoApprove, Pattern: "^echo .*$"},
+		},
+	}
+
+	mockExec := &mockCommandExecutor{
+		responses: map[string]*executor.ExecuteResponse{
+			"echo": {
+				Status:   executor.StatusCompleted,
+				ExitCode: 0,
+				Stdout:   "hello\n",
+			},
+		},
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	server := NewServer(lookup, matcher, mockExec, auditLogger)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have REQUEST event
+	if !strings.Contains(auditOutput, "HOSTEXEC REQUEST") {
+		t.Errorf("expected audit log to contain REQUEST event, got: %s", auditOutput)
+	}
+
+	// Should have AUTO_APPROVE event
+	if !strings.Contains(auditOutput, "HOSTEXEC AUTO_APPROVE") {
+		t.Errorf("expected audit log to contain AUTO_APPROVE event, got: %s", auditOutput)
+	}
+
+	// Should have COMPLETE event
+	if !strings.Contains(auditOutput, "HOSTEXEC COMPLETE") {
+		t.Errorf("expected audit log to contain COMPLETE event, got: %s", auditOutput)
+	}
+
+	// Verify project and cloister are in the logs
+	if !strings.Contains(auditOutput, "project=test-project") {
+		t.Errorf("expected audit log to contain project=test-project, got: %s", auditOutput)
+	}
+	if !strings.Contains(auditOutput, "cloister=test-cloister") {
+		t.Errorf("expected audit log to contain cloister=test-cloister, got: %s", auditOutput)
+	}
+}
+
+func TestServer_HandleRequest_AuditLogging_Deny(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"echo hello": {Action: patterns.AutoApprove, Pattern: "^echo .*$"},
+		},
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	server := NewServer(lookup, matcher, nil, auditLogger)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	// Send a command that doesn't match any pattern
+	cmdReq := CommandRequest{Cmd: "rm -rf /", Args: []string{"rm", "-rf", "/"}}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have REQUEST event
+	if !strings.Contains(auditOutput, "HOSTEXEC REQUEST") {
+		t.Errorf("expected audit log to contain REQUEST event, got: %s", auditOutput)
+	}
+
+	// Should have DENY event
+	if !strings.Contains(auditOutput, "HOSTEXEC DENY") {
+		t.Errorf("expected audit log to contain DENY event, got: %s", auditOutput)
+	}
+
+	// Should include denial reason
+	if !strings.Contains(auditOutput, "does not match") {
+		t.Errorf("expected audit log to contain denial reason, got: %s", auditOutput)
+	}
+}
+
+func TestServer_HandleRequest_AuditLogging_NilMatcher(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	// Server with nil pattern matcher - should deny
+	server := NewServer(lookup, nil, nil, auditLogger)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have REQUEST event
+	if !strings.Contains(auditOutput, "HOSTEXEC REQUEST") {
+		t.Errorf("expected audit log to contain REQUEST event, got: %s", auditOutput)
+	}
+
+	// Should have DENY event
+	if !strings.Contains(auditOutput, "HOSTEXEC DENY") {
+		t.Errorf("expected audit log to contain DENY event, got: %s", auditOutput)
+	}
+
+	// Should include reason about no patterns configured
+	if !strings.Contains(auditOutput, "no approval patterns configured") {
+		t.Errorf("expected audit log to contain 'no approval patterns configured', got: %s", auditOutput)
+	}
+}
+
+func TestServer_HandleRequest_AuditLogging_Timeout(t *testing.T) {
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"docker compose up -d": {Action: patterns.ManualApprove, Pattern: "^docker compose (up|down).*$"},
+		},
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	// Create server with a very short timeout queue
+	queue := approval.NewQueueWithTimeout(100 * time.Millisecond)
+	server := NewServer(lookup, matcher, nil, auditLogger)
+	server.Queue = queue
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	// Run the request handler in a goroutine
+	done := make(chan struct{})
+	rr := httptest.NewRecorder()
+
+	go func() {
+		handler.ServeHTTP(rr, req)
+		close(done)
+	}()
+
+	// Wait for timeout (should be ~100ms + some margin)
+	select {
+	case <-done:
+		// Handler completed due to timeout
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("handler did not complete after timeout")
+	}
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have REQUEST event
+	if !strings.Contains(auditOutput, "HOSTEXEC REQUEST") {
+		t.Errorf("expected audit log to contain REQUEST event, got: %s", auditOutput)
+	}
+
+	// Should have TIMEOUT event
+	if !strings.Contains(auditOutput, "HOSTEXEC TIMEOUT") {
+		t.Errorf("expected audit log to contain TIMEOUT event, got: %s", auditOutput)
+	}
+}
+
+func TestServer_HandleRequest_AuditLogging_NilLogger(t *testing.T) {
+	// Verify that nil logger doesn't cause panic
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
+	})
+
+	matcher := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"echo hello": {Action: patterns.AutoApprove, Pattern: "^echo .*$"},
+		},
+	}
+
+	mockExec := &mockCommandExecutor{
+		responses: map[string]*executor.ExecuteResponse{
+			"echo": {
+				Status:   executor.StatusCompleted,
+				ExitCode: 0,
+				Stdout:   "hello\n",
+			},
+		},
+	}
+
+	// Create server with nil audit logger
+	server := NewServer(lookup, matcher, mockExec, nil)
+	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+
+	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
+	body, _ := json.Marshal(cmdReq)
+	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(TokenHeader, "valid-token")
+
+	rr := httptest.NewRecorder()
+	// Should not panic with nil logger
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp CommandResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp.Status != "auto_approved" {
+		t.Errorf("expected status 'auto_approved', got %q", resp.Status)
 	}
 }

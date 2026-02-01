@@ -10,11 +10,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/xdg/cloister/internal/audit"
 )
 
 func TestNewServer(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	if server == nil {
 		t.Fatal("NewServer returned nil")
@@ -29,7 +31,7 @@ func TestNewServer(t *testing.T) {
 
 func TestServer_StartStop(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 	server.Addr = "127.0.0.1:0" // Use random port
 
 	// Start should succeed
@@ -61,7 +63,7 @@ func TestServer_StartStop(t *testing.T) {
 
 func TestServer_ListenAddrBeforeStart(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	addr := server.ListenAddr()
 	if addr != "" {
@@ -71,7 +73,7 @@ func TestServer_ListenAddrBeforeStart(t *testing.T) {
 
 func TestServer_HandleIndex(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
@@ -95,7 +97,7 @@ func TestServer_HandleIndex(t *testing.T) {
 
 func TestServer_HandlePending_Empty(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/pending", nil)
 	rr := httptest.NewRecorder()
@@ -140,7 +142,7 @@ func TestServer_HandlePending_WithRequests(t *testing.T) {
 		t.Fatalf("failed to add request: %v", err)
 	}
 
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	httpReq := httptest.NewRequest(http.MethodGet, "/pending", nil)
 	rr := httptest.NewRecorder()
@@ -201,7 +203,7 @@ func TestServer_HandleApprove_Success(t *testing.T) {
 		t.Fatalf("failed to add request: %v", err)
 	}
 
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	httpReq := httptest.NewRequest(http.MethodPost, "/approve/"+id, nil)
 	httpReq.SetPathValue("id", id)
@@ -243,7 +245,7 @@ func TestServer_HandleApprove_Success(t *testing.T) {
 
 func TestServer_HandleApprove_NotFound(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/approve/nonexistent", nil)
 	req.SetPathValue("id", "nonexistent")
@@ -282,7 +284,7 @@ func TestServer_HandleDeny_Success(t *testing.T) {
 		t.Fatalf("failed to add request: %v", err)
 	}
 
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	httpReq := httptest.NewRequest(http.MethodPost, "/deny/"+id, nil)
 	httpReq.SetPathValue("id", id)
@@ -342,7 +344,7 @@ func TestServer_HandleDeny_WithReason(t *testing.T) {
 		t.Fatalf("failed to add request: %v", err)
 	}
 
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	body := `{"reason": "Command looks dangerous"}`
 	httpReq := httptest.NewRequest(http.MethodPost, "/deny/"+id, bytes.NewBufferString(body))
@@ -371,7 +373,7 @@ func TestServer_HandleDeny_WithReason(t *testing.T) {
 
 func TestServer_HandleDeny_NotFound(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/deny/nonexistent", nil)
 	req.SetPathValue("id", "nonexistent")
@@ -395,7 +397,7 @@ func TestServer_HandleDeny_NotFound(t *testing.T) {
 
 func TestServer_ViaHTTP(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 	server.Addr = "127.0.0.1:0" // Use random port
 
 	if err := server.Start(); err != nil {
@@ -448,7 +450,7 @@ func TestServer_ViaHTTP(t *testing.T) {
 
 func TestServer_HandleApprove_MissingID(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	// Create request without path value set
 	req := httptest.NewRequest(http.MethodPost, "/approve/", nil)
@@ -464,7 +466,7 @@ func TestServer_HandleApprove_MissingID(t *testing.T) {
 
 func TestServer_HandleDeny_MissingID(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	// Create request without path value set
 	req := httptest.NewRequest(http.MethodPost, "/deny/", nil)
@@ -613,7 +615,7 @@ func TestTemplates_ParseFS(t *testing.T) {
 
 func TestServer_StaticHtmxServed(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 	server.Addr = "127.0.0.1:0" // Use random port
 
 	if err := server.Start(); err != nil {
@@ -653,7 +655,7 @@ func TestServer_StaticHtmxServed(t *testing.T) {
 
 func TestServer_IndexIncludesHtmxScript(t *testing.T) {
 	queue := NewQueue()
-	server := NewServer(queue)
+	server := NewServer(queue, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rr := httptest.NewRecorder()
@@ -668,4 +670,219 @@ func TestServer_IndexIncludesHtmxScript(t *testing.T) {
 	if !strings.Contains(body, `<script src="/static/htmx.min.js"></script>`) {
 		t.Error("expected index.html to include htmx script tag")
 	}
+}
+
+// Tests for audit logging integration
+
+func TestServer_HandleApprove_AuditLogging(t *testing.T) {
+	queue := NewQueue()
+
+	// Add a test request with a response channel
+	respChan := make(chan Response, 1)
+	req := &PendingRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Branch:    "main",
+		Cmd:       "docker compose up -d",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := queue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add request: %v", err)
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	server := NewServer(queue, auditLogger)
+
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve/"+id, nil)
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApprove(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have APPROVE event
+	if !strings.Contains(auditOutput, "HOSTEXEC APPROVE") {
+		t.Errorf("expected audit log to contain APPROVE event, got: %s", auditOutput)
+	}
+
+	// Verify project and cloister are in the logs
+	if !strings.Contains(auditOutput, "project=test-project") {
+		t.Errorf("expected audit log to contain project=test-project, got: %s", auditOutput)
+	}
+	if !strings.Contains(auditOutput, "cloister=test-cloister") {
+		t.Errorf("expected audit log to contain cloister=test-cloister, got: %s", auditOutput)
+	}
+	if !strings.Contains(auditOutput, "branch=main") {
+		t.Errorf("expected audit log to contain branch=main, got: %s", auditOutput)
+	}
+	if !strings.Contains(auditOutput, `user="user"`) {
+		t.Errorf("expected audit log to contain user=user, got: %s", auditOutput)
+	}
+
+	// Drain the response channel
+	<-respChan
+}
+
+func TestServer_HandleDeny_AuditLogging(t *testing.T) {
+	queue := NewQueue()
+
+	// Add a test request with a response channel
+	respChan := make(chan Response, 1)
+	req := &PendingRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Branch:    "feature",
+		Cmd:       "rm -rf /",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := queue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add request: %v", err)
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	server := NewServer(queue, auditLogger)
+
+	body := `{"reason": "Command looks dangerous"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDeny(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have DENY event
+	if !strings.Contains(auditOutput, "HOSTEXEC DENY") {
+		t.Errorf("expected audit log to contain DENY event, got: %s", auditOutput)
+	}
+
+	// Verify project and cloister are in the logs
+	if !strings.Contains(auditOutput, "project=test-project") {
+		t.Errorf("expected audit log to contain project=test-project, got: %s", auditOutput)
+	}
+	if !strings.Contains(auditOutput, "cloister=test-cloister") {
+		t.Errorf("expected audit log to contain cloister=test-cloister, got: %s", auditOutput)
+	}
+
+	// Verify the denial reason is in the logs
+	if !strings.Contains(auditOutput, "Command looks dangerous") {
+		t.Errorf("expected audit log to contain denial reason, got: %s", auditOutput)
+	}
+
+	// Drain the response channel
+	<-respChan
+}
+
+func TestServer_HandleDeny_AuditLogging_DefaultReason(t *testing.T) {
+	queue := NewQueue()
+
+	// Add a test request with a response channel
+	respChan := make(chan Response, 1)
+	req := &PendingRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Cmd:       "rm -rf /",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := queue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add request: %v", err)
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	server := NewServer(queue, auditLogger)
+
+	// Deny without providing a reason
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny/"+id, nil)
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDeny(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify audit logs include default reason
+	auditOutput := auditBuf.String()
+
+	if !strings.Contains(auditOutput, "HOSTEXEC DENY") {
+		t.Errorf("expected audit log to contain DENY event, got: %s", auditOutput)
+	}
+
+	// Default reason should be "Denied by user"
+	if !strings.Contains(auditOutput, "Denied by user") {
+		t.Errorf("expected audit log to contain default reason 'Denied by user', got: %s", auditOutput)
+	}
+
+	// Drain the response channel
+	<-respChan
+}
+
+func TestServer_HandleApprove_NilAuditLogger(t *testing.T) {
+	queue := NewQueue()
+
+	// Add a test request with a response channel
+	respChan := make(chan Response, 1)
+	req := &PendingRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Cmd:       "docker compose up -d",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := queue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add request: %v", err)
+	}
+
+	// Create server with nil audit logger - should not panic
+	server := NewServer(queue, nil)
+
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve/"+id, nil)
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	// Should not panic with nil logger
+	server.handleApprove(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+
+	// Drain the response channel
+	<-respChan
 }

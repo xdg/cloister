@@ -455,24 +455,24 @@ Complete the approval UI with real-time updates via Server-Sent Events.
 Add logging for all hostexec requests and responses.
 
 ### 4.9.1 Define audit log format
-- [ ] Request event: `HOSTEXEC REQUEST project=X branch=Y cloister=Z cmd="..."`
-- [ ] Auto-approve event: `HOSTEXEC AUTO_APPROVE ... pattern="^..."`
-- [ ] Approve event: `HOSTEXEC APPROVE ... user="..."` (user from approval UI)
-- [ ] Deny event: `HOSTEXEC DENY ... reason="..."`
-- [ ] Complete event: `HOSTEXEC COMPLETE ... exit=N duration=Xs`
-- [ ] Timeout event: `HOSTEXEC TIMEOUT ...`
-- [ ] Follow existing log format from config-reference.md
+- [x] Request event: `HOSTEXEC REQUEST project=X branch=Y cloister=Z cmd="..."`
+- [x] Auto-approve event: `HOSTEXEC AUTO_APPROVE ... pattern="^..."`
+- [x] Approve event: `HOSTEXEC APPROVE ... user="..."` (user from approval UI)
+- [x] Deny event: `HOSTEXEC DENY ... reason="..."`
+- [x] Complete event: `HOSTEXEC COMPLETE ... exit=N duration=Xs`
+- [x] Timeout event: `HOSTEXEC TIMEOUT ...`
+- [x] Follow existing log format from config-reference.md
 
 ### 4.9.2 Integrate with existing logging
-- [ ] Use existing guardian logger
-- [ ] Log to unified audit log (`~/.local/share/cloister/audit.log`)
-- [ ] Log to per-cloister log if enabled
-- [ ] **Test (unit)**: Mock logger, verify correct format
+- [x] Use existing guardian logger
+- [x] Log to unified audit log (`~/.local/share/cloister/audit.log`)
+- [x] Log to per-cloister log if enabled
+- [x] **Test (unit)**: Mock logger, verify correct format
 
 ### 4.9.3 Add structured fields
-- [ ] Include all relevant metadata: project, branch, cloister, agent
-- [ ] Include execution duration for completed commands
-- [ ] **Test (unit)**: All fields present in log output
+- [x] Include all relevant metadata: project, branch, cloister, agent
+- [x] Include execution duration for completed commands
+- [x] **Test (unit)**: All fields present in log output
 
 ---
 

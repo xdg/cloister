@@ -14,6 +14,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/xdg/cloister/internal/audit"
 )
 
 //go:embed templates/*.html
@@ -49,6 +51,9 @@ type Server struct {
 	// Events is the event hub for SSE connections.
 	Events *EventHub
 
+	// AuditLogger logs hostexec events. If nil, no audit logging is performed.
+	AuditLogger *audit.Logger
+
 	server   *http.Server
 	listener net.Listener
 	mu       sync.Mutex
@@ -57,16 +62,18 @@ type Server struct {
 
 // NewServer creates a new approval server.
 // The queue is required for managing pending requests.
+// The auditLogger is optional; if nil, no audit logging is performed.
 // The server binds to 0.0.0.0 inside the container (for Docker port publishing)
 // but is only exposed to host localhost via -p 127.0.0.1:9999:9999.
-func NewServer(queue *Queue) *Server {
+func NewServer(queue *Queue, auditLogger *audit.Logger) *Server {
 	events := NewEventHub()
 	// Wire the event hub to the queue so it can broadcast SSE events
 	queue.SetEventHub(events)
 	return &Server{
-		Addr:   fmt.Sprintf(":%d", DefaultApprovalPort),
-		Queue:  queue,
-		Events: events,
+		Addr:        fmt.Sprintf(":%d", DefaultApprovalPort),
+		Queue:       queue,
+		Events:      events,
+		AuditLogger: auditLogger,
 	}
 }
 
@@ -312,8 +319,14 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Capture command before removing from queue
+	// Capture request info before removing from queue
 	cmd := req.Cmd
+	project := req.Project
+	branch := req.Branch
+	cloister := req.Cloister
+
+	// Log APPROVE event
+	_ = s.AuditLogger.LogApprove(project, branch, cloister, cmd, "user")
 
 	// Send approved response on the request's channel.
 	// The request handler is blocked waiting on this channel and will
@@ -367,8 +380,11 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Capture command before removing from queue
+	// Capture request info before removing from queue
 	cmd := req.Cmd
+	project := req.Project
+	branch := req.Branch
+	cloister := req.Cloister
 
 	// Parse optional reason from request body
 	var denyReq denyRequest
@@ -379,6 +395,9 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 	if reason == "" {
 		reason = "Denied by user"
 	}
+
+	// Log DENY event
+	_ = s.AuditLogger.LogDeny(project, branch, cloister, cmd, reason)
 
 	// Send denied response on the request's channel
 	if req.Response != nil {

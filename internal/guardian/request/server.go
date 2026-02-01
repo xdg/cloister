@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/xdg/cloister/internal/audit"
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
@@ -58,6 +59,9 @@ type Server struct {
 	// If nil, ManualApprove commands will be denied.
 	Queue *approval.Queue
 
+	// AuditLogger logs hostexec events. If nil, no audit logging is performed.
+	AuditLogger *audit.Logger
+
 	server   *http.Server
 	listener net.Listener
 	mu       sync.Mutex
@@ -65,14 +69,15 @@ type Server struct {
 }
 
 // NewServer creates a new request server.
-// The tokenLookup is required; patternMatcher and commandExecutor may be nil
-// (commandExecutor is optional during initial setup).
-func NewServer(tokenLookup TokenLookup, patternMatcher PatternMatcher, commandExecutor CommandExecutor) *Server {
+// The tokenLookup is required; patternMatcher, commandExecutor, and auditLogger may be nil.
+// (commandExecutor is optional during initial setup; auditLogger enables audit logging if provided).
+func NewServer(tokenLookup TokenLookup, patternMatcher PatternMatcher, commandExecutor CommandExecutor, auditLogger *audit.Logger) *Server {
 	return &Server{
 		Addr:            fmt.Sprintf(":%d", DefaultRequestPort),
 		TokenLookup:     tokenLookup,
 		PatternMatcher:  patternMatcher,
 		CommandExecutor: commandExecutor,
+		AuditLogger:     auditLogger,
 	}
 }
 
@@ -178,8 +183,12 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Log REQUEST event
+	_ = s.AuditLogger.LogRequest(info.ProjectName, "", info.CloisterName, req.Cmd)
+
 	// If no pattern matcher is configured, deny all commands
 	if s.PatternMatcher == nil {
+		_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, req.Cmd, "no approval patterns configured")
 		s.writeJSON(w, http.StatusOK, CommandResponse{
 			Status: "denied",
 			Reason: "no approval patterns configured",
@@ -192,13 +201,19 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	switch result.Action {
 	case patterns.AutoApprove:
+		// Log AUTO_APPROVE event
+		_ = s.AuditLogger.LogAutoApprove(info.ProjectName, "", info.CloisterName, req.Cmd, result.Pattern)
 		// Auto-approved: proceed to execution
+		startTime := time.Now()
 		resp := s.executeCommand(req.Args, "auto_approved", result.Pattern)
+		// Log COMPLETE event with duration
+		_ = s.AuditLogger.LogComplete(info.ProjectName, "", info.CloisterName, req.Cmd, resp.ExitCode, time.Since(startTime))
 		s.writeJSON(w, http.StatusOK, resp)
 
 	case patterns.ManualApprove:
 		// Manual approval required: queue for human review
 		if s.Queue == nil {
+			_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, req.Cmd, "manual approval required but approval queue not configured")
 			s.writeJSON(w, http.StatusOK, CommandResponse{
 				Status: "denied",
 				Reason: "manual approval required but approval queue not configured",
@@ -235,10 +250,20 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 		// If approved, execute the command
 		if approvalResp.Status == "approved" {
+			// Note: APPROVE event is logged by approval server
+			startTime := time.Now()
 			resp := s.executeCommand(req.Args, "approved", "")
+			// Log COMPLETE event with duration
+			_ = s.AuditLogger.LogComplete(info.ProjectName, "", info.CloisterName, req.Cmd, resp.ExitCode, time.Since(startTime))
 			s.writeJSON(w, http.StatusOK, resp)
 			return
 		}
+
+		// Handle timeout specifically
+		if approvalResp.Status == "timeout" {
+			_ = s.AuditLogger.LogTimeout(info.ProjectName, "", info.CloisterName, req.Cmd)
+		}
+		// Note: DENY events for manual approval are logged by approval server
 
 		// For denied/timeout/error, pass through the response
 		s.writeJSON(w, http.StatusOK, CommandResponse{
@@ -252,6 +277,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 	case patterns.Deny:
 		// No pattern matched: deny the command
+		_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, req.Cmd, "command does not match any approval pattern")
 		s.writeJSON(w, http.StatusOK, CommandResponse{
 			Status: "denied",
 			Reason: "command does not match any approval pattern",

@@ -361,11 +361,11 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	reqServer := request.NewServer(requestTokenLookup, regexMatcher, execClient)
+	reqServer := request.NewServer(requestTokenLookup, regexMatcher, execClient, nil)
 	reqServer.Queue = approvalQueue
 
 	// Create the approval server for the web UI (localhost only)
-	approvalServer := approval.NewServer(approvalQueue)
+	approvalServer := approval.NewServer(approvalQueue, nil)
 
 	// Start the proxy server
 	if err := proxy.Start(); err != nil {
