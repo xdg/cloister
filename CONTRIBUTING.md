@@ -1,53 +1,17 @@
 # Contributing to Cloister
 
-Contributions are welcome! This document covers the basics.
+Cloister is not accepting pull requests from external contributors and such pull requests will be automatically closed.
 
-## Before You Start
+It's ironic that a project devoted to AI coding agents is taking such a step, but here we are. This is a side project and I don't want to make a promise for timely code review that I can't keep.
 
-Please read the documentation in [docs/](docs/):
+## Issues Welcome
 
-- **[cloister-spec.md](docs/cloister-spec.md)** — Architecture, threat model, and security analysis
-- **[implementation-phases.md](docs/implementation-phases.md)** — Development roadmap and current priorities
+Well-thought-out issues are welcome, particularly if they include:
 
-Contributions should align with the spec and roadmap. If you're considering a significant change, open an issue first to discuss.
-
-## Getting Started
-
-1. Fork and clone the repository
-2. Install Go 1.25+
-3. Install development tools: `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
-4. Run tests: `go test ./...`
-5. Run linter: `golangci-lint run`
-
-## Development Workflow
-
-1. Check existing issues or open a new one to discuss your idea
-2. Fork the repo and create a branch from `main`
-3. Make your changes with tests
-4. Ensure `go test ./...` and `golangci-lint run` pass
-5. Submit a pull request
-
-## Pull Request Guidelines
-
-- Keep PRs focused on a single change
-- Include tests for new functionality
-- Update documentation if needed
-- Reference related issues in the PR description
+- A [Short, Self Contained, Correct, Example](https://sscce.org/) demonstrating the problem
+- An LLM prompt that would help diagnose or fix the issue
+- Clear steps to reproduce
 
 ## Security
 
-Cloister is security infrastructure. Please:
-
-- **Never weaken security controls** without discussion
-- **Review the [spec](docs/cloister-spec.md)** to understand the threat model
-- **Report vulnerabilities privately** via [GitHub Security Advisories](https://github.com/xdg/cloister/security/advisories/new)
-
-## Code Style
-
-- Follow standard Go conventions (`gofmt`, `go vet`)
-- Keep functions focused and testable
-- Prefer clarity over cleverness
-
-## Questions?
-
-Open a [discussion](https://github.com/xdg/cloister/discussions) or issue.
+If you discover a security vulnerability, please report it via [GitHub Security Advisories](https://github.com/xdg/cloister/security/advisories/new) rather than opening a public issue.

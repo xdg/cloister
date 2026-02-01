@@ -1,8 +1,21 @@
-# Cloister
+<p align="center">
+  <img src="docs/img/logo-banner.png" alt="Cloister - Skip the permission prompts, safely." width="500">
+</p>
 
-**Secure sandboxing for AI coding agents**
+<p align="center">
+  <a href="https://goreportcard.com/report/github.com/xdg/cloister"><img src="https://goreportcard.com/badge/github.com/xdg/cloister" alt="Go Report Card"></a>
+  <a href="https://github.com/xdg/cloister/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
+</p>
 
-Cloister isolates CLI-based AI coding tools in Docker containers with strict security controls. It breaks the "[Lethal Trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/)" that makes AI agents dangerous: private data access, untrusted content exposure, and unrestricted external communication.
+**Secure sandboxing for AI coding agents** — Cloister isolates CLI-based AI coding tools in Docker containers with strict security controls, breaking the "[Lethal Trifecta](https://simonwillison.net/2025/Jun/16/the-lethal-trifecta/)" that makes AI agents dangerous.
+
+## The Dilemma
+
+| | |
+|---|---|
+| **Permission Fatigue** | Constant prompts disrupt your flow and stop agents from working unsupervised |
+| **YOLO Is Risky** | Unrestricted permissions let over-eager agents corrupt your system or leak credentials |
+| **Sandbox It** | Cloister gives you productivity without the risk—mistakes stay contained and git-recoverable |
 
 ## Quick Start
 
@@ -78,7 +91,7 @@ cloister project edit    # Edit project-specific config
 - **Allowlist proxy** — Network traffic restricted to approved domains (AI APIs, package registries, documentation)
 - **Human-in-the-loop** — Host command execution requires explicit approval via web UI
 - **Zero-trust containers** — Unprivileged, capability-dropped Docker containers on internal networks
-- **Devcontainer compatible** — Leverages existing devcontainer.json while enforcing security
+- **Devcontainer compatible** — Leverages existing devcontainer.json while enforcing security (coming soon)
 
 ## How it Works
 
@@ -114,10 +127,6 @@ Some sandboxes use **action control**: enumerate what the agent can do, then all
 
 ## Configuration
 
-Cloister works out of the box with sensible defaults. See [docs/config-reference.md](docs/config-reference.md) for details.
-
-## Configuration
-
 Cloister uses a layered configuration system:
 
 1. **Global config** (`~/.config/cloister/config.yaml`) — Default allowlist, timeouts, logging
@@ -138,20 +147,19 @@ See [docs/config-reference.md](docs/config-reference.md) for the full schema.
 
 ## Current Limitations
 
-Cloister is in active development (Phase 3 mostly complete). Current limitations include:
+Cloister is in active development. Current limitations include:
 
-**No host command execution** — The `hostexec` feature for running host commands (git push, docker build, etc.) with approval is not yet implemented. This is planned for Phase 4.
+- **Claude Code only** — Other AI agents (Codex, Gemini CLI) not yet supported
+- **No git worktree support** — Each worktree currently needs its own cloister
+- **No devcontainer integration** — Custom devcontainer.json configs not yet honored
 
 See [docs/implementation-phases.md](docs/implementation-phases.md) for the full roadmap.
 
 ## Contributing
 
-Contributions welcome as long as they align with the spec and roadmap in the [docs](docs/) direcotry! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Cloister is not accepting pull requests from external contributors and such pull requests will be automatically closed. It's ironic that a project devoted to AI coding agents is taking such a step, but here we are.  This is a side project and I don't want to make a promise for timely code review that I can't keep.
 
-Before submitting a PR:
-1. Run tests: `go test ./...`
-2. Run linter: `golangci-lint run`
-3. Ensure your changes don't weaken security controls
+However, well-thought-out issues are welcome, particularly if they have a [Short, Self Contained, Correct, Example](https://sscce.org/) or an LLM prompt that would help diagnose or fix the problem.
 
 ## Security
 
