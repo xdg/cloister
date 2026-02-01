@@ -174,10 +174,9 @@
                     htmx.process(document.getElementById('request-list'));
                 }
 
-                // Show browser notification if tab is not visible and permission granted
+                // Show browser notification if permission granted
                 if ('Notification' in window &&
-                    Notification.permission === 'granted' &&
-                    document.visibilityState === 'hidden') {
+                    Notification.permission === 'granted') {
 
                     // Extract request info from the rendered HTML
                     var temp = document.createElement('div');
