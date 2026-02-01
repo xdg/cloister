@@ -330,9 +330,9 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}, true
 	}
 
-	// Create pattern matcher from global config approval patterns
-	autoApprovePatterns := extractPatterns(cfg.Approval.AutoApprove)
-	manualApprovePatterns := extractPatterns(cfg.Approval.ManualApprove)
+	// Create pattern matcher from global config hostexec patterns
+	autoApprovePatterns := extractPatterns(cfg.Hostexec.AutoApprove)
+	manualApprovePatterns := extractPatterns(cfg.Hostexec.ManualApprove)
 	regexMatcher := patterns.NewRegexMatcher(autoApprovePatterns, manualApprovePatterns)
 	log.Printf("Loaded approval patterns: %d auto-approve, %d manual-approve",
 		len(autoApprovePatterns), len(manualApprovePatterns))

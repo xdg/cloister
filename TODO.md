@@ -157,7 +157,7 @@ Implement command pattern matching for auto-approve and manual-approve decisions
 - [x] **Test (unit)**: Invalid regex pattern → logged, skipped
 
 ### 4.2.3 Load patterns from config
-- [x] Add config parsing for `approval.auto_approve` and `approval.manual_approve` in `internal/config`
+- [x] Add config parsing for `hostexec.auto_approve` and `hostexec.manual_approve` in `internal/config`
 - [x] Pass patterns to `RegexMatcher` during guardian initialization
 - [x] Support per-project pattern additions (merged with global)
 - [x] **Test (unit)**: Config with patterns → matcher initialized correctly

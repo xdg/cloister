@@ -22,7 +22,7 @@ func TestValidateGlobalConfig_Valid(t *testing.T) {
 			Listen:  ":9998",
 			Timeout: "5m",
 		},
-		Approval: ApprovalConfig{
+		Hostexec: HostexecConfig{
 			Listen: "127.0.0.1:9999",
 			AutoApprove: []CommandPattern{
 				{Pattern: "^docker compose ps$"},
@@ -84,9 +84,9 @@ func TestValidateGlobalConfig_InvalidPort(t *testing.T) {
 		{
 			name: "non-numeric port",
 			cfg: &GlobalConfig{
-				Approval: ApprovalConfig{Listen: "127.0.0.1:abc"},
+				Hostexec: HostexecConfig{Listen: "127.0.0.1:abc"},
 			},
-			wantErr: "approval.listen: invalid port",
+			wantErr: "hostexec.listen: invalid port",
 		},
 		{
 			name: "missing port",
@@ -168,36 +168,36 @@ func TestValidateGlobalConfig_InvalidRegex(t *testing.T) {
 		{
 			name: "invalid auto_approve regex",
 			cfg: &GlobalConfig{
-				Approval: ApprovalConfig{
+				Hostexec: HostexecConfig{
 					AutoApprove: []CommandPattern{
 						{Pattern: "^valid$"},
 						{Pattern: "[invalid"},
 					},
 				},
 			},
-			wantErr: "approval.auto_approve[1].pattern: invalid regex",
+			wantErr: "hostexec.auto_approve[1].pattern: invalid regex",
 		},
 		{
 			name: "invalid manual_approve regex",
 			cfg: &GlobalConfig{
-				Approval: ApprovalConfig{
+				Hostexec: HostexecConfig{
 					ManualApprove: []CommandPattern{
 						{Pattern: "(unclosed"},
 					},
 				},
 			},
-			wantErr: "approval.manual_approve[0].pattern: invalid regex",
+			wantErr: "hostexec.manual_approve[0].pattern: invalid regex",
 		},
 		{
 			name: "invalid regex with special chars",
 			cfg: &GlobalConfig{
-				Approval: ApprovalConfig{
+				Hostexec: HostexecConfig{
 					AutoApprove: []CommandPattern{
 						{Pattern: "(?P<invalid"},
 					},
 				},
 			},
-			wantErr: "approval.auto_approve[0].pattern: invalid regex",
+			wantErr: "hostexec.auto_approve[0].pattern: invalid regex",
 		},
 	}
 

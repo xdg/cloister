@@ -63,8 +63,8 @@ request:
   # Default timeout waiting for approval
   timeout: "5m"
 
-# Approval server configuration (host-facing)
-approval:
+# Hostexec server configuration (host-facing)
+hostexec:
   listen: "127.0.0.1:9999"  # Localhost only
 
   # Allowed command patterns (regex)

@@ -48,7 +48,7 @@ func DefaultGlobalConfig() *GlobalConfig {
 			Listen:  ":9998",
 			Timeout: "5m",
 		},
-		Approval: ApprovalConfig{
+		Hostexec: HostexecConfig{
 			Listen: "127.0.0.1:9999",
 			AutoApprove: []CommandPattern{
 				{Pattern: "^docker compose ps$"},

@@ -7,7 +7,7 @@ package config
 type GlobalConfig struct {
 	Proxy        ProxyConfig            `yaml:"proxy,omitempty"`
 	Request      RequestConfig          `yaml:"request,omitempty"`
-	Approval     ApprovalConfig         `yaml:"approval,omitempty"`
+	Hostexec     HostexecConfig         `yaml:"hostexec,omitempty"`
 	Devcontainer DevcontainerConfig     `yaml:"devcontainer,omitempty"`
 	Agents       map[string]AgentConfig `yaml:"agents,omitempty"`
 	Defaults     DefaultsConfig         `yaml:"defaults,omitempty"`
@@ -36,9 +36,9 @@ type RequestConfig struct {
 	Timeout string `yaml:"timeout,omitempty"`
 }
 
-// ApprovalConfig contains settings for the approval server that provides
+// HostexecConfig contains settings for the hostexec approval server that provides
 // the human review interface for hostexec commands.
-type ApprovalConfig struct {
+type HostexecConfig struct {
 	Listen        string           `yaml:"listen,omitempty"`
 	AutoApprove   []CommandPattern `yaml:"auto_approve,omitempty"`
 	ManualApprove []CommandPattern `yaml:"manual_approve,omitempty"`

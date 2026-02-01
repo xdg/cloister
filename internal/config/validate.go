@@ -65,19 +65,19 @@ func ValidateGlobalConfig(cfg *GlobalConfig) error {
 		}
 	}
 
-	// Validate approval settings
-	if cfg.Approval.Listen != "" {
-		if err := validateListenAddr(cfg.Approval.Listen, "approval.listen"); err != nil {
+	// Validate hostexec settings
+	if cfg.Hostexec.Listen != "" {
+		if err := validateListenAddr(cfg.Hostexec.Listen, "hostexec.listen"); err != nil {
 			return err
 		}
 	}
-	for i, pattern := range cfg.Approval.AutoApprove {
-		if err := validateRegex(pattern.Pattern, fmt.Sprintf("approval.auto_approve[%d].pattern", i)); err != nil {
+	for i, pattern := range cfg.Hostexec.AutoApprove {
+		if err := validateRegex(pattern.Pattern, fmt.Sprintf("hostexec.auto_approve[%d].pattern", i)); err != nil {
 			return err
 		}
 	}
-	for i, pattern := range cfg.Approval.ManualApprove {
-		if err := validateRegex(pattern.Pattern, fmt.Sprintf("approval.manual_approve[%d].pattern", i)); err != nil {
+	for i, pattern := range cfg.Hostexec.ManualApprove {
+		if err := validateRegex(pattern.Pattern, fmt.Sprintf("hostexec.manual_approve[%d].pattern", i)); err != nil {
 			return err
 		}
 	}

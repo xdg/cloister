@@ -23,7 +23,7 @@ request:
   listen: ":9998"
   timeout: "5m"
 
-approval:
+hostexec:
   listen: "127.0.0.1:9999"
   auto_approve:
     - pattern: "^docker compose ps$"
@@ -116,18 +116,18 @@ func TestGlobalConfigUnmarshal(t *testing.T) {
 		t.Errorf("Request.Timeout = %q, want %q", cfg.Request.Timeout, "5m")
 	}
 
-	// Verify approval settings
-	if cfg.Approval.Listen != "127.0.0.1:9999" {
-		t.Errorf("Approval.Listen = %q, want %q", cfg.Approval.Listen, "127.0.0.1:9999")
+	// Verify hostexec settings
+	if cfg.Hostexec.Listen != "127.0.0.1:9999" {
+		t.Errorf("Hostexec.Listen = %q, want %q", cfg.Hostexec.Listen, "127.0.0.1:9999")
 	}
-	if len(cfg.Approval.AutoApprove) != 1 {
-		t.Errorf("len(Approval.AutoApprove) = %d, want 1", len(cfg.Approval.AutoApprove))
+	if len(cfg.Hostexec.AutoApprove) != 1 {
+		t.Errorf("len(Hostexec.AutoApprove) = %d, want 1", len(cfg.Hostexec.AutoApprove))
 	}
-	if cfg.Approval.AutoApprove[0].Pattern != "^docker compose ps$" {
-		t.Errorf("Approval.AutoApprove[0].Pattern = %q, want %q", cfg.Approval.AutoApprove[0].Pattern, "^docker compose ps$")
+	if cfg.Hostexec.AutoApprove[0].Pattern != "^docker compose ps$" {
+		t.Errorf("Hostexec.AutoApprove[0].Pattern = %q, want %q", cfg.Hostexec.AutoApprove[0].Pattern, "^docker compose ps$")
 	}
-	if len(cfg.Approval.ManualApprove) != 1 {
-		t.Errorf("len(Approval.ManualApprove) = %d, want 1", len(cfg.Approval.ManualApprove))
+	if len(cfg.Hostexec.ManualApprove) != 1 {
+		t.Errorf("len(Hostexec.ManualApprove) = %d, want 1", len(cfg.Hostexec.ManualApprove))
 	}
 
 	// Verify devcontainer settings
@@ -240,7 +240,7 @@ func TestGlobalConfigRoundTrip(t *testing.T) {
 			Listen:  ":9998",
 			Timeout: "2m",
 		},
-		Approval: ApprovalConfig{
+		Hostexec: HostexecConfig{
 			Listen: "127.0.0.1:9999",
 			AutoApprove: []CommandPattern{
 				{Pattern: "^test$"},

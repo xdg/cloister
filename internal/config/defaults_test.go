@@ -102,15 +102,15 @@ func TestDefaultGlobalConfig_AllFields(t *testing.T) {
 		t.Error("DefaultGlobalConfig() Request.Timeout is empty")
 	}
 
-	// Approval fields
-	if cfg.Approval.Listen == "" {
-		t.Error("DefaultGlobalConfig() Approval.Listen is empty")
+	// Hostexec fields
+	if cfg.Hostexec.Listen == "" {
+		t.Error("DefaultGlobalConfig() Hostexec.Listen is empty")
 	}
-	if len(cfg.Approval.AutoApprove) == 0 {
-		t.Error("DefaultGlobalConfig() Approval.AutoApprove is empty")
+	if len(cfg.Hostexec.AutoApprove) == 0 {
+		t.Error("DefaultGlobalConfig() Hostexec.AutoApprove is empty")
 	}
-	if len(cfg.Approval.ManualApprove) == 0 {
-		t.Error("DefaultGlobalConfig() Approval.ManualApprove is empty")
+	if len(cfg.Hostexec.ManualApprove) == 0 {
+		t.Error("DefaultGlobalConfig() Hostexec.ManualApprove is empty")
 	}
 
 	// Devcontainer fields

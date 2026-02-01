@@ -17,8 +17,8 @@ type EffectiveConfig struct {
 	RequestListen  string
 	RequestTimeout string
 
-	// Approval server settings
-	ApprovalListen string
+	// Hostexec server settings
+	HostexecListen string
 	AutoApprove    []CommandPattern // Merged
 	ManualApprove  []CommandPattern // Merged
 
@@ -106,10 +106,10 @@ func ResolveConfig(projectName string) (*EffectiveConfig, error) {
 		RequestListen:  global.Request.Listen,
 		RequestTimeout: global.Request.Timeout,
 
-		// Approval server settings
-		ApprovalListen: global.Approval.Listen,
-		AutoApprove:    global.Approval.AutoApprove,
-		ManualApprove:  global.Approval.ManualApprove,
+		// Hostexec server settings
+		HostexecListen: global.Hostexec.Listen,
+		AutoApprove:    global.Hostexec.AutoApprove,
+		ManualApprove:  global.Hostexec.ManualApprove,
 
 		// Container defaults
 		Image: global.Defaults.Image,
@@ -139,8 +139,8 @@ func ResolveConfig(projectName string) (*EffectiveConfig, error) {
 	effective.Allow = MergeAllowlists(global.Proxy.Allow, project.Proxy.Allow)
 
 	// Merge command patterns (global + project)
-	effective.AutoApprove = MergeCommandPatterns(global.Approval.AutoApprove, project.Commands.AutoApprove)
-	effective.ManualApprove = MergeCommandPatterns(global.Approval.ManualApprove, project.Commands.ManualApprove)
+	effective.AutoApprove = MergeCommandPatterns(global.Hostexec.AutoApprove, project.Commands.AutoApprove)
+	effective.ManualApprove = MergeCommandPatterns(global.Hostexec.ManualApprove, project.Commands.ManualApprove)
 
 	return effective, nil
 }

@@ -36,12 +36,12 @@ func TestParseGlobalConfig_Valid(t *testing.T) {
 		t.Errorf("Request.Timeout = %q, want %q", cfg.Request.Timeout, "5m")
 	}
 
-	// Verify approval settings
-	if cfg.Approval.Listen != "127.0.0.1:9999" {
-		t.Errorf("Approval.Listen = %q, want %q", cfg.Approval.Listen, "127.0.0.1:9999")
+	// Verify hostexec settings
+	if cfg.Hostexec.Listen != "127.0.0.1:9999" {
+		t.Errorf("Hostexec.Listen = %q, want %q", cfg.Hostexec.Listen, "127.0.0.1:9999")
 	}
-	if len(cfg.Approval.AutoApprove) != 1 {
-		t.Errorf("len(Approval.AutoApprove) = %d, want 1", len(cfg.Approval.AutoApprove))
+	if len(cfg.Hostexec.AutoApprove) != 1 {
+		t.Errorf("len(Hostexec.AutoApprove) = %d, want 1", len(cfg.Hostexec.AutoApprove))
 	}
 
 	// Verify agents
@@ -138,7 +138,7 @@ proxy:
 
 func TestParseGlobalConfig_NestedUnknownField(t *testing.T) {
 	yamlWithNestedTypo := `
-approval:
+hostexec:
   listen: "127.0.0.1:9999"
   auto_aprove:  # typo: missing 'p'
     - pattern: "^test$"

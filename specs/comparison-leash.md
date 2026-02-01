@@ -172,7 +172,7 @@ proxy:
     - domain: "api.anthropic.com"
     - domain: "pkg.go.dev"
 
-approval:
+hostexec:
   auto_approve:
     - pattern: "^npm install$"
     - pattern: "^go mod tidy$"

@@ -58,7 +58,7 @@ func TestWriteDefaultConfig_Creates(t *testing.T) {
 		"# AI provider APIs",
 		"domain: \"api.anthropic.com\"",
 		"request:",
-		"approval:",
+		"hostexec:",
 		"devcontainer:",
 		"agents:",
 		"defaults:",
