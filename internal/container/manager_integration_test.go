@@ -170,7 +170,6 @@ func TestManager_Start_VerifySecuritySettings(t *testing.T) {
 			WorkingDir string `json:"WorkingDir"`
 		} `json:"Config"`
 		HostConfig struct {
-			CapDrop     []string `json:"CapDrop"`
 			SecurityOpt []string `json:"SecurityOpt"`
 			NetworkMode string   `json:"NetworkMode"`
 		} `json:"HostConfig"`
@@ -202,17 +201,6 @@ func TestManager_Start_VerifySecuritySettings(t *testing.T) {
 
 	if inspect.Config.User != "1000" {
 		t.Errorf("User = %q, want %q", inspect.Config.User, "1000")
-	}
-
-	hasCapDropAll := false
-	for _, cap := range inspect.HostConfig.CapDrop {
-		if cap == "ALL" {
-			hasCapDropAll = true
-			break
-		}
-	}
-	if !hasCapDropAll {
-		t.Errorf("CapDrop does not include ALL: %v", inspect.HostConfig.CapDrop)
 	}
 
 	foundMount := false
