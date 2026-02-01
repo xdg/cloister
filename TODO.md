@@ -495,7 +495,7 @@ Add logging for all hostexec requests and responses.
 ### 4.10.3 Update specs/container-image.md if needed
 - [x] Verify hostexec script documentation matches implementation
 - [x] Document environment variables
-- [ ] **Test (manual)**: Container image docs accurate
+- [x] **Test (manual)**: Container image docs accurate
 
 ### 4.10.4 End-to-end verification
 - [x] **Test (manual)**: Full flow from Claude → hostexec → approval UI → execution → output
