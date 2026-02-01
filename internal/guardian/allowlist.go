@@ -19,6 +19,12 @@ var DefaultAllowedDomains = []string{
 	"proxy.golang.org",
 	"sum.golang.org",
 	"storage.googleapis.com",
+
+	// Ubuntu package repositories
+	"archive.ubuntu.com",
+	"ports.ubuntu.com",
+	"security.ubuntu.com",
+	"deb.nodesource.com",
 }
 
 // Allowlist enforces domain-based access control for the proxy.
