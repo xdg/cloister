@@ -9,7 +9,7 @@ host: Host {
     style.fill: "#d8f0d8"
   }
 
-  socket: "hostexec.sock" {
+  tcp_server: "TCP Server\n127.0.0.1:<port>" {
     style.fill: "#fff"
     style.stroke: "#888"
     style.stroke-dash: 3
@@ -17,7 +17,7 @@ host: Host {
 
   browser: "Browser\n(approval UI)"
 
-  cloister_cli -> socket: listens
+  cloister_cli -> tcp_server: listens
 }
 
 cloister_net: cloister-net (--internal) {
@@ -68,8 +68,8 @@ cloister_net -> guardian.request: hostexec requests {
 guardian.proxy -> bridge
 bridge -> internet: allowlisted traffic
 
-# Host command execution via Unix socket
-guardian.request -> host.socket {
+# Host command execution via TCP (host.docker.internal)
+guardian.request -> host.tcp_server {
   style.stroke: "#4a4"
 }
 

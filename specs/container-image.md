@@ -141,7 +141,7 @@ The `hostexec` binary allows commands to be executed on the host with human appr
 **Execution flow:**
 1. `hostexec` in cloister sends request to guardian container (port 9998)
 2. Guardian presents request in approval UI
-3. If approved, guardian forwards command to host process via Unix socket
+3. If approved, guardian forwards command to host process via TCP
 4. Host process executes command and returns stdout/stderr/exit code
 5. Guardian returns result to `hostexec`
 
@@ -167,14 +167,17 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
+# Build JSON request with both cmd (for display/pattern matching) and args (for execution)
+# Using jq ensures proper JSON escaping of arguments
 COMMAND="$*"
+ARGS_JSON=$(printf '%s\n' "$@" | jq -R . | jq -s .)
 
 # Send request to request server and wait for response
 # Token header is authoritative; body fields are informational for logging
-response=$(curl -s -X POST "http://${CLOISTER_GUARDIAN_HOST}:9998/request" \
+response=$(curl -s --noproxy "*" -X POST "http://${CLOISTER_GUARDIAN_HOST}:9998/request" \
     -H "Content-Type: application/json" \
     -H "X-Cloister-Token: ${CLOISTER_TOKEN}" \
-    -d "{\"cmd\": \"${COMMAND}\"}" \
+    -d "{\"cmd\": $(printf '%s' "$COMMAND" | jq -R .), \"args\": ${ARGS_JSON}}" \
     --max-time 300)
 
 status=$(echo "$response" | jq -r '.status // "error"')

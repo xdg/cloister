@@ -608,3 +608,160 @@ func TestQueue_ResponseChannelWorks(t *testing.T) {
 		t.Error("expected response on channel")
 	}
 }
+
+func TestQueue_SetEventHub(t *testing.T) {
+	q := NewQueue()
+	hub := NewEventHub()
+
+	// Set the event hub
+	q.SetEventHub(hub)
+
+	// Verify it's set by checking the internal state (via a goroutine race-safe approach)
+	// We'll verify by adding a request and checking if the hub receives the event
+	eventCh := hub.Subscribe()
+	defer hub.Unsubscribe(eventCh)
+
+	req := &PendingRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Cmd:       "test command",
+		Timestamp: time.Now(),
+	}
+	_, err := q.Add(req)
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	// Should receive request-added event
+	select {
+	case event := <-eventCh:
+		if event.Type != EventRequestAdded {
+			t.Errorf("event.Type = %q, want %q", event.Type, EventRequestAdded)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("expected request-added event, but none received")
+	}
+}
+
+func TestQueue_BroadcastsOnAdd(t *testing.T) {
+	q := NewQueue()
+	hub := NewEventHub()
+	q.SetEventHub(hub)
+
+	eventCh := hub.Subscribe()
+	defer hub.Unsubscribe(eventCh)
+
+	req := &PendingRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Branch:    "main",
+		Agent:     "claude",
+		Cmd:       "docker compose up -d",
+		Timestamp: time.Now(),
+	}
+
+	_, err := q.Add(req)
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	// Verify request-added event is broadcast
+	select {
+	case event := <-eventCh:
+		if event.Type != EventRequestAdded {
+			t.Errorf("event.Type = %q, want %q", event.Type, EventRequestAdded)
+		}
+		// Event data should contain the command (HTML rendered)
+		if event.Data == "" {
+			t.Error("event.Data should not be empty")
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("expected request-added event, but none received")
+	}
+}
+
+func TestQueue_BroadcastsOnTimeout(t *testing.T) {
+	timeout := 50 * time.Millisecond
+	q := NewQueueWithTimeout(timeout)
+	hub := NewEventHub()
+	q.SetEventHub(hub)
+
+	eventCh := hub.Subscribe()
+	defer hub.Unsubscribe(eventCh)
+
+	respChan := make(chan Response, 1)
+	req := &PendingRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Cmd:       "test command",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+
+	id, err := q.Add(req)
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	// Drain the request-added event
+	select {
+	case <-eventCh:
+		// Expected
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("expected request-added event")
+	}
+
+	// Wait for timeout and verify request-removed event
+	select {
+	case event := <-eventCh:
+		if event.Type != EventRequestRemoved {
+			t.Errorf("event.Type = %q, want %q", event.Type, EventRequestRemoved)
+		}
+		// Data should contain the request ID
+		if event.Data == "" {
+			t.Error("event.Data should not be empty")
+		}
+		// Check that the ID is in the JSON data
+		if !contains(event.Data, id) {
+			t.Errorf("event.Data %q should contain request ID %q", event.Data, id)
+		}
+	case <-time.After(200 * time.Millisecond):
+		t.Error("expected request-removed event after timeout, but none received")
+	}
+}
+
+// contains checks if s contains substr
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+}
+
+func containsHelper(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
+func TestQueue_NoBroadcastWithoutEventHub(t *testing.T) {
+	// Verify that queue operations work without an event hub (no panic)
+	q := NewQueue()
+
+	req := &PendingRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Cmd:       "test command",
+		Timestamp: time.Now(),
+	}
+
+	// Should not panic without event hub
+	_, err := q.Add(req)
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+
+	if q.Len() != 1 {
+		t.Errorf("Len() = %d, want 1", q.Len())
+	}
+}

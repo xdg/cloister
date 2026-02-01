@@ -43,6 +43,7 @@ type Queue struct {
 	requests map[string]*PendingRequest
 	cancels  map[string]context.CancelFunc // Cancel functions for timeout goroutines
 	timeout  time.Duration
+	events   *EventHub // Optional event hub for SSE broadcasts
 }
 
 // NewQueue creates a new empty approval queue with the default timeout.
@@ -59,10 +60,19 @@ func NewQueueWithTimeout(timeout time.Duration) *Queue {
 	}
 }
 
+// SetEventHub sets the event hub for SSE broadcasts.
+// When set, the queue will broadcast events when requests are added or time out.
+func (q *Queue) SetEventHub(hub *EventHub) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.events = hub
+}
+
 // Add adds a new pending request to the queue and returns its generated ID.
 // The ID is generated using crypto/rand (8 bytes = 16 hex characters).
 // A timeout goroutine is started that will send a timeout response on the
 // request's Response channel if the request is not approved/denied in time.
+// If an EventHub is configured, a request-added event is broadcast to SSE clients.
 func (q *Queue) Add(req *PendingRequest) (string, error) {
 	id, err := generateID()
 	if err != nil {
@@ -75,7 +85,13 @@ func (q *Queue) Add(req *PendingRequest) (string, error) {
 	req.ID = id
 	q.requests[id] = req
 	q.cancels[id] = cancel
+	events := q.events // Capture reference while holding lock
 	q.mu.Unlock()
+
+	// Broadcast request-added event to SSE clients
+	if events != nil {
+		events.BroadcastPendingRequestAdded(req)
+	}
 
 	// Start timeout goroutine
 	go q.handleTimeout(ctx, id, req.Response)
@@ -85,6 +101,7 @@ func (q *Queue) Add(req *PendingRequest) (string, error) {
 
 // handleTimeout waits for the timeout duration and sends a timeout response
 // if the context has not been canceled (i.e., request not approved/denied).
+// If an EventHub is configured, a request-removed event is broadcast to SSE clients.
 func (q *Queue) handleTimeout(ctx context.Context, id string, respChan chan<- Response) {
 	select {
 	case <-ctx.Done():
@@ -98,13 +115,21 @@ func (q *Queue) handleTimeout(ctx context.Context, id string, respChan chan<- Re
 			delete(q.requests, id)
 			delete(q.cancels, id)
 		}
+		events := q.events // Capture reference while holding lock
 		q.mu.Unlock()
 
 		// Only send timeout response if the request was still pending
-		if exists && respChan != nil {
-			respChan <- Response{
-				Status: "timeout",
-				Reason: "Request timed out waiting for approval",
+		if exists {
+			// Broadcast request-removed event to SSE clients
+			if events != nil {
+				events.BroadcastRequestRemoved(id)
+			}
+
+			if respChan != nil {
+				respChan <- Response{
+					Status: "timeout",
+					Reason: "Request timed out waiting for approval",
+				}
 			}
 		}
 	}

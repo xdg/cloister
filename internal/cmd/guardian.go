@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -20,6 +21,7 @@ import (
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian"
 	"github.com/xdg/cloister/internal/guardian/approval"
+	guardianexec "github.com/xdg/cloister/internal/guardian/executor"
 	"github.com/xdg/cloister/internal/guardian/patterns"
 	"github.com/xdg/cloister/internal/guardian/request"
 	"github.com/xdg/cloister/internal/token"
@@ -338,8 +340,28 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	// Create the approval queue for pending requests
 	approvalQueue := approval.NewQueue()
 
-	// Executor is nil for now (Phase 4.4)
-	reqServer := request.NewServer(requestTokenLookup, regexMatcher, nil)
+	// Create executor client if shared secret and port are available
+	var execClient request.CommandExecutor
+	sharedSecret := os.Getenv(guardian.SharedSecretEnvVar)
+	executorPortStr := os.Getenv(guardian.ExecutorPortEnvVar)
+	if sharedSecret != "" && executorPortStr != "" {
+		port, err := strconv.Atoi(executorPortStr)
+		if err != nil {
+			log.Printf("Warning: invalid executor port %q: %v", executorPortStr, err)
+		} else {
+			execClient = guardianexec.NewTCPClient(port, sharedSecret)
+			log.Printf("Executor client configured (host.docker.internal:%d)", port)
+		}
+	} else {
+		if sharedSecret == "" {
+			log.Printf("Warning: %s not set, command execution disabled", guardian.SharedSecretEnvVar)
+		}
+		if executorPortStr == "" {
+			log.Printf("Warning: %s not set, command execution disabled", guardian.ExecutorPortEnvVar)
+		}
+	}
+
+	reqServer := request.NewServer(requestTokenLookup, regexMatcher, execClient)
 	reqServer.Queue = approvalQueue
 
 	// Create the approval server for the web UI (localhost only)

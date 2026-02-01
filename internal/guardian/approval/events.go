@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sync"
+	"time"
 )
 
 // EventType represents the type of SSE event.
@@ -15,6 +16,8 @@ const (
 	EventRequestAdded EventType = "request-added"
 	// EventRequestRemoved is sent when a request is removed (approved/denied/timed out).
 	EventRequestRemoved EventType = "request-removed"
+	// EventHeartbeat is sent periodically to keep the connection alive.
+	EventHeartbeat EventType = "heartbeat"
 )
 
 // Event represents an SSE event to be broadcast to clients.
@@ -122,6 +125,20 @@ func (h *EventHub) BroadcastRequestAdded(req templateRequest) {
 	})
 }
 
+// BroadcastPendingRequestAdded broadcasts a request-added event for a PendingRequest.
+// This is a convenience method that converts PendingRequest to the template format.
+func (h *EventHub) BroadcastPendingRequestAdded(req *PendingRequest) {
+	h.BroadcastRequestAdded(templateRequest{
+		ID:        req.ID,
+		Cloister:  req.Cloister,
+		Project:   req.Project,
+		Branch:    req.Branch,
+		Agent:     req.Agent,
+		Cmd:       req.Cmd,
+		Timestamp: req.Timestamp.Format(time.RFC3339),
+	})
+}
+
 // BroadcastRequestRemoved broadcasts a request-removed event with the request ID.
 func (h *EventHub) BroadcastRequestRemoved(id string) {
 	data, _ := json.Marshal(RemovedEventData{ID: id})
@@ -132,6 +149,18 @@ func (h *EventHub) BroadcastRequestRemoved(id string) {
 }
 
 // FormatSSE formats an event as an SSE message.
+// For multiline data, each line must be prefixed with "data: " per the SSE spec.
 func FormatSSE(event Event) string {
-	return fmt.Sprintf("event: %s\ndata: %s\n\n", event.Type, event.Data)
+	var buf bytes.Buffer
+	buf.WriteString(fmt.Sprintf("event: %s\n", event.Type))
+
+	// Split data into lines and prefix each with "data: "
+	lines := bytes.Split([]byte(event.Data), []byte("\n"))
+	for _, line := range lines {
+		buf.WriteString("data: ")
+		buf.Write(line)
+		buf.WriteByte('\n')
+	}
+	buf.WriteByte('\n') // End of message
+	return buf.String()
 }

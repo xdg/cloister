@@ -84,9 +84,6 @@ func TestClientExecuteSuccess(t *testing.T) {
 		if req.Secret != "test-secret" {
 			t.Errorf("Secret: got %q, want %q", req.Secret, "test-secret")
 		}
-		if req.Request.Token != "tok_abc" {
-			t.Errorf("Token: got %q, want %q", req.Request.Token, "tok_abc")
-		}
 		if req.Request.Command != "echo" {
 			t.Errorf("Command: got %q, want %q", req.Request.Command, "echo")
 		}
@@ -115,7 +112,6 @@ func TestClientExecuteSuccess(t *testing.T) {
 	client := NewClient(mock.sockPath, "test-secret")
 
 	req := executor.ExecuteRequest{
-		Token:   "tok_abc",
 		Command: "echo",
 		Args:    []string{"hello"},
 		Workdir: "/work",
@@ -145,7 +141,6 @@ func TestClientExecuteConnectionError(t *testing.T) {
 	client := NewClient(nonExistentSocket, "test-secret")
 
 	req := executor.ExecuteRequest{
-		Token:   "tok_abc",
 		Command: "echo",
 	}
 
@@ -184,7 +179,6 @@ func TestClientExecuteInvalidResponse(t *testing.T) {
 	client := NewClient(mock.sockPath, "test-secret")
 
 	req := executor.ExecuteRequest{
-		Token:   "tok_abc",
 		Command: "echo",
 	}
 
@@ -229,7 +223,6 @@ func TestClientExecuteSocketError(t *testing.T) {
 	client := NewClient(mock.sockPath, "test-secret")
 
 	req := executor.ExecuteRequest{
-		Token:   "tok_abc",
 		Command: "echo",
 	}
 
@@ -290,7 +283,6 @@ func TestClientExecuteWithEnvAndTimeout(t *testing.T) {
 	client := NewClient(mock.sockPath, "test-secret")
 
 	req := executor.ExecuteRequest{
-		Token:     "tok_abc",
 		Command:   "env",
 		Args:      []string{},
 		Workdir:   "/work",
@@ -342,7 +334,6 @@ func TestClientExecuteReadError(t *testing.T) {
 	client := NewClient(mock.sockPath, "test-secret")
 
 	req := executor.ExecuteRequest{
-		Token:   "tok_abc",
 		Command: "echo",
 	}
 
@@ -392,7 +383,6 @@ func TestClientWireFormat(t *testing.T) {
 	client := NewClient(mock.sockPath, "my-secret")
 
 	req := executor.ExecuteRequest{
-		Token:   "tok_xyz",
 		Command: "ls",
 		Args:    []string{"-la"},
 		Workdir: "/home",
@@ -425,7 +415,7 @@ func TestClientWireFormat(t *testing.T) {
 		t.Fatal("Wire format 'request' is not an object")
 	}
 
-	expectedFields := []string{"token", "command", "args", "workdir"}
+	expectedFields := []string{"command", "args", "workdir"}
 	for _, field := range expectedFields {
 		if _, ok := reqMap[field]; !ok {
 			t.Errorf("Wire format request missing '%s' field", field)

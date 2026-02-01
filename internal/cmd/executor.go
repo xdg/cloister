@@ -3,15 +3,16 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian"
-	"github.com/xdg/cloister/internal/token"
 )
 
 var executorCmd = &cobra.Command{
@@ -29,7 +30,8 @@ This command is intended to be run as a background process by 'cloister guardian
 and should not normally be invoked directly by users.
 
 The executor listens on a Unix socket and executes approved commands on the host.
-It validates requests using a shared secret and token-based authentication.`,
+It validates requests using a shared secret (guardian-executor authentication).
+Token validation is handled by the guardian before forwarding requests.`,
 	Hidden: true,
 	RunE:   runExecutor,
 }
@@ -47,78 +49,38 @@ func runExecutor(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("shared secret not provided (set %s)", guardian.SharedSecretEnvVar)
 	}
 
-	// Get socket path
-	socketPath, err := guardian.HostSocketPath()
-	if err != nil {
-		return fmt.Errorf("failed to get socket path: %w", err)
-	}
-
-	// Create token registry and load persisted tokens
-	registry := token.NewRegistry()
-	tokenDir, err := token.DefaultTokenDir()
-	if err != nil {
-		log.Printf("Warning: failed to get token directory: %v", err)
-	} else {
-		store, err := token.NewStore(tokenDir)
-		if err != nil {
-			log.Printf("Warning: failed to open token store: %v", err)
-		} else {
-			tokens, err := store.Load()
-			if err != nil {
-				log.Printf("Warning: failed to load tokens: %v", err)
-			} else {
-				for tok, info := range tokens {
-					registry.RegisterFull(tok, info.CloisterName, info.ProjectName, info.WorktreePath)
-				}
-				if len(tokens) > 0 {
-					log.Printf("Loaded %d tokens from disk", len(tokens))
-				}
-			}
-		}
-	}
-
 	// Create real executor
 	realExecutor := executor.NewRealExecutor()
 
-	// Create token validator that looks up in the registry
-	tokenValidator := func(tok string) (string, error) {
-		info, ok := registry.Lookup(tok)
-		if !ok {
-			return "", executor.ErrInvalidToken
-		}
-		return info.WorktreePath, nil
-	}
-
-	// Create workdir validator that compares paths
-	workdirValidator := func(requestedWorkdir, registeredWorktree string) error {
-		// Require exact match for security
-		if requestedWorkdir != registeredWorktree {
-			return executor.ErrWorkdirMismatch
-		}
-		return nil
-	}
-
-	// Create socket server with validators
+	// Create socket server with TCP mode (for Docker compatibility on macOS)
+	// Bind to 127.0.0.1:0 to get a random available port
+	// Token validation is handled by the guardian before forwarding requests
 	server := executor.NewSocketServer(
 		secret,
 		realExecutor,
-		executor.WithSocketPath(socketPath),
-		executor.WithTokenValidator(tokenValidator),
-		executor.WithWorkdirValidator(workdirValidator),
+		executor.WithTCPAddr("127.0.0.1:0"),
 	)
 
 	// Start the server
 	if err := server.Start(); err != nil {
-		return fmt.Errorf("failed to start executor socket server: %w", err)
+		return fmt.Errorf("failed to start executor server: %w", err)
 	}
 
-	log.Printf("Executor socket server listening on %s", socketPath)
+	// Get the actual port that was bound
+	listenAddr := server.ListenAddr()
+	_, portStr, err := net.SplitHostPort(listenAddr)
+	if err != nil {
+		return fmt.Errorf("failed to parse listen address: %w", err)
+	}
+	port, _ := strconv.Atoi(portStr)
 
-	// Save daemon state
+	log.Printf("Executor server listening on %s", listenAddr)
+
+	// Save daemon state with TCP port
 	state := &executor.DaemonState{
-		PID:        os.Getpid(),
-		Secret:     secret,
-		SocketPath: socketPath,
+		PID:     os.Getpid(),
+		Secret:  secret,
+		TCPPort: port,
 	}
 	if err := executor.SaveDaemonState(state); err != nil {
 		log.Printf("Warning: failed to save daemon state: %v", err)
@@ -129,7 +91,7 @@ func runExecutor(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("Shutting down executor socket server...")
+	log.Println("Shutting down executor server...")
 
 	// Clean up
 	if err := server.Stop(); err != nil {
@@ -141,6 +103,6 @@ func runExecutor(cmd *cobra.Command, args []string) error {
 		log.Printf("Warning: failed to remove daemon state: %v", err)
 	}
 
-	log.Println("Executor socket server stopped")
+	log.Println("Executor server stopped")
 	return nil
 }

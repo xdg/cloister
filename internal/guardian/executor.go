@@ -6,36 +6,12 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"syscall"
 	"time"
 
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/token"
 )
-
-// HostSocketDir returns the directory for the hostexec socket on the host.
-// This is ~/.local/share/cloister.
-func HostSocketDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	return filepath.Join(home, ".local", "share", "cloister"), nil
-}
-
-// HostSocketPath returns the path to the hostexec socket on the host.
-// This is ~/.local/share/cloister/hostexec.sock.
-func HostSocketPath() (string, error) {
-	dir, err := HostSocketDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "hostexec.sock"), nil
-}
-
-// ContainerSocketPath is the path to the hostexec socket inside the guardian container.
-const ContainerSocketPath = "/var/run/hostexec.sock"
 
 // SharedSecretEnvVar is the environment variable name for the shared secret.
 const SharedSecretEnvVar = "CLOISTER_SHARED_SECRET"
@@ -55,10 +31,14 @@ func getExecutablePath() (string, error) {
 
 // ExecutorInfo contains information about a started executor process.
 type ExecutorInfo struct {
-	SocketPath string
+	SocketPath string // Deprecated: use TCPPort
+	TCPPort    int    // Port for TCP mode
 	Secret     string
 	Process    *os.Process
 }
+
+// ExecutorPortEnvVar is the environment variable for the executor TCP port.
+const ExecutorPortEnvVar = "CLOISTER_EXECUTOR_PORT"
 
 // StartExecutor starts the executor daemon process.
 // It cleans up any stale state, generates a shared secret, and spawns the executor.
@@ -72,12 +52,6 @@ func StartExecutor() (*ExecutorInfo, error) {
 
 	// Generate shared secret for executor authentication
 	secret := token.Generate()
-
-	// Get socket path
-	socketPath, err := HostSocketPath()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get socket path: %w", err)
-	}
 
 	// Get path to cloister binary
 	executablePath, err := getExecutablePath()
@@ -99,27 +73,29 @@ func StartExecutor() (*ExecutorInfo, error) {
 		return nil, fmt.Errorf("failed to start executor: %w", err)
 	}
 
-	// Poll for the socket to be created (up to 2 seconds)
+	// Poll for the daemon state file (contains the port) to be created (up to 2 seconds)
+	var state *executor.DaemonState
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(socketPath); err == nil {
-			// Socket exists
+		state, err = executor.LoadDaemonState()
+		if err == nil && state != nil && state.TCPPort > 0 {
+			// Daemon state written with port
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	// Final check - verify socket was created
-	if _, err := os.Stat(socketPath); err != nil {
+	// Final check - verify daemon state was written with port
+	if state == nil || state.TCPPort == 0 {
 		// Executor may have failed to start, try to clean up
 		_ = cmd.Process.Kill()
-		return nil, fmt.Errorf("executor failed to create socket: %w", err)
+		return nil, fmt.Errorf("executor failed to start (no port in daemon state)")
 	}
 
 	return &ExecutorInfo{
-		SocketPath: socketPath,
-		Secret:     secret,
-		Process:    cmd.Process,
+		TCPPort: state.TCPPort,
+		Secret:  secret,
+		Process: cmd.Process,
 	}, nil
 }
 

@@ -80,7 +80,7 @@ The sandbox runtime is an npm package (`@anthropic-ai/sandbox-runtime`) that wra
 │  │  └─────────────┘  └─────────────┘  └─────────────┘  │ │
 │  └─────────────────────────────────────────────────────┘ │
 │  ┌─────────────────────────────────────────────────────┐ │
-│  │    Host Executor (Unix socket)                      │ │
+│  │    Host Executor (TCP via host.docker.internal)     │ │
 │  │    Executes approved commands outside container     │ │
 │  └─────────────────────────────────────────────────────┘ │
 └──────────────────────────────────────────────────────────┘

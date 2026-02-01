@@ -32,7 +32,6 @@ func TestSocketRequestJSONRoundTrip(t *testing.T) {
 	req := SocketRequest{
 		Secret: "test-secret-123",
 		Request: ExecuteRequest{
-			Token:     "tok_abc",
 			Command:   "echo",
 			Args:      []string{"hello"},
 			Workdir:   "/work",
@@ -53,9 +52,6 @@ func TestSocketRequestJSONRoundTrip(t *testing.T) {
 
 	if got.Secret != req.Secret {
 		t.Errorf("Secret: got %q, want %q", got.Secret, req.Secret)
-	}
-	if got.Request.Token != req.Request.Token {
-		t.Errorf("Token: got %q, want %q", got.Request.Token, req.Request.Token)
 	}
 	if got.Request.Command != req.Request.Command {
 		t.Errorf("Command: got %q, want %q", got.Request.Command, req.Request.Command)
@@ -227,7 +223,6 @@ func TestSocketServerValidRequest(t *testing.T) {
 	req := SocketRequest{
 		Secret: "test-secret",
 		Request: ExecuteRequest{
-			Token:   "tok_123",
 			Command: "echo",
 			Args:    []string{"hello"},
 			Workdir: "/work",
@@ -285,7 +280,6 @@ func TestSocketServerInvalidSecret(t *testing.T) {
 	req := SocketRequest{
 		Secret: "wrong-secret",
 		Request: ExecuteRequest{
-			Token:   "tok_123",
 			Command: "echo",
 		},
 	}
@@ -347,154 +341,6 @@ func TestSocketServerInvalidJSON(t *testing.T) {
 	}
 }
 
-// TestSocketServerTokenValidation verifies token validation is called.
-func TestSocketServerTokenValidation(t *testing.T) {
-	tmpDir := shortTempDir(t)
-	sockPath := filepath.Join(tmpDir, "test.sock")
-
-	mock := &mockExecutorForSocket{
-		response: ExecuteResponse{Status: StatusCompleted, ExitCode: 0},
-	}
-
-	validatorCalled := false
-	tokenValidator := func(token string) (string, error) {
-		validatorCalled = true
-		if token != "valid-token" {
-			return "", ErrInvalidToken
-		}
-		return "/expected/worktree", nil
-	}
-
-	server := NewSocketServer("test-secret", mock,
-		WithSocketPath(sockPath),
-		WithTokenValidator(tokenValidator),
-	)
-
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	defer func() { _ = server.Stop() }()
-
-	// Test with invalid token
-	conn1, err := net.Dial("unix", sockPath)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-
-	req := SocketRequest{
-		Secret: "test-secret",
-		Request: ExecuteRequest{
-			Token:   "invalid-token",
-			Command: "echo",
-		},
-	}
-	sendRequest(t, conn1, req)
-	resp := readResponse(t, conn1)
-	conn1.Close()
-
-	if !validatorCalled {
-		t.Error("Token validator was not called")
-	}
-	if resp.Success {
-		t.Error("Expected failure for invalid token")
-	}
-	if !strings.Contains(resp.Error, "invalid token") {
-		t.Errorf("Error should contain 'invalid token', got: %q", resp.Error)
-	}
-
-	// Test with valid token
-	conn2, err := net.Dial("unix", sockPath)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-	defer conn2.Close()
-
-	req.Request.Token = "valid-token"
-	sendRequest(t, conn2, req)
-	resp = readResponse(t, conn2)
-
-	if !resp.Success {
-		t.Errorf("Expected success for valid token, got error: %s", resp.Error)
-	}
-}
-
-// TestSocketServerWorkdirValidation verifies workdir validation is called.
-func TestSocketServerWorkdirValidation(t *testing.T) {
-	tmpDir := shortTempDir(t)
-	sockPath := filepath.Join(tmpDir, "test.sock")
-
-	mock := &mockExecutorForSocket{
-		response: ExecuteResponse{Status: StatusCompleted, ExitCode: 0},
-	}
-
-	tokenValidator := func(token string) (string, error) {
-		return "/registered/worktree", nil
-	}
-
-	workdirValidatorCalled := false
-	workdirValidator := func(requestedWorkdir, registeredWorktree string) error {
-		workdirValidatorCalled = true
-		if requestedWorkdir != registeredWorktree {
-			return ErrWorkdirMismatch
-		}
-		return nil
-	}
-
-	server := NewSocketServer("test-secret", mock,
-		WithSocketPath(sockPath),
-		WithTokenValidator(tokenValidator),
-		WithWorkdirValidator(workdirValidator),
-	)
-
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	defer func() { _ = server.Stop() }()
-
-	// Test with mismatched workdir
-	conn1, err := net.Dial("unix", sockPath)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-
-	req := SocketRequest{
-		Secret: "test-secret",
-		Request: ExecuteRequest{
-			Token:   "tok_123",
-			Command: "echo",
-			Workdir: "/different/path",
-		},
-	}
-	sendRequest(t, conn1, req)
-	resp := readResponse(t, conn1)
-	conn1.Close()
-
-	if !workdirValidatorCalled {
-		t.Error("Workdir validator was not called")
-	}
-	if resp.Success {
-		t.Error("Expected failure for workdir mismatch")
-	}
-	if !strings.Contains(resp.Error, "workdir mismatch") {
-		t.Errorf("Error should contain 'workdir mismatch', got: %q", resp.Error)
-	}
-
-	// Test with matching workdir
-	conn2, err := net.Dial("unix", sockPath)
-	if err != nil {
-		t.Fatalf("Dial failed: %v", err)
-	}
-	defer conn2.Close()
-
-	req.Request.Workdir = "/registered/worktree"
-	sendRequest(t, conn2, req)
-	resp = readResponse(t, conn2)
-
-	if !resp.Success {
-		t.Errorf("Expected success for matching workdir, got error: %s", resp.Error)
-	}
-}
-
 // TestSocketServerMultipleConnections verifies concurrent connections work.
 func TestSocketServerMultipleConnections(t *testing.T) {
 	tmpDir := shortTempDir(t)
@@ -528,7 +374,6 @@ func TestSocketServerMultipleConnections(t *testing.T) {
 			req := SocketRequest{
 				Secret: "test-secret",
 				Request: ExecuteRequest{
-					Token:   "tok_123",
 					Command: "echo",
 					Args:    []string{"hello"},
 				},
@@ -611,7 +456,6 @@ func TestSocketServerGracefulShutdown(t *testing.T) {
 		req := SocketRequest{
 			Secret: "test-secret",
 			Request: ExecuteRequest{
-				Token:   "tok_123",
 				Command: "echo",
 			},
 		}

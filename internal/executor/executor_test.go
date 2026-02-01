@@ -15,14 +15,12 @@ func TestExecuteRequestJSONRoundTrip(t *testing.T) {
 		{
 			name: "minimal request",
 			req: ExecuteRequest{
-				Token:   "tok_abc123",
 				Command: "echo",
 			},
 		},
 		{
 			name: "full request",
 			req: ExecuteRequest{
-				Token:     "tok_xyz789",
 				Command:   "docker",
 				Args:      []string{"compose", "up", "-d"},
 				Workdir:   "/work",
@@ -33,7 +31,6 @@ func TestExecuteRequestJSONRoundTrip(t *testing.T) {
 		{
 			name: "empty args",
 			req: ExecuteRequest{
-				Token:   "tok_empty",
 				Command: "pwd",
 				Args:    []string{},
 			},
@@ -53,9 +50,6 @@ func TestExecuteRequestJSONRoundTrip(t *testing.T) {
 			}
 
 			// Compare fields
-			if got.Token != tt.req.Token {
-				t.Errorf("Token: got %q, want %q", got.Token, tt.req.Token)
-			}
 			if got.Command != tt.req.Command {
 				t.Errorf("Command: got %q, want %q", got.Command, tt.req.Command)
 			}
@@ -197,7 +191,6 @@ func TestMockExecutor(t *testing.T) {
 
 	mock := &mockExecutor{response: expected}
 	req := ExecuteRequest{
-		Token:   "test-token",
 		Command: "echo",
 		Args:    []string{"hello"},
 	}

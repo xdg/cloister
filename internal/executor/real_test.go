@@ -18,7 +18,6 @@ func TestRealExecutorInterface(t *testing.T) {
 func TestRealExecutorEchoHello(t *testing.T) {
 	executor := NewRealExecutor()
 	req := ExecuteRequest{
-		Token:   "test-token",
 		Command: "echo",
 		Args:    []string{"hello"},
 	}
@@ -43,7 +42,6 @@ func TestRealExecutorEchoHello(t *testing.T) {
 func TestRealExecutorNonexistentCommand(t *testing.T) {
 	executor := NewRealExecutor()
 	req := ExecuteRequest{
-		Token:   "test-token",
 		Command: "this-command-definitely-does-not-exist-anywhere",
 	}
 
@@ -61,7 +59,6 @@ func TestRealExecutorNonexistentCommand(t *testing.T) {
 func TestRealExecutorTimeout(t *testing.T) {
 	executor := NewRealExecutor()
 	req := ExecuteRequest{
-		Token:     "test-token",
 		Command:   "sleep",
 		Args:      []string{"10"},
 		TimeoutMs: 100, // 100ms timeout, command sleeps for 10s
@@ -87,7 +84,6 @@ func TestRealExecutorWorkdir(t *testing.T) {
 
 	executor := NewRealExecutor()
 	req := ExecuteRequest{
-		Token:   "test-token",
 		Command: "pwd",
 		Workdir: tmpDir,
 	}
@@ -113,7 +109,6 @@ func TestRealExecutorWorkdir(t *testing.T) {
 func TestRealExecutorEnv(t *testing.T) {
 	executor := NewRealExecutor()
 	req := ExecuteRequest{
-		Token:   "test-token",
 		Command: "sh",
 		Args:    []string{"-c", "echo $TEST_VAR"},
 		Env:     map[string]string{"TEST_VAR": "test_value_12345"},
@@ -133,7 +128,6 @@ func TestRealExecutorEnv(t *testing.T) {
 func TestRealExecutorExitCode(t *testing.T) {
 	executor := NewRealExecutor()
 	req := ExecuteRequest{
-		Token:   "test-token",
 		Command: "sh",
 		Args:    []string{"-c", "exit 42"},
 	}
@@ -152,7 +146,6 @@ func TestRealExecutorExitCode(t *testing.T) {
 func TestRealExecutorStderr(t *testing.T) {
 	executor := NewRealExecutor()
 	req := ExecuteRequest{
-		Token:   "test-token",
 		Command: "sh",
 		Args:    []string{"-c", "echo error_message >&2"},
 	}
@@ -174,7 +167,6 @@ func TestRealExecutorContextCancelled(t *testing.T) {
 	cancel() // Cancel immediately
 
 	req := ExecuteRequest{
-		Token:   "test-token",
 		Command: "sleep",
 		Args:    []string{"10"},
 	}
@@ -196,7 +188,6 @@ func TestRealExecutorPreserveInheritedEnv(t *testing.T) {
 
 	executor := NewRealExecutor()
 	req := ExecuteRequest{
-		Token:   "test-token",
 		Command: "sh",
 		Args:    []string{"-c", "echo $EXECUTOR_TEST_INHERITED $TEST_CUSTOM"},
 		Env:     map[string]string{"TEST_CUSTOM": "custom_value"},

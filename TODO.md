@@ -437,15 +437,15 @@ Create the in-container wrapper script that communicates with the request server
 Complete the approval UI with real-time updates via Server-Sent Events.
 
 ### 4.8.1 Implement SSE endpoint
-- [ ] Create `GET /events` SSE endpoint
-- [ ] Broadcast events when:
+- [x] Create `GET /events` SSE endpoint
+- [x] Broadcast events when:
   - New request added to queue
   - Request approved/denied/timed out
-- [ ] **Test (unit)**: SSE endpoint sends correctly formatted events
+- [x] **Test (unit)**: SSE endpoint sends correctly formatted events
 
 ### 4.8.2 Integrate SSE into approval UI
-- [ ] Client subscribes on page load
-- [ ] Use htmx SSE extension or native EventSource for updates
+- [x] Client subscribes on page load
+- [x] Use htmx SSE extension or native EventSource for updates
 - [ ] **Test (manual)**: New request appears without page refresh
 
 ---

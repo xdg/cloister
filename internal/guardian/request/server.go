@@ -159,6 +159,14 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.Args) == 0 {
+		s.writeJSON(w, http.StatusBadRequest, CommandResponse{
+			Status: "error",
+			Reason: "args is required",
+		})
+		return
+	}
+
 	// Get cloister info from context (set by auth middleware)
 	info, ok := CloisterInfo(r.Context())
 	if !ok {
@@ -185,7 +193,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	switch result.Action {
 	case patterns.AutoApprove:
 		// Auto-approved: proceed to execution
-		resp := s.executeCommand(info.Token, req.Cmd, "auto_approved", result.Pattern)
+		resp := s.executeCommand(req.Args, "auto_approved", result.Pattern)
 		s.writeJSON(w, http.StatusOK, resp)
 
 	case patterns.ManualApprove:
@@ -224,7 +232,15 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 		// Block waiting for approval, denial, or timeout
 		approvalResp := <-respChan
-		// Convert approval.Response to CommandResponse (same structure)
+
+		// If approved, execute the command
+		if approvalResp.Status == "approved" {
+			resp := s.executeCommand(req.Args, "approved", "")
+			s.writeJSON(w, http.StatusOK, resp)
+			return
+		}
+
+		// For denied/timeout/error, pass through the response
 		s.writeJSON(w, http.StatusOK, CommandResponse{
 			Status:   approvalResp.Status,
 			Pattern:  approvalResp.Pattern,
@@ -258,9 +274,10 @@ func (s *Server) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 }
 
 // executeCommand runs the command through the executor and returns a CommandResponse.
+// The args parameter is the tokenized argument array (args[0] is the command).
 // The status parameter is used for the response status (e.g., "approved" or "auto_approved").
 // The pattern parameter is included in the response for auto_approved commands.
-func (s *Server) executeCommand(token, cmd, status, pattern string) CommandResponse {
+func (s *Server) executeCommand(args []string, status, pattern string) CommandResponse {
 	if s.CommandExecutor == nil {
 		return CommandResponse{
 			Status: "error",
@@ -268,12 +285,20 @@ func (s *Server) executeCommand(token, cmd, status, pattern string) CommandRespo
 		}
 	}
 
+	if len(args) == 0 {
+		return CommandResponse{
+			Status: "error",
+			Reason: "empty args array",
+		}
+	}
+
 	// Build the executor request
-	// The command string is passed as-is; the host executor will parse it
+	// args[0] is the command, args[1:] are the arguments
+	// Using pre-tokenized args prevents shell injection
 	execReq := executor.ExecuteRequest{
-		Token:   token,
-		Command: cmd,
-		// Workdir, Args, Env, and TimeoutMs can be extended later
+		Command: args[0],
+		Args:    args[1:],
+		// Workdir, Env, and TimeoutMs can be extended later
 	}
 
 	execResp, err := s.CommandExecutor.Execute(execReq)

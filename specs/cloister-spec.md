@@ -206,9 +206,9 @@ The guardian is a hybrid of a container and a host process, working together:
 - Forwards approved proxy requests to the internet via `bridge`
 
 **Host Process (`cloister` binary):**
-- Listens on a Unix socket (`~/.local/share/cloister/hostexec.sock`)
+- Listens on a TCP port on localhost (random port)
 - Executes approved host commands
-- Socket is bind-mounted into the guardian container
+- Guardian container connects via `host.docker.internal:<port>`
 
 This separation is necessary because:
 1. Cloisters are on an `--internal` network with no route to the host
@@ -220,7 +220,7 @@ This separation is necessary because:
 | Proxy Server | 3128 | `cloister-net` | HTTP CONNECT proxy with domain allowlist |
 | Request Server | 9998 | `cloister-net` | Command execution requests from hostexec |
 | Approval Server | 9999 | `127.0.0.1` | Web UI for human review and approval |
-| Host Executor | Unix socket | Host | Executes approved commands on host |
+| Host Executor | TCP (localhost) | Host | Executes approved commands on host |
 
 See [guardian-api.md](guardian-api.md) for full endpoint documentation.
 
@@ -275,7 +275,7 @@ cloister guardian stop            # Stop guardian
     └── cloister-frontend
 
 ~/.local/share/cloister/
-├── hostexec.sock              # Unix socket for host command execution
+├── executor.json              # Executor daemon state (PID, port, secret)
 ├── audit.log                  # Unified audit log
 ├── logs/                      # Per-cloister logs (named by cloister)
 │   ├── my-api-main.log
@@ -336,7 +336,7 @@ The `--internal` flag on `cloister-net` prevents cloister containers from reachi
 
 All cloisters share `cloister-net` and communicate through the guardian. The guardian authenticates requests using a per-cloister token (`CLOISTER_TOKEN`). This prevents one cloister from spoofing requests as another.
 
-For host command execution, approved requests flow from the guardian container to the host process via a Unix socket (`hostexec.sock`), which is bind-mounted into the container.
+For host command execution, approved requests flow from the guardian container to the host process via TCP. The guardian connects to `host.docker.internal:<port>` where `<port>` is the executor's dynamically assigned port.
 
 **Token lifecycle:**
 

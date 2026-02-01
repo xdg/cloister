@@ -1,5 +1,5 @@
 // Package executor provides a client for the guardian to communicate
-// with the host executor via Unix socket.
+// with the host executor via TCP (or Unix socket for legacy support).
 package executor
 
 import (
@@ -12,21 +12,40 @@ import (
 )
 
 // DefaultSocketPath is the default path to the hostexec socket inside the guardian container.
+// Deprecated: Use TCP mode via NewTCPClient instead.
 const DefaultSocketPath = "/var/run/hostexec.sock"
 
-// Client communicates with the host executor via Unix socket.
+// HostDockerInternal is the hostname that Docker containers use to reach the host.
+const HostDockerInternal = "host.docker.internal"
+
+// Client communicates with the host executor via TCP or Unix socket.
 type Client struct {
-	socketPath string
-	secret     string
+	network string // "tcp" or "unix"
+	address string // TCP address or socket path
+	secret  string
 }
 
-// NewClient creates a new executor client.
+// NewClient creates a new executor client using Unix socket.
+// Deprecated: Use NewTCPClient for Docker compatibility.
 // socketPath is the path to the Unix socket (typically /var/run/hostexec.sock).
 // secret is the shared secret for authentication.
 func NewClient(socketPath, secret string) *Client {
 	return &Client{
-		socketPath: socketPath,
-		secret:     secret,
+		network: "unix",
+		address: socketPath,
+		secret:  secret,
+	}
+}
+
+// NewTCPClient creates a new executor client using TCP.
+// port is the TCP port on the host that the executor is listening on.
+// secret is the shared secret for authentication.
+// The client will connect to host.docker.internal:port.
+func NewTCPClient(port int, secret string) *Client {
+	return &Client{
+		network: "tcp",
+		address: fmt.Sprintf("%s:%d", HostDockerInternal, port),
+		secret:  secret,
 	}
 }
 
@@ -34,10 +53,10 @@ func NewClient(socketPath, secret string) *Client {
 // It opens a new connection for each request, sends the request as newline-delimited JSON,
 // reads the response, and closes the connection.
 func (c *Client) Execute(req executor.ExecuteRequest) (*executor.ExecuteResponse, error) {
-	// Connect to the Unix socket
-	conn, err := net.Dial("unix", c.socketPath)
+	// Connect to the executor
+	conn, err := net.Dial(c.network, c.address)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to executor socket: %w", err)
+		return nil, fmt.Errorf("failed to connect to executor (%s): %w", c.address, err)
 	}
 	defer conn.Close()
 

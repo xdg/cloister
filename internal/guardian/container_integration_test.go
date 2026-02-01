@@ -3,7 +3,11 @@
 package guardian
 
 import (
+	"bufio"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -11,7 +15,6 @@ import (
 
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/executor"
-	executorclient "github.com/xdg/cloister/internal/guardian/executor"
 )
 
 // requireDocker skips the test if Docker is not available.
@@ -137,18 +140,16 @@ func TestGuardian_Lifecycle(t *testing.T) {
 		}
 	})
 
-	t.Run("Executor_SocketExists", func(t *testing.T) {
-		socketPath, err := HostSocketPath()
+	t.Run("Executor_TCPPortAvailable", func(t *testing.T) {
+		state, err := executor.LoadDaemonState()
 		if err != nil {
-			t.Fatalf("HostSocketPath() error: %v", err)
+			t.Fatalf("LoadDaemonState() error: %v", err)
 		}
-		info, err := os.Stat(socketPath)
-		if err != nil {
-			t.Errorf("Socket file should exist at %s: %v", socketPath, err)
-			return
+		if state == nil {
+			t.Fatal("Expected daemon state to exist after guardian start")
 		}
-		if info.Mode().Type()&os.ModeSocket == 0 {
-			t.Errorf("Expected socket file, got mode %v", info.Mode())
+		if state.TCPPort == 0 {
+			t.Error("Expected TCPPort to be set in daemon state")
 		}
 	})
 
@@ -166,7 +167,7 @@ func TestGuardian_Lifecycle(t *testing.T) {
 	})
 
 	t.Run("Executor_ClientCanExecuteCommand", func(t *testing.T) {
-		// Load daemon state to get the socket path and secret
+		// Load daemon state to get the TCP port and secret
 		state, err := executor.LoadDaemonState()
 		if err != nil {
 			t.Fatalf("LoadDaemonState() error: %v", err)
@@ -175,20 +176,48 @@ func TestGuardian_Lifecycle(t *testing.T) {
 			t.Fatal("Expected daemon state to exist after guardian start")
 		}
 
-		// Create executor client with socket path and secret from daemon state
-		client := executorclient.NewClient(state.SocketPath, state.Secret)
-
-		// Execute a simple echo command
-		req := executor.ExecuteRequest{
-			Token:   "test-token", // Token is validated by the guardian, not the executor
-			Command: "echo",
-			Args:    []string{"hello"},
-		}
-
-		resp, err := client.Execute(req)
+		// Connect to executor via TCP (using localhost since we're on the host)
+		addr := fmt.Sprintf("127.0.0.1:%d", state.TCPPort)
+		conn, err := net.Dial("tcp", addr)
 		if err != nil {
-			t.Fatalf("Execute() error: %v", err)
+			t.Fatalf("Failed to connect to executor at %s: %v", addr, err)
 		}
+		defer conn.Close()
+
+		// Build request
+		// Token validation is handled by the guardian before forwarding to executor
+		req := executor.SocketRequest{
+			Secret: state.Secret,
+			Request: executor.ExecuteRequest{
+				Command: "echo",
+				Args:    []string{"hello"},
+			},
+		}
+
+		// Send request
+		reqData, _ := json.Marshal(req)
+		reqData = append(reqData, '\n')
+		if _, err := conn.Write(reqData); err != nil {
+			t.Fatalf("Failed to send request: %v", err)
+		}
+
+		// Read response
+		reader := bufio.NewReader(conn)
+		respLine, err := reader.ReadBytes('\n')
+		if err != nil {
+			t.Fatalf("Failed to read response: %v", err)
+		}
+
+		var socketResp executor.SocketResponse
+		if err := json.Unmarshal(respLine, &socketResp); err != nil {
+			t.Fatalf("Failed to parse response: %v", err)
+		}
+
+		if !socketResp.Success {
+			t.Fatalf("Request failed: %s", socketResp.Error)
+		}
+
+		resp := socketResp.Response
 
 		// Verify the response
 		if resp.Status != executor.StatusCompleted {
@@ -209,12 +238,6 @@ func TestGuardian_Lifecycle(t *testing.T) {
 
 	// Stop guardian and verify cleanup
 	t.Run("Stop_CleansUpExecutor", func(t *testing.T) {
-		// Get socket path before stopping
-		socketPath, err := HostSocketPath()
-		if err != nil {
-			t.Fatalf("HostSocketPath() error: %v", err)
-		}
-
 		// Stop the guardian
 		if err := Stop(); err != nil {
 			t.Fatalf("Stop() error: %v", err)
@@ -236,11 +259,6 @@ func TestGuardian_Lifecycle(t *testing.T) {
 		}
 		if state != nil && executor.IsDaemonRunning(state) {
 			t.Errorf("Executor daemon should not be running after Stop() (PID %d)", state.PID)
-		}
-
-		// Verify socket is removed
-		if _, err := os.Stat(socketPath); !os.IsNotExist(err) {
-			t.Errorf("Socket file should be removed after Stop(): %v", err)
 		}
 	})
 }

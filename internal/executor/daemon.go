@@ -14,7 +14,8 @@ import (
 type DaemonState struct {
 	PID        int    `json:"pid"`
 	Secret     string `json:"secret"`
-	SocketPath string `json:"socket_path"`
+	SocketPath string `json:"socket_path,omitempty"` // Deprecated: use TCPPort
+	TCPPort    int    `json:"tcp_port,omitempty"`    // Port for TCP mode
 }
 
 // DaemonStateDir returns the directory for daemon state files.

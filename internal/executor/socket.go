@@ -5,7 +5,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -13,6 +13,7 @@ import (
 )
 
 // DefaultSocketPath is the default path for the hostexec Unix socket.
+// Deprecated: Use TCP mode instead for cross-platform compatibility.
 var DefaultSocketPath = filepath.Join(os.Getenv("HOME"), ".local", "share", "cloister", "hostexec.sock")
 
 // SocketRequest is the JSON request sent over the Unix socket.
@@ -30,21 +31,12 @@ type SocketResponse struct {
 	Response ExecuteResponse `json:"response,omitempty"`
 }
 
-// TokenValidator validates a token and returns the associated worktree path.
-// Returns an error if the token is invalid.
-type TokenValidator func(token string) (worktreePath string, err error)
-
-// WorkdirValidator validates that the requested workdir matches the token's registered worktree.
-// Returns an error if the workdir does not match.
-type WorkdirValidator func(requestedWorkdir, registeredWorktree string) error
-
-// SocketServer listens on a Unix socket and executes commands via an Executor.
+// SocketServer listens on a Unix socket or TCP port and executes commands via an Executor.
 type SocketServer struct {
-	socketPath       string
-	secret           string
-	executor         Executor
-	tokenValidator   TokenValidator
-	workdirValidator WorkdirValidator
+	socketPath string
+	tcpAddr    string // If set, use TCP instead of Unix socket
+	secret     string
+	executor   Executor
 
 	listener net.Listener
 	wg       sync.WaitGroup
@@ -62,31 +54,24 @@ func WithSocketPath(path string) SocketServerOption {
 	}
 }
 
-// WithTokenValidator sets a custom token validator.
-func WithTokenValidator(v TokenValidator) SocketServerOption {
+// WithTCPAddr configures the server to listen on a TCP address instead of Unix socket.
+// The address should be in the form "host:port" or ":port".
+// Use ":0" to let the OS choose a random available port.
+func WithTCPAddr(addr string) SocketServerOption {
 	return func(s *SocketServer) {
-		s.tokenValidator = v
-	}
-}
-
-// WithWorkdirValidator sets a custom workdir validator.
-func WithWorkdirValidator(v WorkdirValidator) SocketServerOption {
-	return func(s *SocketServer) {
-		s.workdirValidator = v
+		s.tcpAddr = addr
 	}
 }
 
 // NewSocketServer creates a new SocketServer.
-// The secret is used to authenticate requests.
-// The executor is used to execute commands.
+// The secret is used to authenticate requests from the guardian.
+// Token validation is handled by the guardian before forwarding to the executor.
 func NewSocketServer(secret string, executor Executor, opts ...SocketServerOption) *SocketServer {
 	s := &SocketServer{
-		socketPath:       DefaultSocketPath,
-		secret:           secret,
-		executor:         executor,
-		tokenValidator:   defaultTokenValidator,
-		workdirValidator: defaultWorkdirValidator,
-		shutdown:         make(chan struct{}),
+		socketPath: DefaultSocketPath,
+		secret:     secret,
+		executor:   executor,
+		shutdown:   make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -94,48 +79,48 @@ func NewSocketServer(secret string, executor Executor, opts ...SocketServerOptio
 	return s
 }
 
-// defaultTokenValidator is a placeholder that accepts all tokens.
-// It will be replaced in Phase 4.4.4 with real validation.
-func defaultTokenValidator(token string) (string, error) {
-	// Placeholder: accept all tokens, return empty worktree path
-	return "", nil
-}
-
-// defaultWorkdirValidator is a placeholder that accepts all workdirs.
-// It will be replaced in Phase 4.4.5 with real validation.
-func defaultWorkdirValidator(requestedWorkdir, registeredWorktree string) error {
-	// Placeholder: accept all workdirs
-	return nil
-}
-
-// Start begins listening on the Unix socket.
-// It creates the parent directory if needed and sets socket permissions to 0600.
-// Returns an error if the socket cannot be created.
+// Start begins listening on the configured address.
+// For TCP mode (WithTCPAddr), it listens on the specified TCP address.
+// For Unix socket mode (default), it creates the parent directory if needed
+// and sets socket permissions to 0600.
+// Returns an error if the listener cannot be created.
 func (s *SocketServer) Start() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Create parent directory if needed
-	dir := filepath.Dir(s.socketPath)
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return err
-	}
+	var listener net.Listener
+	var err error
 
-	// Remove existing socket if present
-	if err := os.Remove(s.socketPath); err != nil && !os.IsNotExist(err) {
-		return err
-	}
+	if s.tcpAddr != "" {
+		// TCP mode
+		listener, err = net.Listen("tcp", s.tcpAddr)
+		if err != nil {
+			return fmt.Errorf("failed to listen on TCP %s: %w", s.tcpAddr, err)
+		}
+	} else {
+		// Unix socket mode
+		// Create parent directory if needed
+		dir := filepath.Dir(s.socketPath)
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			return err
+		}
 
-	// Listen on Unix socket
-	listener, err := net.Listen("unix", s.socketPath)
-	if err != nil {
-		return err
-	}
+		// Remove existing socket if present
+		if err := os.Remove(s.socketPath); err != nil && !os.IsNotExist(err) {
+			return err
+		}
 
-	// Set socket permissions to 0600 (owner read/write only)
-	if err := os.Chmod(s.socketPath, 0600); err != nil {
-		listener.Close()
-		return err
+		// Listen on Unix socket
+		listener, err = net.Listen("unix", s.socketPath)
+		if err != nil {
+			return err
+		}
+
+		// Set socket permissions to 0600 (owner read/write only)
+		if err := os.Chmod(s.socketPath, 0600); err != nil {
+			listener.Close()
+			return err
+		}
 	}
 
 	s.listener = listener
@@ -161,20 +146,45 @@ func (s *SocketServer) Stop() error {
 
 	// Close listener to stop accepting new connections
 	err := s.listener.Close()
+	isTCP := s.tcpAddr != ""
 	s.mu.Unlock()
 
 	// Wait for all connections to complete
 	s.wg.Wait()
 
-	// Remove socket file
-	os.Remove(s.socketPath)
+	// Remove socket file (only for Unix socket mode)
+	if !isTCP {
+		os.Remove(s.socketPath)
+	}
 
 	return err
 }
 
 // SocketPath returns the path to the Unix socket.
+// Returns empty string if using TCP mode.
 func (s *SocketServer) SocketPath() string {
+	if s.tcpAddr != "" {
+		return ""
+	}
 	return s.socketPath
+}
+
+// ListenAddr returns the actual address the server is listening on.
+// For TCP mode, this is the bound TCP address (useful when using :0).
+// For Unix socket mode, this returns the socket path.
+func (s *SocketServer) ListenAddr() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.listener == nil {
+		return ""
+	}
+	return s.listener.Addr().String()
+}
+
+// IsTCP returns true if the server is configured for TCP mode.
+func (s *SocketServer) IsTCP() bool {
+	return s.tcpAddr != ""
 }
 
 // acceptLoop accepts connections until shutdown.
@@ -222,22 +232,10 @@ func (s *SocketServer) handleConnection(conn net.Conn) {
 		return
 	}
 
-	// Validate shared secret
+	// Validate shared secret (guardian-executor authentication)
+	// Token validation is handled by the guardian before forwarding requests
 	if req.Secret != s.secret {
 		s.writeError(conn, "invalid secret")
-		return
-	}
-
-	// Validate token
-	registeredWorktree, err := s.tokenValidator(req.Request.Token)
-	if err != nil {
-		s.writeError(conn, "invalid token: "+err.Error())
-		return
-	}
-
-	// Validate workdir
-	if err := s.workdirValidator(req.Request.Workdir, registeredWorktree); err != nil {
-		s.writeError(conn, "workdir mismatch: "+err.Error())
 		return
 	}
 
@@ -280,9 +278,3 @@ func (s *SocketServer) writeResponse(conn net.Conn, resp SocketResponse) {
 	data = append(data, '\n')
 	_, _ = conn.Write(data) // Ignore write error; connection may be closed
 }
-
-// ErrInvalidToken is returned when a token is not found in the registry.
-var ErrInvalidToken = errors.New("token not found")
-
-// ErrWorkdirMismatch is returned when the requested workdir doesn't match the registered worktree.
-var ErrWorkdirMismatch = errors.New("workdir does not match registered worktree")

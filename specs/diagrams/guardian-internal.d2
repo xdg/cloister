@@ -20,7 +20,7 @@ container: cloister-guardian container {
     style.stroke: "#a84"
   }
 
-  socket_client: "Socket Client" {
+  tcp_client: "TCP Client" {
     style.fill: "#e8f8e8"
     style.stroke: "#4a4"
   }
@@ -28,15 +28,15 @@ container: cloister-guardian container {
   request_server -> approval_server: pending request
   approval_server -> request_server: approval/denial
 
-  approval_server -> socket_client: approved hostexec
-  socket_client -> approval_server: command result
+  approval_server -> tcp_client: approved hostexec
+  tcp_client -> approval_server: command result
 }
 
 host: Host Process (cloister binary) {
   style.fill: "#e8f8e8"
   style.stroke: "#4a4"
 
-  socket_listener: "Unix Socket Listener\nhostexec.sock" {
+  tcp_server: "TCP Server\n127.0.0.1:<port>" {
     style.fill: "#d8f0d8"
   }
 
@@ -44,12 +44,12 @@ host: Host Process (cloister binary) {
     style.fill: "#d8f0d8"
   }
 
-  socket_listener -> executor: execute
-  executor -> socket_listener: stdout/stderr/exit
+  tcp_server -> executor: execute
+  executor -> tcp_server: stdout/stderr/exit
 }
 
-# Unix socket IPC
-container.socket_client <-> host.socket_listener: Unix socket\n(bind-mounted) {
+# TCP IPC via host.docker.internal
+container.tcp_client <-> host.tcp_server: TCP\n(host.docker.internal) {
   style.stroke: "#4a4"
   style.stroke-dash: 3
 }

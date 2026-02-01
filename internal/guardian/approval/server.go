@@ -60,10 +60,13 @@ type Server struct {
 // The server binds to 0.0.0.0 inside the container (for Docker port publishing)
 // but is only exposed to host localhost via -p 127.0.0.1:9999:9999.
 func NewServer(queue *Queue) *Server {
+	events := NewEventHub()
+	// Wire the event hub to the queue so it can broadcast SSE events
+	queue.SetEventHub(events)
 	return &Server{
 		Addr:   fmt.Sprintf(":%d", DefaultApprovalPort),
 		Queue:  queue,
-		Events: NewEventHub(),
+		Events: events,
 	}
 }
 
@@ -225,6 +228,11 @@ func (s *Server) handlePending(w http.ResponseWriter, r *http.Request) {
 	s.writeJSON(w, http.StatusOK, response)
 }
 
+// HeartbeatInterval is the interval between heartbeat events sent to SSE clients.
+// This keeps connections alive through proxies and load balancers that may
+// close idle connections.
+const HeartbeatInterval = 30 * time.Second
+
 // handleEvents serves the SSE endpoint for real-time updates.
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// Set headers for SSE
@@ -251,12 +259,24 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// Flush headers immediately so client knows connection is established
 	flusher.Flush()
 
+	// Start heartbeat ticker to keep connection alive
+	ticker := time.NewTicker(HeartbeatInterval)
+	defer ticker.Stop()
+
 	// Stream events to client
 	for {
 		select {
 		case <-r.Context().Done():
 			// Client disconnected
 			return
+		case <-ticker.C:
+			// Send heartbeat to keep connection alive
+			heartbeat := Event{Type: EventHeartbeat, Data: ""}
+			_, err := fmt.Fprint(w, FormatSSE(heartbeat))
+			if err != nil {
+				return
+			}
+			flusher.Flush()
 		case event, ok := <-eventCh:
 			if !ok {
 				// Event hub closed

@@ -147,8 +147,12 @@ func IsRunning() (bool, error) {
 // StartOptions configures guardian container startup.
 type StartOptions struct {
 	// SocketPath is the path to the hostexec socket on the host.
-	// If empty, the socket is not mounted.
+	// Deprecated: Use TCPPort instead.
 	SocketPath string
+
+	// TCPPort is the TCP port the executor is listening on (on the host).
+	// The guardian container will connect to host.docker.internal:TCPPort.
+	TCPPort int
 
 	// SharedSecret is the secret for authenticating executor requests.
 	// If empty, the executor is not enabled.
@@ -232,9 +236,9 @@ func StartWithOptions(opts StartOptions) error {
 		"-v", hostConfigDir + ":" + ContainerConfigDir + ":ro",
 	}
 
-	// Add executor socket mount if provided
-	if opts.SocketPath != "" {
-		args = append(args, "-v", opts.SocketPath+":"+ContainerSocketPath)
+	// Add executor TCP port if provided (for host.docker.internal connection)
+	if opts.TCPPort > 0 {
+		args = append(args, "-e", fmt.Sprintf("%s=%d", ExecutorPortEnvVar, opts.TCPPort))
 	}
 
 	// Add shared secret environment variable if provided
@@ -304,9 +308,9 @@ func EnsureRunning() error {
 		return fmt.Errorf("failed to start executor: %w", err)
 	}
 
-	// Start the guardian container with executor socket mounted
+	// Start the guardian container with executor TCP port
 	opts := StartOptions{
-		SocketPath:   execInfo.SocketPath,
+		TCPPort:      execInfo.TCPPort,
 		SharedSecret: execInfo.Secret,
 	}
 	if err := StartWithOptions(opts); err != nil {

@@ -10,7 +10,6 @@ type Executor interface {
 
 // ExecuteRequest contains the command execution parameters.
 type ExecuteRequest struct {
-	Token     string            `json:"token"`
 	Command   string            `json:"command"`
 	Args      []string          `json:"args"`
 	Workdir   string            `json:"workdir"`

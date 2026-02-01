@@ -82,7 +82,7 @@ Both are AI coding agent sandboxing systems written in Go that use containers an
 ```
 
 **Key components:**
-- **Guardian**: Hybrid architecture—container on two networks (cloister-net + bridge) plus host process for command execution via Unix socket
+- **Guardian**: Hybrid architecture—container on two networks (cloister-net + bridge) plus host process for command execution via TCP
 - **Internal network**: Docker `--internal` flag prevents direct egress
 - **hostexec**: In-container binary that sends commands to guardian for approval/execution
 - **Per-cloister logs**: Audit trails organized by project/branch

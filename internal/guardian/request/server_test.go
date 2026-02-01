@@ -184,7 +184,7 @@ func TestServer_HandleRequest_ValidRequest_NilMatcher(t *testing.T) {
 	server := NewServer(lookup, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello"}
+	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -233,7 +233,7 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 
 	// Make a real HTTP request to the running server
 	url := "http://" + server.ListenAddr() + "/request"
-	cmdReq := CommandRequest{Cmd: "echo hello"}
+	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
@@ -320,7 +320,7 @@ func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 
 	mockExec := &mockCommandExecutor{
 		responses: map[string]*executor.ExecuteResponse{
-			"docker compose ps": {
+			"docker": {
 				Status:   executor.StatusCompleted,
 				ExitCode: 0,
 				Stdout:   "NAME    STATUS\nweb     running",
@@ -331,7 +331,7 @@ func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose ps"}
+	cmdReq := CommandRequest{Cmd: "docker compose ps", Args: []string{"docker", "compose", "ps"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -380,7 +380,7 @@ func TestServer_HandleRequest_ManualApprove_NilQueue(t *testing.T) {
 	server := NewServer(lookup, matcher, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose up -d"}
+	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -422,7 +422,7 @@ func TestServer_HandleRequest_Deny(t *testing.T) {
 	server := NewServer(lookup, matcher, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "rm -rf /"}
+	cmdReq := CommandRequest{Cmd: "rm -rf /", Args: []string{"rm", "-rf", "/"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -457,7 +457,7 @@ func TestServer_HandleRequest_NoPatternMatcher(t *testing.T) {
 	server := NewServer(lookup, nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello"}
+	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -494,13 +494,24 @@ func TestServer_HandleRequest_ManualApprove_BlocksUntilApproval(t *testing.T) {
 		},
 	}
 
-	// Create server with an approval queue
+	// Mock executor that returns expected output
+	mockExec := &mockCommandExecutor{
+		responses: map[string]*executor.ExecuteResponse{
+			"docker": {
+				Status:   executor.StatusCompleted,
+				ExitCode: 0,
+				Stdout:   "containers started",
+			},
+		},
+	}
+
+	// Create server with an approval queue and executor
 	queue := approval.NewQueue()
-	server := NewServer(lookup, matcher, nil)
+	server := NewServer(lookup, matcher, mockExec)
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose up -d"}
+	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -540,11 +551,9 @@ func TestServer_HandleRequest_ManualApprove_BlocksUntilApproval(t *testing.T) {
 		t.Fatal("failed to get pending request by ID")
 	}
 
-	// Send approval response
+	// Send approval response (executor provides the output)
 	actualReq.Response <- approval.Response{
-		Status:   "approved",
-		ExitCode: 0,
-		Stdout:   "containers started",
+		Status: "approved",
 	}
 	queue.Remove(pending[0].ID)
 
@@ -594,7 +603,7 @@ func TestServer_HandleRequest_ManualApprove_Timeout(t *testing.T) {
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose up -d"}
+	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -657,7 +666,7 @@ func TestServer_HandleRequest_ManualApprove_Denied(t *testing.T) {
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "docker compose up -d"}
+	cmdReq := CommandRequest{Cmd: "docker compose up -d", Args: []string{"docker", "compose", "up", "-d"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -769,7 +778,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorCalled(t *testing.T) {
 
 	mockExec := &mockCommandExecutor{
 		responses: map[string]*executor.ExecuteResponse{
-			"echo hello": {
+			"echo": {
 				Status:   executor.StatusCompleted,
 				ExitCode: 0,
 				Stdout:   "hello\n",
@@ -780,7 +789,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorCalled(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello"}
+	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -827,7 +836,7 @@ func TestServer_HandleRequest_AutoApprove_NilExecutor(t *testing.T) {
 	server := NewServer(lookup, matcher, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello"}
+	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -871,7 +880,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorError(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "echo hello"}
+	cmdReq := CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -910,7 +919,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorTimeout(t *testing.T) {
 
 	mockExec := &mockCommandExecutor{
 		responses: map[string]*executor.ExecuteResponse{
-			"slow command": {
+			"slow": {
 				Status:   executor.StatusTimeout,
 				ExitCode: -1,
 				Stdout:   "partial output",
@@ -922,7 +931,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorTimeout(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "slow command"}
+	cmdReq := CommandRequest{Cmd: "slow command", Args: []string{"slow", "command"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -965,7 +974,7 @@ func TestServer_HandleRequest_AutoApprove_CommandFailed(t *testing.T) {
 
 	mockExec := &mockCommandExecutor{
 		responses: map[string]*executor.ExecuteResponse{
-			"failing command": {
+			"failing": {
 				Status:   executor.StatusCompleted,
 				ExitCode: 1,
 				Stderr:   "error: command failed",
@@ -976,7 +985,7 @@ func TestServer_HandleRequest_AutoApprove_CommandFailed(t *testing.T) {
 	server := NewServer(lookup, matcher, mockExec)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
-	cmdReq := CommandRequest{Cmd: "failing command"}
+	cmdReq := CommandRequest{Cmd: "failing command", Args: []string{"failing", "command"}}
 	body, _ := json.Marshal(cmdReq)
 	req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")

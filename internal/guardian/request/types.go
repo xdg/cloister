@@ -4,7 +4,13 @@ package request
 
 // CommandRequest represents a command execution request from a cloister container.
 type CommandRequest struct {
+	// Cmd is the human-readable command string for pattern matching and display.
 	Cmd string `json:"cmd"`
+
+	// Args is the tokenized argument array for execution.
+	// Args[0] is the command/executable, Args[1:] are the arguments.
+	// Using a pre-tokenized array prevents shell injection attacks.
+	Args []string `json:"args,omitempty"`
 }
 
 // CommandResponse represents the result of a command execution request.

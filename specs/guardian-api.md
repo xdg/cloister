@@ -7,9 +7,9 @@ The guardian system exposes four interfaces:
 | Proxy (:3128) | `cloister-net` | HTTP CONNECT proxy | Containers |
 | Request Server (:9998) | `cloister-net` | Command execution requests | Containers (hostexec) |
 | Approval Server (:9999) | `127.0.0.1` | Web UI and API for human review | Host only |
-| Host Executor (Unix socket) | `hostexec.sock` | Command execution on host | Guardian container only |
+| Host Executor (TCP) | `host.docker.internal:<port>` | Command execution on host | Guardian container only |
 
-The first three run in the guardian container. The host executor runs as a separate process on the host, communicating with the guardian via a bind-mounted Unix socket.
+The first three run in the guardian container. The host executor runs as a separate process on the host, communicating with the guardian via TCP (using Docker's `host.docker.internal` hostname).
 
 For architecture overview, see [cloister-spec.md](cloister-spec.md).
 
@@ -45,7 +45,7 @@ Requests without valid credentials are rejected with 401 Unauthorized (proxy) or
 
 ### Guardian↔Executor Secret
 
-The Unix socket for host command execution requires a separate shared secret between the guardian container and the host executor process. This prevents unauthorized processes on the host from executing commands via the socket.
+The TCP connection for host command execution requires a shared secret between the guardian container and the host executor process. This prevents unauthorized processes from executing commands via the executor port.
 
 The secret is:
 
@@ -96,10 +96,20 @@ X-Cloister-Token: <token>
 
 The token is the sole source of cloister identity. The guardian looks up cloister metadata (name, project, branch) from its token registry.
 
+**Request fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `cmd` | Yes | Human-readable command string for pattern matching and display |
+| `args` | Yes | Tokenized argument array for execution (`args[0]` is the command) |
+
+The `cmd` field is used for pattern matching and human review. The `args` array is used for actual execution via `exec` (no shell), preventing shell injection attacks. The shell has already tokenized the arguments, so we preserve that tokenization.
+
 **Request body:**
 ```json
 {
-    "cmd": "docker compose up -d"
+    "cmd": "docker compose up -d",
+    "args": ["docker", "compose", "up", "-d"]
 }
 ```
 
@@ -315,9 +325,9 @@ Unregister a cloister token. Called by the CLI when stopping a container. Remove
 
 ---
 
-## Host Executor Socket
+## Host Executor
 
-Unix socket at `~/.local/share/cloister/hostexec.sock`. The socket is bind-mounted into the guardian container, allowing the guardian to send approved commands for execution on the host.
+TCP server on localhost (random port). The executor port is passed to the guardian container via `CLOISTER_EXECUTOR_PORT` environment variable. The guardian connects to `host.docker.internal:<port>` to send approved commands for execution on the host.
 
 ### Connection Model
 
@@ -341,33 +351,31 @@ Newline-delimited JSON (one object per line). Newlines within string values must
 **Request:**
 ```json
 {
-    "action": "execute",
     "secret": "e7f2a1b9c4d8...",
-    "token": "af3b2c1d...",
-    "command": "docker",
-    "args": ["compose", "up", "-d"],
-    "workdir": "/home/user/repos/my-api",
-    "env": {"DOCKER_HOST": "unix:///var/run/docker.sock"},
-    "timeout_ms": 300000
+    "request": {
+        "command": "docker",
+        "args": ["compose", "up", "-d"],
+        "workdir": "/home/user/repos/my-api",
+        "env": {"DOCKER_HOST": "unix:///var/run/docker.sock"},
+        "timeout_ms": 300000
+    }
 }
 ```
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| `action` | Yes | Always `"execute"` (allows future actions) |
 | `secret` | Yes | Guardian↔executor shared secret |
-| `token` | Yes | Cloister token for identity lookup and audit |
-| `command` | Yes | Executable name or path (no shell expansion) |
-| `args` | No | Arguments array (default: empty) |
-| `workdir` | Yes | Working directory; must match token's registered worktree |
-| `env` | No | Environment overrides (merged with host environment) |
-| `timeout_ms` | No | Execution timeout in milliseconds (default: 300000 = 5 min) |
+| `request.command` | Yes | Executable name or path (no shell expansion) |
+| `request.args` | No | Arguments array (default: empty) |
+| `request.workdir` | No | Working directory for command execution |
+| `request.env` | No | Environment overrides (merged with host environment) |
+| `request.timeout_ms` | No | Execution timeout in milliseconds (default: 300000 = 5 min) |
 
 **Validation order:**
 1. Verify `secret` matches executor's secret → reject if mismatch
-2. Look up `token` in registry → reject if unknown
-3. Verify `workdir` matches token's registered worktree path → reject if mismatch
-4. Execute command via `exec` (no shell)
+2. Execute command via `exec` (no shell)
+
+Token validation is handled by the guardian before forwarding requests to the executor. The executor trusts requests with valid shared secrets.
 
 Using `command` + `args` instead of a shell command string prevents shell injection. If shell features are needed, the approved command must explicitly be `["sh", "-c", "..."]`.
 
@@ -386,22 +394,6 @@ Using `command` + `args` instead of a shell command string prevents shell inject
 {
     "status": "error",
     "error": "invalid secret"
-}
-```
-
-**Response (unknown token):**
-```json
-{
-    "status": "error",
-    "error": "unknown token"
-}
-```
-
-**Response (workdir mismatch):**
-```json
-{
-    "status": "error",
-    "error": "workdir mismatch: got /tmp/evil, expected /home/user/repos/my-api"
 }
 ```
 
