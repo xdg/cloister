@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xdg/cloister/internal/docker"
+	"github.com/xdg/cloister/internal/executor"
 )
 
 // DockerOps abstracts Docker operations for testing guardian container management.
@@ -72,9 +73,6 @@ func SetDockerOps(ops DockerOps) {
 
 // Container constants for the guardian service.
 const (
-	// ContainerName is the name of the guardian container.
-	ContainerName = "cloister-guardian"
-
 	// DefaultImage is the Docker image used for the guardian container.
 	DefaultImage = "cloister:latest"
 
@@ -157,6 +155,14 @@ type StartOptions struct {
 	// SharedSecret is the secret for authenticating executor requests.
 	// If empty, the executor is not enabled.
 	SharedSecret string
+
+	// TokenAPIPort is the host port to expose for the guardian token API.
+	// If zero, defaults to 9997 for production or a dynamic port for test instances.
+	TokenAPIPort int
+
+	// ApprovalPort is the host port to expose for the guardian approval web UI.
+	// If zero, defaults to 9999 for production or a dynamic port for test instances.
+	ApprovalPort int
 }
 
 // Start starts the guardian container if it is not already running.
@@ -217,20 +223,31 @@ func StartWithOptions(opts StartOptions) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
+	// Determine ports to use
+	tokenAPIPort := opts.TokenAPIPort
+	approvalPort := opts.ApprovalPort
+	if tokenAPIPort == 0 || approvalPort == 0 {
+		var err error
+		tokenAPIPort, approvalPort, err = GuardianPorts()
+		if err != nil {
+			return fmt.Errorf("failed to allocate guardian ports: %w", err)
+		}
+	}
+
 	// Build docker run arguments
-	// Port 9997 is exposed to the host for the token management API
+	// Token API port is exposed to the host for the token management API
 	// (used by CLI to register/revoke tokens)
-	// Port 9999 is exposed to the host for the approval web UI
+	// Approval port is exposed to the host for the approval web UI
 	// (used by humans to approve/deny hostexec requests)
 	// Token directory is mounted read-only for recovery on restart
 	// Config directory is mounted read-only for allowlist configuration
 	// XDG_CONFIG_HOME=/etc so ConfigDir() returns /etc/cloister/
 	args := []string{
 		"run", "-d",
-		"--name", ContainerName,
+		"--name", ContainerName(),
 		"--network", docker.CloisterNetworkName,
-		"-p", "127.0.0.1:9997:9997",
-		"-p", "127.0.0.1:9999:9999",
+		"-p", fmt.Sprintf("127.0.0.1:%d:9997", tokenAPIPort),
+		"-p", fmt.Sprintf("127.0.0.1:%d:9999", approvalPort),
 		"-e", "XDG_CONFIG_HOME=/etc",
 		"-v", hostTokenDir + ":" + ContainerTokenDir + ":ro",
 		"-v", hostConfigDir + ":" + ContainerConfigDir + ":ro",
@@ -256,7 +273,7 @@ func StartWithOptions(opts StartOptions) error {
 	}
 
 	// Connect to bridge network for external access to upstream servers
-	_, err = defaultDockerOps.Run("network", "connect", BridgeNetwork, ContainerName)
+	_, err = defaultDockerOps.Run("network", "connect", BridgeNetwork, ContainerName())
 	if err != nil {
 		// If connecting to bridge fails, clean up the container
 		_ = removeContainer()
@@ -302,16 +319,47 @@ func EnsureRunning() error {
 		return nil
 	}
 
+	// Allocate ports for the guardian
+	tokenAPIPort, approvalPort, err := GuardianPorts()
+	if err != nil {
+		return fmt.Errorf("failed to allocate guardian ports: %w", err)
+	}
+
 	// Start the executor daemon first
 	execInfo, err := StartExecutor()
 	if err != nil {
 		return fmt.Errorf("failed to start executor: %w", err)
 	}
 
-	// Start the guardian container with executor TCP port
+	// Update executor state with guardian ports so clients can find them
+	execState, err := executor.LoadDaemonState()
+	if err != nil {
+		// Clean up executor if we can't read its state
+		if execInfo.Process != nil {
+			_ = execInfo.Process.Kill()
+		}
+		_ = StopExecutor()
+		return fmt.Errorf("failed to load executor state for port storage: %w", err)
+	}
+	if execState != nil {
+		execState.TokenAPIPort = tokenAPIPort
+		execState.ApprovalPort = approvalPort
+		if err := executor.SaveDaemonState(execState); err != nil {
+			// Clean up executor if we can't save state
+			if execInfo.Process != nil {
+				_ = execInfo.Process.Kill()
+			}
+			_ = StopExecutor()
+			return fmt.Errorf("failed to save guardian ports to executor state: %w", err)
+		}
+	}
+
+	// Start the guardian container with executor TCP port and allocated guardian ports
 	opts := StartOptions{
 		TCPPort:      execInfo.TCPPort,
 		SharedSecret: execInfo.Secret,
+		TokenAPIPort: tokenAPIPort,
+		ApprovalPort: approvalPort,
 	}
 	if err := StartWithOptions(opts); err != nil {
 		// Clean up executor if guardian fails to start
@@ -323,14 +371,20 @@ func EnsureRunning() error {
 	}
 
 	// Wait for API to be ready after fresh start
-	return WaitReady(5 * time.Second)
+	return WaitReadyWithPort(tokenAPIPort, 5*time.Second)
 }
 
 // WaitReady polls the guardian API until it responds or timeout is reached.
 // This ensures the API server inside the container has started accepting connections.
+// Uses the default API address (dynamic for test instances).
 func WaitReady(timeout time.Duration) error {
+	return WaitReadyWithPort(APIPort(), timeout)
+}
+
+// WaitReadyWithPort polls the guardian API on a specific port until it responds.
+func WaitReadyWithPort(port int, timeout time.Duration) error {
 	client := &http.Client{Timeout: 500 * time.Millisecond}
-	url := fmt.Sprintf("http://%s/tokens", DefaultAPIAddr)
+	url := fmt.Sprintf("http://localhost:%d/tokens", port)
 
 	deadline := time.Now().Add(timeout)
 	var lastErr error
@@ -356,7 +410,7 @@ func WaitReady(timeout time.Duration) error {
 // getContainerState retrieves the current state of the guardian container.
 // Returns nil if the container doesn't exist.
 func getContainerState() (*containerState, error) {
-	info, err := defaultDockerOps.FindContainerByExactName(ContainerName)
+	info, err := defaultDockerOps.FindContainerByExactName(ContainerName())
 	if err != nil {
 		return nil, err
 	}
@@ -374,10 +428,10 @@ func getContainerState() (*containerState, error) {
 // removeContainer stops and removes the guardian container.
 func removeContainer() error {
 	// Stop the container (ignore errors if already stopped)
-	_, _ = defaultDockerOps.Run("stop", ContainerName)
+	_, _ = defaultDockerOps.Run("stop", ContainerName())
 
 	// Remove the container
-	_, err := defaultDockerOps.Run("rm", ContainerName)
+	_, err := defaultDockerOps.Run("rm", ContainerName())
 	if err != nil {
 		var cmdErr *docker.CommandError
 		if errors.As(err, &cmdErr) {
@@ -393,7 +447,31 @@ func removeContainer() error {
 }
 
 // DefaultAPIAddr is the address where the guardian API is exposed to the host.
+// For production, this is "localhost:9997". For test instances, use APIAddr().
 const DefaultAPIAddr = "localhost:9997"
+
+// APIPort returns the port where the guardian token API is exposed.
+// For production (no instance ID), returns 9997.
+// For test instances, reads from executor state.
+func APIPort() int {
+	if InstanceID() == "" {
+		return DefaultTokenAPIPort
+	}
+	// For test instances, read from executor state
+	state, err := executor.LoadDaemonState()
+	if err != nil || state == nil || state.TokenAPIPort == 0 {
+		// Fallback to default if state not available
+		return DefaultTokenAPIPort
+	}
+	return state.TokenAPIPort
+}
+
+// APIAddr returns the address where the guardian token API is exposed.
+// For production, returns "localhost:9997".
+// For test instances, returns the dynamic port from executor state.
+func APIAddr() string {
+	return fmt.Sprintf("localhost:%d", APIPort())
+}
 
 // withGuardianClient checks if the guardian is running and returns a client.
 // Returns ErrGuardianNotRunning if the guardian is not running.
@@ -405,7 +483,7 @@ func withGuardianClient() (*Client, error) {
 	if !running {
 		return nil, ErrGuardianNotRunning
 	}
-	return NewClient(DefaultAPIAddr), nil
+	return NewClient(APIAddr()), nil
 }
 
 // RegisterToken registers a token with the guardian for a cloister.

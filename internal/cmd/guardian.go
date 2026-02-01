@@ -113,7 +113,7 @@ Warns if there are running cloister containers that depend on the guardian.`,
 		// Filter for running cloisters (exclude guardian itself)
 		var runningCloisters []string
 		for _, c := range containers {
-			if c.Name != guardian.ContainerName && c.State == "running" {
+			if c.Name != guardian.ContainerName() && c.State == "running" {
 				runningCloisters = append(runningCloisters, c.Name)
 			}
 		}
@@ -449,7 +449,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 // It uses docker inspect to get the StartedAt time and calculates the duration.
 func getGuardianUptime() (string, error) {
 	// Use docker inspect to get the container state
-	output, err := docker.Run("inspect", guardian.ContainerName)
+	output, err := docker.Run("inspect", guardian.ContainerName())
 	if err != nil {
 		return "", err
 	}

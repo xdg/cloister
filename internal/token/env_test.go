@@ -219,3 +219,19 @@ func TestDefaultProxyPort_Constant(t *testing.T) {
 		t.Errorf("DefaultProxyPort = %d, want %d", DefaultProxyPort, 3128)
 	}
 }
+
+func TestGuardianHost_Production(t *testing.T) {
+	t.Setenv(InstanceIDEnvVar, "")
+
+	if got := GuardianHost(); got != "cloister-guardian" {
+		t.Errorf("GuardianHost() = %q, want %q", got, "cloister-guardian")
+	}
+}
+
+func TestGuardianHost_TestInstance(t *testing.T) {
+	t.Setenv(InstanceIDEnvVar, "abc123")
+
+	if got := GuardianHost(); got != "cloister-guardian-abc123" {
+		t.Errorf("GuardianHost() = %q, want %q", got, "cloister-guardian-abc123")
+	}
+}

@@ -21,15 +21,16 @@ import (
 // on cloister-net can reach the guardian's proxy and request server.
 func TestNetworkIsolation_ContainerCanReachGuardian(t *testing.T) {
 	containerName := createTestContainer(t, "reach-guardian")
+	guardianHost := guardian.ContainerName()
 
 	// Wait for request server port to be ready
-	if err := waitForPort(t, containerName, "cloister-guardian", request.DefaultRequestPort, 5*time.Second); err != nil {
+	if err := waitForPort(t, containerName, guardianHost, request.DefaultRequestPort, 5*time.Second); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
 	// Test 1: Can reach proxy port 3128
 	t.Run("ProxyPort", func(t *testing.T) {
-		_, err := execInContainer(t, containerName, "nc", "-z", "-w", "2", "cloister-guardian", "3128")
+		_, err := execInContainer(t, containerName, "nc", "-z", "-w", "2", guardianHost, "3128")
 		if err != nil {
 			t.Errorf("Could not connect to proxy port 3128: %v", err)
 		}
@@ -37,7 +38,7 @@ func TestNetworkIsolation_ContainerCanReachGuardian(t *testing.T) {
 
 	// Test 2: Can reach request server port 9998
 	t.Run("RequestServerPort", func(t *testing.T) {
-		_, err := execInContainer(t, containerName, "nc", "-z", "-w", "2", "cloister-guardian", "9998")
+		_, err := execInContainer(t, containerName, "nc", "-z", "-w", "2", guardianHost, "9998")
 		if err != nil {
 			t.Errorf("Could not connect to request server port 9998: %v", err)
 		}
@@ -48,6 +49,7 @@ func TestNetworkIsolation_ContainerCanReachGuardian(t *testing.T) {
 // responds correctly to requests from containers on cloister-net.
 func TestNetworkIsolation_RequestServerReachable(t *testing.T) {
 	containerName := createTestContainer(t, "reqserver")
+	guardianHost := guardian.ContainerName()
 
 	// Register a test token with the guardian
 	testToken := fmt.Sprintf("test-token-%d", time.Now().UnixNano())
@@ -59,7 +61,7 @@ func TestNetworkIsolation_RequestServerReachable(t *testing.T) {
 	})
 
 	// Wait for request server port to be ready
-	if err := waitForPort(t, containerName, "cloister-guardian", request.DefaultRequestPort, 5*time.Second); err != nil {
+	if err := waitForPort(t, containerName, guardianHost, request.DefaultRequestPort, 5*time.Second); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -74,7 +76,7 @@ func TestNetworkIsolation_RequestServerReachable(t *testing.T) {
 		"-H", fmt.Sprintf("X-Cloister-Token: %s", testToken),
 		"-d", string(reqBody),
 		"-w", "\n%{http_code}",
-		fmt.Sprintf("http://cloister-guardian:%d/request", request.DefaultRequestPort))
+		fmt.Sprintf("http://%s:%d/request", guardianHost, request.DefaultRequestPort))
 
 	if err != nil {
 		var cmdErr *docker.CommandError
@@ -117,6 +119,7 @@ func TestNetworkIsolation_RequestServerReachable(t *testing.T) {
 // without a valid token are rejected with 401.
 func TestNetworkIsolation_UnauthorizedRequest(t *testing.T) {
 	containerName := createTestContainer(t, "unauth")
+	guardianHost := guardian.ContainerName()
 
 	cmdReq := request.CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
 	reqBody, _ := json.Marshal(cmdReq)
@@ -128,7 +131,7 @@ func TestNetworkIsolation_UnauthorizedRequest(t *testing.T) {
 		"-H", "X-Cloister-Token: invalid-token-12345",
 		"-d", string(reqBody),
 		"-w", "\n%{http_code}",
-		fmt.Sprintf("http://cloister-guardian:%d/request", request.DefaultRequestPort))
+		fmt.Sprintf("http://%s:%d/request", guardianHost, request.DefaultRequestPort))
 
 	if err != nil {
 		var cmdErr *docker.CommandError
@@ -168,13 +171,14 @@ func TestNetworkIsolation_HostCannotReachRequestServer(t *testing.T) {
 }
 
 // TestNetworkIsolation_HostCanReachAPIServer verifies that the API server
-// port (9997) IS exposed to the host for CLI operations.
+// port IS exposed to the host for CLI operations.
 func TestNetworkIsolation_HostCanReachAPIServer(t *testing.T) {
-	// Port 9997 should be exposed to localhost for CLI token management
+	// API port should be exposed to localhost for CLI token management
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get("http://localhost:9997/tokens")
+	apiAddr := guardian.APIAddr()
+	resp, err := client.Get(fmt.Sprintf("http://%s/tokens", apiAddr))
 	if err != nil {
-		t.Errorf("Expected connection to localhost:9997 to succeed: %v", err)
+		t.Errorf("Expected connection to %s to succeed: %v", apiAddr, err)
 		return
 	}
 	defer resp.Body.Close()

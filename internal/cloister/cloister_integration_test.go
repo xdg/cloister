@@ -15,6 +15,7 @@ import (
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/testutil"
+	"github.com/xdg/cloister/internal/token"
 )
 
 // TestCloisterLifecycle combines integration tests that require the guardian.
@@ -152,8 +153,9 @@ func TestCloisterLifecycle(t *testing.T) {
 			t.Errorf("CLOISTER_TOKEN = %q, want %q", tokenVal, tok)
 		}
 
-		// Verify proxy env vars
-		expectedProxy := "http://token:" + tok + "@cloister-guardian:3128"
+		// Verify proxy env vars (use dynamic guardian host for test isolation)
+		expectedHost := token.GuardianHost()
+		expectedProxy := "http://token:" + tok + "@" + expectedHost + ":3128"
 		for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
 			if val, ok := envMap[key]; !ok {
 				t.Errorf("%s not set in container", key)
@@ -163,7 +165,6 @@ func TestCloisterLifecycle(t *testing.T) {
 		}
 
 		// Verify CLOISTER_GUARDIAN_HOST
-		expectedHost := "cloister-guardian"
 		if hostVal, ok := envMap["CLOISTER_GUARDIAN_HOST"]; !ok {
 			t.Error("CLOISTER_GUARDIAN_HOST not set in container")
 		} else if hostVal != expectedHost {

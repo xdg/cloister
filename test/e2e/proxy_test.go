@@ -6,14 +6,17 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/xdg/cloister/internal/guardian"
 )
 
 // TestProxy_AllowedDomain verifies that allowed domains are accessible through the proxy.
 func TestProxy_AllowedDomain(t *testing.T) {
 	tc := createAuthenticatedTestContainer(t, "proxy-allow")
+	guardianHost := guardian.ContainerName()
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, "cloister-guardian", 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -23,7 +26,7 @@ func TestProxy_AllowedDomain(t *testing.T) {
 	// Authentication is required: --proxy-user :token (empty username, token as password).
 	output, err := execInContainer(t, tc.Name,
 		"sh", "-c",
-		"curl -s -o /dev/null -w '%{http_connect}:%{http_code}' --proxy http://cloister-guardian:3128 --proxy-user :"+tc.Token+" --max-time 10 https://golang.org/")
+		"curl -s -o /dev/null -w '%{http_connect}:%{http_code}' --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+" --max-time 10 https://golang.org/")
 
 	if err != nil {
 		if strings.Contains(output, "not found") {
@@ -55,9 +58,10 @@ func TestProxy_AllowedDomain(t *testing.T) {
 // TestProxy_BlockedDomain verifies that non-allowlisted domains are blocked.
 func TestProxy_BlockedDomain(t *testing.T) {
 	tc := createAuthenticatedTestContainer(t, "proxy-block")
+	guardianHost := guardian.ContainerName()
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, "cloister-guardian", 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -68,7 +72,7 @@ func TestProxy_BlockedDomain(t *testing.T) {
 	// Authentication is required: --proxy-user :token (empty username, token as password).
 	output, _ := execInContainer(t, tc.Name,
 		"sh", "-c",
-		"curl -v --proxy http://cloister-guardian:3128 --proxy-user :"+tc.Token+" --max-time 10 https://example.com/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
+		"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+" --max-time 10 https://example.com/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
 
 	if strings.Contains(output, "not found") {
 		t.Skip("curl not available in container image")
@@ -85,9 +89,10 @@ func TestProxy_BlockedDomain(t *testing.T) {
 func TestProxy_UnauthenticatedRequest(t *testing.T) {
 	// Use unauthenticated container (no token registered with guardian)
 	containerName := createTestContainer(t, "proxy-unauth")
+	guardianHost := guardian.ContainerName()
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, containerName, "cloister-guardian", 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, containerName, guardianHost, 3128, 5*time.Second); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -97,7 +102,7 @@ func TestProxy_UnauthenticatedRequest(t *testing.T) {
 	// the actual HTTP response line instead.
 	output, _ := execInContainer(t, containerName,
 		"sh", "-c",
-		"curl -v --proxy http://cloister-guardian:3128 --max-time 10 https://golang.org/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
+		"curl -v --proxy http://"+guardianHost+":3128 --max-time 10 https://golang.org/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
 
 	if strings.Contains(output, "not found") {
 		t.Skip("curl not available in container image")

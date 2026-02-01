@@ -185,3 +185,27 @@ func TestGetPIDString(t *testing.T) {
 		t.Error("GetPIDString() returned 0")
 	}
 }
+
+func TestDaemonStatePath_Production(t *testing.T) {
+	t.Setenv(InstanceIDEnvVar, "")
+
+	path, err := DaemonStatePath()
+	if err != nil {
+		t.Fatalf("DaemonStatePath() error: %v", err)
+	}
+	if filepath.Base(path) != "executor.json" {
+		t.Errorf("DaemonStatePath() = %q, want basename executor.json", path)
+	}
+}
+
+func TestDaemonStatePath_TestInstance(t *testing.T) {
+	t.Setenv(InstanceIDEnvVar, "abc123")
+
+	path, err := DaemonStatePath()
+	if err != nil {
+		t.Fatalf("DaemonStatePath() error: %v", err)
+	}
+	if filepath.Base(path) != "executor-abc123.json" {
+		t.Errorf("DaemonStatePath() = %q, want basename executor-abc123.json", path)
+	}
+}

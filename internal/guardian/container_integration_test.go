@@ -52,8 +52,8 @@ func requireCloisterBinary(t *testing.T) {
 func cleanupGuardian() {
 	// Best effort cleanup - ignore errors
 	_ = StopExecutor()
-	_, _ = docker.Run("stop", ContainerName)
-	_, _ = docker.Run("rm", ContainerName)
+	_, _ = docker.Run("stop", ContainerName())
+	_, _ = docker.Run("rm", ContainerName())
 }
 
 // requireCleanGuardianState ensures no guardian is running and registers cleanup.

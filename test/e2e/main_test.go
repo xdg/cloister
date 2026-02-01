@@ -20,6 +20,11 @@ import (
 // This allows tests to share a single guardian instance, which is more efficient
 // and matches the production model where guardian runs persistently.
 func TestMain(m *testing.M) {
+	// Generate unique instance ID for test isolation.
+	// This allows tests to run without conflicting with a production guardian
+	// or with tests running in other worktrees.
+	os.Setenv(guardian.InstanceIDEnvVar, guardian.GenerateInstanceID())
+
 	// Check Docker availability first
 	if err := docker.CheckDaemon(); err != nil {
 		fmt.Fprintf(os.Stderr, "SKIP: Docker not available: %v\n", err)
@@ -40,10 +45,8 @@ func TestMain(m *testing.M) {
 	}
 	os.Setenv(guardian.ExecutableEnvVar, binaryPath)
 
-	// Ensure clean state - stop any existing guardian
-	_ = guardian.Stop()
-
-	// Start the guardian for the test run
+	// Start the guardian for the test run (no need to stop existing guardian
+	// since we have our own isolated instance)
 	if err := guardian.EnsureRunning(); err != nil {
 		fmt.Fprintf(os.Stderr, "SKIP: Could not start guardian: %v\n", err)
 		os.Exit(0)

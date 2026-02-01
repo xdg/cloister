@@ -10,12 +10,19 @@ import (
 	"syscall"
 )
 
+// InstanceIDEnvVar matches guardian.InstanceIDEnvVar for test isolation.
+// We duplicate it here to avoid an import cycle (guardian imports executor).
+// A consistency test in testutil verifies these constants stay in sync.
+const InstanceIDEnvVar = "CLOISTER_INSTANCE_ID"
+
 // DaemonState tracks the state of the executor daemon.
 type DaemonState struct {
-	PID        int    `json:"pid"`
-	Secret     string `json:"secret"`
-	SocketPath string `json:"socket_path,omitempty"` // Deprecated: use TCPPort
-	TCPPort    int    `json:"tcp_port,omitempty"`    // Port for TCP mode
+	PID          int    `json:"pid"`
+	Secret       string `json:"secret"`
+	SocketPath   string `json:"socket_path,omitempty"`    // Deprecated: use TCPPort
+	TCPPort      int    `json:"tcp_port,omitempty"`       // Port for TCP mode
+	TokenAPIPort int    `json:"token_api_port,omitempty"` // Guardian token API port (for test instances)
+	ApprovalPort int    `json:"approval_port,omitempty"`  // Guardian approval server port (for test instances)
 }
 
 // DaemonStateDir returns the directory for daemon state files.
@@ -29,12 +36,17 @@ func DaemonStateDir() (string, error) {
 }
 
 // DaemonStatePath returns the path to the daemon state file.
+// For test isolation, appends the instance ID suffix when CLOISTER_INSTANCE_ID is set.
 func DaemonStatePath() (string, error) {
 	dir, err := DaemonStateDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "executor.json"), nil
+	filename := "executor.json"
+	if id := os.Getenv(InstanceIDEnvVar); id != "" {
+		filename = "executor-" + id + ".json"
+	}
+	return filepath.Join(dir, filename), nil
 }
 
 // SaveDaemonState saves the daemon state to disk.

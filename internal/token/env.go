@@ -1,10 +1,28 @@
 package token
 
-import "fmt"
+import (
+	"fmt"
+	"os"
+)
 
 // DefaultGuardianHost is the default hostname for the guardian container
 // on the cloister-net Docker network.
 const DefaultGuardianHost = "cloister-guardian"
+
+// InstanceIDEnvVar matches guardian.InstanceIDEnvVar for test isolation.
+// We duplicate it here to avoid an import cycle.
+// A consistency test in testutil verifies these constants stay in sync.
+const InstanceIDEnvVar = "CLOISTER_INSTANCE_ID"
+
+// GuardianHost returns the guardian container hostname for the current instance.
+// For production (no instance ID), returns "cloister-guardian".
+// For test instances, returns "cloister-guardian-<id>".
+func GuardianHost() string {
+	if id := os.Getenv(InstanceIDEnvVar); id != "" {
+		return "cloister-guardian-" + id
+	}
+	return DefaultGuardianHost
+}
 
 // DefaultProxyPort is the default port for the guardian proxy server.
 const DefaultProxyPort = 3128
@@ -26,7 +44,7 @@ const DefaultProxyPort = 3128
 // Using "token" as the username and the actual token as the password.
 func ProxyEnvVars(token, guardianHost string) []string {
 	if guardianHost == "" {
-		guardianHost = DefaultGuardianHost
+		guardianHost = GuardianHost()
 	}
 
 	proxyURL := fmt.Sprintf("http://token:%s@%s:%d", token, guardianHost, DefaultProxyPort)

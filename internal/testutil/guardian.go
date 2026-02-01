@@ -33,11 +33,16 @@ func RequireCloisterBinary(t *testing.T) {
 
 // RequireGuardian ensures the guardian is running and registers cleanup.
 // This is for integration tests that manage their own guardian lifecycle.
+// Generates a unique instance ID so tests don't conflict with production or other tests.
 // Skips the test if the guardian cannot be started.
 func RequireGuardian(t *testing.T) {
 	t.Helper()
 	RequireDocker(t)
 	RequireCloisterBinary(t)
+
+	// Generate unique instance ID for test isolation
+	t.Setenv(guardian.InstanceIDEnvVar, guardian.GenerateInstanceID())
+
 	if err := guardian.EnsureRunning(); err != nil {
 		t.Skipf("Guardian not available: %v", err)
 	}
@@ -47,16 +52,22 @@ func RequireGuardian(t *testing.T) {
 }
 
 // RequireCleanGuardianState ensures no guardian is running and registers cleanup.
-// Skips the test if guardian is unexpectedly running (another test may be using it).
+// Generates a unique instance ID so tests operate on an isolated guardian.
 // Use this for tests that need exclusive control over guardian lifecycle.
 func RequireCleanGuardianState(t *testing.T) {
 	t.Helper()
 	RequireDocker(t)
+
+	// Generate unique instance ID for test isolation.
+	// This means IsRunning() will check for our isolated instance, not production.
+	t.Setenv(guardian.InstanceIDEnvVar, guardian.GenerateInstanceID())
+
 	running, err := guardian.IsRunning()
 	if err != nil {
 		t.Fatalf("IsRunning() error: %v", err)
 	}
 	if running {
+		// This should not happen with instance isolation, but check anyway
 		t.Skip("Skipping: guardian is already running (parallel test conflict)")
 	}
 	t.Cleanup(func() {
@@ -68,6 +79,6 @@ func RequireCleanGuardianState(t *testing.T) {
 // Returns any output and error from the docker commands.
 func CleanupGuardian() (string, error) {
 	_ = guardian.StopExecutor()
-	_, _ = docker.Run("stop", guardian.ContainerName)
-	return docker.Run("rm", guardian.ContainerName)
+	_, _ = docker.Run("stop", guardian.ContainerName())
+	return docker.Run("rm", guardian.ContainerName())
 }
