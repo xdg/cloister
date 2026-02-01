@@ -190,7 +190,6 @@ Configurable containers with development tools, built from devcontainer.json or 
 
 ```bash
 --cap-drop=ALL
---security-opt=no-new-privileges
 --network cloister-net  # internal only
 ```
 
@@ -403,7 +402,6 @@ Containers on `cloister-net` can reach each other by IP but have no shared files
 | Docker socket mount | Critical | Never mounted |
 | Sensitive host paths | High | Explicitly blocked |
 | Excessive capabilities | Medium | `--cap-drop=ALL` |
-| Privilege escalation | Medium | `--no-new-privileges` |
 
 ### Network Exfiltration Vectors
 

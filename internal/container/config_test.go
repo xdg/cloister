@@ -138,7 +138,6 @@ func TestConfig_BuildRunArgs(t *testing.T) {
 	// Check security flags (combined flag=value format)
 	expectedFlags := []string{
 		"--cap-drop=ALL",
-		"--security-opt=no-new-privileges",
 	}
 	for _, flag := range expectedFlags {
 		found := false
@@ -184,9 +183,9 @@ func TestConfig_BuildRunArgs_MinimalConfig(t *testing.T) {
 	args := cfg.BuildRunArgs()
 
 	// Should have: --name, container-name, -v, mount, -w, /work,
-	//              --cap-drop=ALL, --security-opt=no-new-privileges, --user, 1000, image
-	if len(args) != 11 {
-		t.Errorf("expected 11 args for minimal config, got %d: %v", len(args), args)
+	//              --cap-drop=ALL, --user, 1000, image
+	if len(args) != 10 {
+		t.Errorf("expected 10 args for minimal config, got %d: %v", len(args), args)
 	}
 
 	// Should use default image
@@ -235,11 +234,6 @@ func TestConfig_BuildRunArgs_SecurityHardening(t *testing.T) {
 	// Test: --cap-drop=ALL is present
 	if !containsFlag("--cap-drop=ALL") {
 		t.Errorf("BuildRunArgs() missing --cap-drop=ALL, got %v", args)
-	}
-
-	// Test: --security-opt=no-new-privileges is present
-	if !containsFlag("--security-opt=no-new-privileges") {
-		t.Errorf("BuildRunArgs() missing --security-opt=no-new-privileges, got %v", args)
 	}
 
 	// Test: --user with default UID 1000 is present

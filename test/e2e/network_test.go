@@ -64,7 +64,7 @@ func TestNetworkIsolation_RequestServerReachable(t *testing.T) {
 	}
 
 	// Build the curl command to test connectivity
-	cmdReq := request.CommandRequest{Cmd: "echo hello"}
+	cmdReq := request.CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
 	reqBody, _ := json.Marshal(cmdReq)
 
 	output, err := execInContainer(t, containerName,
@@ -118,7 +118,7 @@ func TestNetworkIsolation_RequestServerReachable(t *testing.T) {
 func TestNetworkIsolation_UnauthorizedRequest(t *testing.T) {
 	containerName := createTestContainer(t, "unauth")
 
-	cmdReq := request.CommandRequest{Cmd: "echo hello"}
+	cmdReq := request.CommandRequest{Cmd: "echo hello", Args: []string{"echo", "hello"}}
 	reqBody, _ := json.Marshal(cmdReq)
 
 	output, err := execInContainer(t, containerName,

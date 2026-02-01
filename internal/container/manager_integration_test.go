@@ -215,17 +215,6 @@ func TestManager_Start_VerifySecuritySettings(t *testing.T) {
 		t.Errorf("CapDrop does not include ALL: %v", inspect.HostConfig.CapDrop)
 	}
 
-	hasNoNewPrivileges := false
-	for _, opt := range inspect.HostConfig.SecurityOpt {
-		if opt == "no-new-privileges" {
-			hasNoNewPrivileges = true
-			break
-		}
-	}
-	if !hasNoNewPrivileges {
-		t.Errorf("SecurityOpt does not include no-new-privileges: %v", inspect.HostConfig.SecurityOpt)
-	}
-
 	foundMount := false
 	for _, mount := range inspect.Mounts {
 		if mount.Destination == DefaultWorkDir {

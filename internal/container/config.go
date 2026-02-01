@@ -74,7 +74,7 @@ func (c *Config) UserID() int {
 //   - Working directory set to /work
 //   - Environment variables
 //   - Network connection
-//   - Security hardening (cap-drop=ALL, no-new-privileges, non-root user)
+//   - Security hardening (cap-drop=ALL, non-root user)
 //   - Image name
 func (c *Config) BuildRunArgs() []string {
 	args := []string{
@@ -96,9 +96,6 @@ func (c *Config) BuildRunArgs() []string {
 	// Security hardening: drop all capabilities
 	// File injection uses tar piping with --owner/--group flags, so no extra capabilities needed
 	args = append(args, "--cap-drop=ALL")
-
-	// Security hardening: prevent privilege escalation
-	args = append(args, "--security-opt=no-new-privileges")
 
 	// Security hardening: run as non-root user
 	args = append(args, "--user", fmt.Sprintf("%d", c.UserID()))
