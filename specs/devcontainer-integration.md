@@ -49,7 +49,7 @@ Regardless of what devcontainer.json requests, the launcher enforces:
 
 overrides:
   network: "cloister-net"          # Internal network only
-  cap_drop: ["ALL"]                # Drop all capabilities
+  user: 1000                       # Non-root user
 
   blocked_mounts:                  # Never mounted, even if requested
     - "~/.ssh"

@@ -189,9 +189,10 @@ Configurable containers with development tools, built from devcontainer.json or 
 **Security Hardening:**
 
 ```bash
---cap-drop=ALL
 --network cloister-net  # internal only
 ```
+
+Cloister relies on Docker's default capability set rather than `--cap-drop=ALL`. Docker defaults already drop dangerous capabilities (SYS_ADMIN, SYS_PTRACE, etc.) while keeping those needed for normal operation (SETUID/SETGID for sudo). Cloister's security comes primarily from network isolation and filesystem restrictions, not capability dropping.
 
 No access to Docker socket, host SSH keys (`~/.ssh`), cloud credentials (`~/.aws`, `~/.config/gcloud`), host config (`~/.config`, `~/.local`), or GPG keys (`~/.gnupg`).
 
@@ -401,7 +402,7 @@ Containers on `cloister-net` can reach each other by IP but have no shared files
 | `--privileged` | Critical | Never used |
 | Docker socket mount | Critical | Never mounted |
 | Sensitive host paths | High | Explicitly blocked |
-| Excessive capabilities | Medium | `--cap-drop=ALL` |
+| Excessive capabilities | Low | Docker defaults drop dangerous caps (SYS_ADMIN, etc.) |
 
 ### Network Exfiltration Vectors
 

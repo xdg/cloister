@@ -93,11 +93,11 @@ func (c *Config) BuildRunArgs() []string {
 		args = append(args, "--network", c.Network)
 	}
 
-	// Security hardening: drop all capabilities
-	// File injection uses tar piping with --owner/--group flags, so no extra capabilities needed
-	args = append(args, "--cap-drop=ALL")
-
 	// Security hardening: run as non-root user
+	// Note: We rely on Docker's default capability set rather than --cap-drop=ALL.
+	// Docker defaults already drop dangerous capabilities (SYS_ADMIN, SYS_PTRACE, etc.).
+	// Cloister's security comes from network isolation (proxy allowlist) and filesystem
+	// restrictions (only /work mounted, sensitive paths blocked), not capability dropping.
 	args = append(args, "--user", fmt.Sprintf("%d", c.UserID()))
 
 	// Add image name last

@@ -135,23 +135,6 @@ func TestConfig_BuildRunArgs(t *testing.T) {
 		}
 	}
 
-	// Check security flags (combined flag=value format)
-	expectedFlags := []string{
-		"--cap-drop=ALL",
-	}
-	for _, flag := range expectedFlags {
-		found := false
-		for _, arg := range args {
-			if arg == flag {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("BuildRunArgs() missing %s, got %v", flag, args)
-		}
-	}
-
 	// Check env vars
 	envCount := 0
 	for i, arg := range args {
@@ -182,10 +165,9 @@ func TestConfig_BuildRunArgs_MinimalConfig(t *testing.T) {
 
 	args := cfg.BuildRunArgs()
 
-	// Should have: --name, container-name, -v, mount, -w, /work,
-	//              --cap-drop=ALL, --user, 1000, image
-	if len(args) != 10 {
-		t.Errorf("expected 10 args for minimal config, got %d: %v", len(args), args)
+	// Should have: --name, container-name, -v, mount, -w, /work, --user, 1000, image
+	if len(args) != 9 {
+		t.Errorf("expected 9 args for minimal config, got %d: %v", len(args), args)
 	}
 
 	// Should use default image
@@ -211,16 +193,6 @@ func TestConfig_BuildRunArgs_SecurityHardening(t *testing.T) {
 
 	args := cfg.BuildRunArgs()
 
-	// Helper to check if a flag exists in args
-	containsFlag := func(flag string) bool {
-		for _, arg := range args {
-			if arg == flag {
-				return true
-			}
-		}
-		return false
-	}
-
 	// Helper to check if a flag-value pair exists in args
 	containsFlagValue := func(flag, value string) bool {
 		for i, arg := range args {
@@ -229,11 +201,6 @@ func TestConfig_BuildRunArgs_SecurityHardening(t *testing.T) {
 			}
 		}
 		return false
-	}
-
-	// Test: --cap-drop=ALL is present
-	if !containsFlag("--cap-drop=ALL") {
-		t.Errorf("BuildRunArgs() missing --cap-drop=ALL, got %v", args)
 	}
 
 	// Test: --user with default UID 1000 is present

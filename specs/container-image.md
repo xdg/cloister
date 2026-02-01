@@ -22,10 +22,10 @@ AI config folder/files are copied from the host because several tools read and w
 ## Security Hardening
 
 ```bash
---cap-drop=ALL
---security-opt=no-new-privileges
 --network cloister-net  # internal only
 ```
+
+Docker's default capability set is used (drops SYS_ADMIN, SYS_PTRACE, etc. while keeping SETUID/SETGID for sudo e.g. for apt). Cloister's security relies on network isolation and filesystem restrictions.
 
 No access to:
 - Docker socket

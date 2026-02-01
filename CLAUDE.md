@@ -46,7 +46,6 @@ Key security properties:
 - All network traffic routes through the allowlist proxy (AI APIs, package registries, documentation sites)
 - Per-cloister tokens authenticate proxy and hostexec requests
 - Sensitive paths blocked: `~/.ssh`, `~/.aws`, `~/.gnupg`, Docker socket
-- Containers run unprivileged with `--cap-drop=ALL`
 - Host commands require human approval via web UI
 
 ## Implementation
