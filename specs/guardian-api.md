@@ -1,15 +1,16 @@
 # Guardian API Reference
 
-The guardian system exposes four interfaces:
+The guardian system exposes five interfaces:
 
 | Interface | Binding | Purpose | Clients |
 |-----------|---------|---------|---------|
 | Proxy (:3128) | `cloister-net` | HTTP CONNECT proxy | Containers |
+| Token API (:9997) | `127.0.0.1` | Token registration and management | CLI on host |
 | Request Server (:9998) | `cloister-net` | Command execution requests | Containers (hostexec) |
 | Approval Server (:9999) | `127.0.0.1` | Web UI and API for human review | Host only |
 | Host Executor (TCP) | `host.docker.internal:<port>` | Command execution on host | Guardian container only |
 
-The first three run in the guardian container. The host executor runs as a separate process on the host, communicating with the guardian via TCP (using Docker's `host.docker.internal` hostname).
+The first four run in the guardian container. The host executor runs as a separate process on the host, communicating with the guardian via TCP (using Docker's `host.docker.internal` hostname).
 
 For architecture overview, see [cloister-spec.md](cloister-spec.md).
 
@@ -55,6 +56,76 @@ The secret is:
 - Ephemeral: never written to disk, dies when guardian stops
 
 This provides defense-in-depth: even if an attacker obtains a cloister token (e.g., by reading token files), they cannot execute commands without the guardian secret.
+
+---
+
+## Token API Endpoints (:9997)
+
+Internal API for token management. Bound to `127.0.0.1` only. Only accessible from the host CLI.
+
+### POST /tokens
+
+Register a new cloister token. Called by the CLI before starting a container.
+
+**Request:**
+```json
+{
+    "token": "af3b2c1d...",
+    "cloister": "my-api-main",
+    "project": "my-api",
+    "worktree": "/home/user/repos/my-api"
+}
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `token` | Yes | The cloister token (32 bytes, hex-encoded) |
+| `cloister` | Yes | The cloister container name |
+| `project` | No | The project name |
+| `worktree` | No | The worktree path on the host |
+
+**Response (201 Created):**
+```json
+{
+    "status": "registered"
+}
+```
+
+### DELETE /tokens/{token}
+
+Revoke a cloister token. Called by the CLI when stopping a container.
+
+**Response (200 OK):**
+```json
+{
+    "status": "revoked"
+}
+```
+
+**Response (404 Not Found):**
+```json
+{
+    "error": "token not found"
+}
+```
+
+### GET /tokens
+
+List all registered tokens. Useful for debugging and monitoring.
+
+**Response:**
+```json
+{
+    "tokens": [
+        {
+            "token": "af3b2c1d...",
+            "cloister": "my-api-main",
+            "project": "my-api",
+            "worktree": "/home/user/repos/my-api"
+        }
+    ]
+}
+```
 
 ---
 
@@ -229,11 +300,31 @@ Deny a pending command request with optional reason.
 }
 ```
 
-### GET /pending-domains
+### GET /events
 
-List pending domain approval requests.
+Server-Sent Events (SSE) endpoint for real-time updates. Used by the web UI to receive live notifications when requests are added or removed from the queue.
 
-**Response:**
+**Event types:**
+- `request-added` — A new request was added to the queue
+- `request-removed` — A request was approved, denied, or timed out
+- `heartbeat` — Keep-alive message (sent every 30 seconds)
+
+**Headers:**
+```
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+```
+
+### GET /static/*
+
+Serves static assets (CSS, JavaScript) for the web UI. These assets are embedded in the binary via `go:embed`.
+
+### GET /pending-domains (Planned)
+
+List pending domain approval requests. *Not yet implemented.*
+
+**Response (planned):**
 ```json
 {
     "requests": [
@@ -249,11 +340,11 @@ List pending domain approval requests.
 }
 ```
 
-### POST /approve-domain/{id}
+### POST /approve-domain/{id} (Planned)
 
-Approve a pending domain request with specified scope.
+Approve a pending domain request with specified scope. *Not yet implemented.*
 
-**Request:**
+**Request (planned):**
 ```json
 {
     "scope": "project"
@@ -265,63 +356,13 @@ Scope options:
 - `"project"` — Save to `~/.config/cloister/projects/<name>.yaml`
 - `"global"` — Save to `~/.config/cloister/config.yaml`
 
-**Response:**
-```json
-{
-    "status": "approved",
-    "domain": "docs.example.com",
-    "scope": "project"
-}
-```
+### POST /deny-domain/{id} (Planned)
 
-### POST /deny-domain/{id}
+Deny a pending domain request. *Not yet implemented.*
 
-Deny a pending domain request.
+### GET /logs?cloister={name} (Planned)
 
-**Response:**
-```json
-{
-    "status": "denied",
-    "domain": "docs.example.com"
-}
-```
-
-### GET /logs?cloister={name}
-
-Stream audit logs, optionally filtered by cloister.
-
-### POST /register
-
-Register a new cloister token. Called by the CLI before starting a container. Persists token metadata to `~/.config/cloister/tokens/<token>.yaml` so associations survive guardian restarts.
-
-**Request:**
-```json
-{
-    "token": "af3b2c1d...",
-    "name": "my-api-main",
-    "project": "my-api",
-    "branch": "main",
-    "agent": "claude"
-}
-```
-
-**Response:**
-```json
-{
-    "status": "registered"
-}
-```
-
-### DELETE /register/{token}
-
-Unregister a cloister token. Called by the CLI when stopping a container. Removes the token from memory and deletes `~/.config/cloister/tokens/<token>.yaml`.
-
-**Response:**
-```json
-{
-    "status": "unregistered"
-}
-```
+Stream audit logs, optionally filtered by cloister. *Not yet implemented.*
 
 ---
 

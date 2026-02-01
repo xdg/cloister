@@ -479,28 +479,28 @@ Add logging for all hostexec requests and responses.
 ## Phase 4.10: Documentation and Integration
 
 ### 4.10.1 Update ~/.claude/rules/cloister.md
-- [ ] Review and update the rules file created in Phase 3.4.6
-- [ ] Ensure hostexec usage instructions are accurate:
+- [x] Review and update the rules file created in Phase 3.4.6
+- [x] Ensure hostexec usage instructions are accurate:
   - When to use hostexec (git push, docker build, etc.)
   - Common patterns (`hostexec git push`, `hostexec docker compose up -d`)
   - What happens when approval is needed
   - How to check if command was approved
-- [ ] **Test (manual)**: Rules file content is helpful for Claude
+- [x] **Test (manual)**: Rules file content is helpful for Claude
 
 ### 4.10.2 Update specs/guardian-api.md if needed
-- [ ] Verify API documentation matches implementation
-- [ ] Add any undocumented endpoints or fields
-- [ ] **Test (manual)**: API docs accurate
+- [x] Verify API documentation matches implementation
+- [x] Add any undocumented endpoints or fields
+- [x] **Test (manual)**: API docs accurate
 
 ### 4.10.3 Update specs/container-image.md if needed
-- [ ] Verify hostexec script documentation matches implementation
-- [ ] Document environment variables
+- [x] Verify hostexec script documentation matches implementation
+- [x] Document environment variables
 - [ ] **Test (manual)**: Container image docs accurate
 
 ### 4.10.4 End-to-end verification
-- [ ] **Test (manual)**: Full flow from Claude → hostexec → approval UI → execution → output
-- [ ] **Test (manual)**: Auto-approve flow works without UI interaction
-- [ ] **Test (manual)**: Denial flow shows clear message in container
+- [x] **Test (manual)**: Full flow from Claude → hostexec → approval UI → execution → output
+- [x] **Test (manual)**: Auto-approve flow works without UI interaction
+- [x] **Test (manual)**: Denial flow shows clear message in container
 
 ---
 

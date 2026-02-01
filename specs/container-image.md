@@ -102,17 +102,27 @@ RUN chmod +x /usr/local/bin/hostexec
 USER cloister
 WORKDIR /work
 
-# Proxy configuration (set by launcher)
-ENV HTTP_PROXY=""
-ENV HTTPS_PROXY=""
-ENV NO_PROXY="localhost,127.0.0.1"
-
-# Guardian connection (set by launcher)
-ENV CLOISTER_GUARDIAN_HOST=""
-ENV CLOISTER_TOKEN=""
+# Proxy and guardian env vars are set at runtime by cloister
 
 CMD ["/bin/bash"]
 ```
+
+---
+
+## Runtime Environment Variables
+
+When a cloister container starts, the launcher sets these environment variables:
+
+| Variable | Purpose |
+|----------|---------|
+| `CLOISTER_TOKEN` | Authentication token for guardian proxy and hostexec requests |
+| `CLOISTER_GUARDIAN_HOST` | Guardian container hostname (default: `cloister-guardian`) |
+| `HTTP_PROXY` / `http_proxy` | Proxy URL with embedded credentials for HTTP traffic |
+| `HTTPS_PROXY` / `https_proxy` | Proxy URL for HTTPS traffic (same as HTTP_PROXY) |
+
+The proxy URL format is: `http://token:$CLOISTER_TOKEN@$CLOISTER_GUARDIAN_HOST:3128`
+
+Both uppercase and lowercase proxy variables are set for maximum compatibility with different tools.
 
 ---
 
@@ -139,11 +149,12 @@ See [agent-configuration.md](agent-configuration.md) for full details on each su
 The `hostexec` binary allows commands to be executed on the host with human approval. It sends requests to the guardian's request server and blocks until approval/denial.
 
 **Execution flow:**
-1. `hostexec` in cloister sends request to guardian container (port 9998)
-2. Guardian presents request in approval UI
-3. If approved, guardian forwards command to host process via TCP
-4. Host process executes command and returns stdout/stderr/exit code
-5. Guardian returns result to `hostexec`
+1. `hostexec` in cloister sends HTTP POST to guardian container (port 9998)
+2. Guardian checks command against auto-approve patterns; if matched, proceeds to step 4
+3. If manual approval required, guardian presents request in approval UI and waits
+4. Guardian forwards approved command to host executor via Unix socket (`~/.local/share/cloister/hostexec.sock`)
+5. Host executor executes command and returns stdout/stderr/exit code
+6. Guardian returns result to `hostexec`
 
 ```bash
 #!/bin/bash
