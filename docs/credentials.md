@@ -127,7 +127,6 @@ Support for additional AI coding agents is planned:
 
 - **OpenAI Codex** — Coming soon
 - **Gemini CLI** — Coming soon
-- **Aider** — Coming soon
 
 The setup pattern will be similar:
 
@@ -149,7 +148,7 @@ The credential injection may have failed. Check:
 
 ```bash
 # Inside cloister
-echo $CLAUDE_AUTH_TOKEN
+echo $CLAUDE_CODE_OAUTH_TOKEN
 # Should show a value if using OAuth token
 ```
 

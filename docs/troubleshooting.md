@@ -291,9 +291,10 @@ cloister start -v  # Verbose mode
 
 ### Reporting issues
 
-File issues at: https://github.com/xdg/cloister/issues
+- [GitHub Issues](https://github.com/xdg/cloister/issues) — Report bugs and request features
+- [GitHub Discussions](https://github.com/xdg/cloister/discussions) — Ask questions and share tips
 
-Include:
+When filing an issue, include:
 - Cloister version
 - OS and Docker version
 - Steps to reproduce

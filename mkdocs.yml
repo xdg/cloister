@@ -13,7 +13,6 @@ docs_dir: docs
 site_dir: site
 
 nav:
-  - Overview: overview.md
   - Getting Started: getting-started.md
   - User Guide:
     - Working with Cloisters: working-with-cloisters.md
