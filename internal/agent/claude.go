@@ -203,10 +203,7 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 	}
 
 	// Step 2: Inject credentials (if configured)
-	var authMethod string
 	if agentCfg != nil && agentCfg.AuthMethod != "" {
-		authMethod = agentCfg.AuthMethod
-
 		injector := a.Injector
 		if injector == nil {
 			injector = claude.NewInjector()
@@ -231,17 +228,7 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 	}
 
 	// Step 3: Generate ~/.claude.json config file
-	// Build conditional fields based on auth method
-	var conditionalCopy map[string]any
-	if authMethod == claude.AuthMethodExisting {
-		// Copy oauthAccount from host when using "existing" auth
-		// (it's tied to the credentials being injected)
-		conditionalCopy = map[string]any{
-			"oauthAccount": nil, // nil means "copy from host if present"
-		}
-	}
-
-	configJSON, err := MergeJSONConfig(configFileName, configFieldsToCopy, configForcedValues, conditionalCopy)
+	configJSON, err := MergeJSONConfig(configFileName, configFieldsToCopy, configForcedValues, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate config: %w", err)
 	}

@@ -403,15 +403,16 @@ func TestStart_WithAPIKeyAuth(t *testing.T) {
 	}
 }
 
-// TestStart_WithExistingAuth verifies that "existing" auth triggers agent setup.
-func TestStart_WithExistingAuth(t *testing.T) {
+// TestStart_WithTokenAuthCallsSetup verifies that "token" auth triggers agent setup.
+func TestStart_WithTokenAuthCallsSetup(t *testing.T) {
 	mockMgr := &mockManager{createResult: "container-123"}
 	mockGuard := &mockGuardian{}
 	mockCfgLoader := &mockConfigLoader{
 		config: &config.GlobalConfig{
 			Agents: map[string]config.AgentConfig{
 				"claude": {
-					AuthMethod: "existing",
+					AuthMethod: "token",
+					Token:      "test-oauth-token",
 				},
 			},
 		},
@@ -444,8 +445,8 @@ func TestStart_WithExistingAuth(t *testing.T) {
 	if !mockAgt.setupCalled {
 		t.Error("agent.Setup() was not called")
 	}
-	if mockAgt.setupCfg.AuthMethod != "existing" {
-		t.Errorf("setupCfg.AuthMethod = %q, want %q", mockAgt.setupCfg.AuthMethod, "existing")
+	if mockAgt.setupCfg.AuthMethod != "token" {
+		t.Errorf("setupCfg.AuthMethod = %q, want %q", mockAgt.setupCfg.AuthMethod, "token")
 	}
 }
 
@@ -517,14 +518,15 @@ func TestStart_AgentSetupError(t *testing.T) {
 		config: &config.GlobalConfig{
 			Agents: map[string]config.AgentConfig{
 				"claude": {
-					AuthMethod: "existing",
+					AuthMethod: "token",
+					Token:      "test-token",
 				},
 			},
 		},
 	}
 	mockAgt := &mockAgent{
 		name:     "claude",
-		setupErr: errors.New("keychain access denied"),
+		setupErr: errors.New("agent setup failed"),
 	}
 
 	t.Setenv("HOME", t.TempDir())
@@ -546,8 +548,8 @@ func TestStart_AgentSetupError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Start() should return error when agent setup fails")
 	}
-	if !strings.Contains(err.Error(), "keychain access denied") {
-		t.Errorf("error = %q, expected to contain 'keychain access denied'", err.Error())
+	if !strings.Contains(err.Error(), "agent setup failed") {
+		t.Errorf("error = %q, expected to contain 'agent setup failed'", err.Error())
 	}
 }
 

@@ -510,10 +510,6 @@ func TestValidateAgentConfig_ValidAuthMethods(t *testing.T) {
 			cfg:  &AgentConfig{},
 		},
 		{
-			name: "existing auth_method",
-			cfg:  &AgentConfig{AuthMethod: "existing"},
-		},
-		{
 			name: "token auth_method with token",
 			cfg:  &AgentConfig{AuthMethod: "token", Token: "my-token"},
 		},
@@ -542,17 +538,17 @@ func TestValidateAgentConfig_InvalidAuthMethod(t *testing.T) {
 		{
 			name:    "unknown auth_method",
 			cfg:     &AgentConfig{AuthMethod: "oauth"},
-			wantErr: "agents.claude.auth_method: invalid value \"oauth\", must be one of: existing, token, api_key",
+			wantErr: "agents.claude.auth_method: invalid value \"oauth\", must be one of: token, api_key",
 		},
 		{
 			name:    "typo in auth_method",
 			cfg:     &AgentConfig{AuthMethod: "tokens"},
-			wantErr: "agents.claude.auth_method: invalid value \"tokens\", must be one of: existing, token, api_key",
+			wantErr: "agents.claude.auth_method: invalid value \"tokens\", must be one of: token, api_key",
 		},
 		{
 			name:    "capitalized auth_method",
 			cfg:     &AgentConfig{AuthMethod: "TOKEN"},
-			wantErr: "agents.claude.auth_method: invalid value \"TOKEN\", must be one of: existing, token, api_key",
+			wantErr: "agents.claude.auth_method: invalid value \"TOKEN\", must be one of: token, api_key",
 		},
 	}
 
@@ -610,19 +606,6 @@ func TestValidateAgentConfig_MissingRequiredFields(t *testing.T) {
 	}
 }
 
-func TestValidateAgentConfig_ExistingNoExtraFields(t *testing.T) {
-	// "existing" auth_method should not require any additional fields
-	cfg := &AgentConfig{
-		AuthMethod: "existing",
-		// Intentionally not setting Token or APIKey
-	}
-
-	err := ValidateAgentConfig(cfg, "agents.claude")
-	if err != nil {
-		t.Errorf("ValidateAgentConfig() error = %v, want nil for existing auth_method", err)
-	}
-}
-
 func TestValidateAgentConfigWarnings_NoAuth(t *testing.T) {
 	cfg := &AgentConfig{}
 	warnings := ValidateAgentConfigWarnings(cfg, "agents.claude", nil)
@@ -651,10 +634,6 @@ func TestValidateAgentConfigWarnings_AuthConfigured(t *testing.T) {
 		name string
 		cfg  *AgentConfig
 	}{
-		{
-			name: "existing auth_method",
-			cfg:  &AgentConfig{AuthMethod: "existing"},
-		},
 		{
 			name: "token auth_method",
 			cfg:  &AgentConfig{AuthMethod: "token", Token: "my-token"},
@@ -733,9 +712,6 @@ func TestValidateGlobalConfig_ValidAgentConfig(t *testing.T) {
 			"codex": {
 				AuthMethod: "api_key",
 				APIKey:     "sk-openai-123",
-			},
-			"gemini": {
-				AuthMethod: "existing",
 			},
 		},
 	}

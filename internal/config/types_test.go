@@ -344,17 +344,6 @@ func TestAgentConfigCredentialFieldsRoundTrip(t *testing.T) {
 			},
 		},
 		{
-			name: "auth_method_existing",
-			agent: AgentConfig{
-				AuthMethod: "existing",
-			},
-			verify: func(t *testing.T, got AgentConfig) {
-				if got.AuthMethod != "existing" {
-					t.Errorf("AuthMethod = %q, want %q", got.AuthMethod, "existing")
-				}
-			},
-		},
-		{
 			name: "auth_method_api_key",
 			agent: AgentConfig{
 				AuthMethod: "api_key",

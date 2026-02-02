@@ -47,11 +47,10 @@ Run the setup wizard to configure Claude Code credentials:
 cloister setup claude
 ```
 
-The wizard offers three authentication methods:
+The wizard offers two authentication methods:
 
-1. **Existing Claude login** — Extracts credentials from your system keychain or credentials file (if you've logged in via `claude` before)
-2. **Long-lived OAuth token** — For Claude Pro/Max subscribers; run `claude setup-token` first to generate a token
-3. **API key** — For pay-per-use via Anthropic API; get your key from [console.anthropic.com](https://console.anthropic.com)
+1. **Long-lived OAuth token** (recommended) — For Claude Pro/Max subscribers; run `claude setup-token` first to generate a token
+2. **API key** — For pay-per-use via Anthropic API; get your key from [console.anthropic.com](https://console.anthropic.com)
 
 ### Start a Sandboxed Session
 

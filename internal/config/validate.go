@@ -18,9 +18,8 @@ var validLogLevels = map[string]bool{
 
 // validAuthMethods defines the allowed auth_method values for agent configs.
 var validAuthMethods = map[string]bool{
-	"existing": true,
-	"token":    true,
-	"api_key":  true,
+	"token":   true,
+	"api_key": true,
 }
 
 // ValidateGlobalConfig validates a parsed GlobalConfig, checking that all
@@ -168,10 +167,9 @@ func validateRegex(pattern, field string) error {
 
 // ValidateAgentConfig validates an AgentConfig, checking that credential fields
 // are consistent with the specified auth_method. It validates:
-//   - auth_method is one of: "existing", "token", "api_key" (if non-empty)
+//   - auth_method is one of: "token", "api_key" (if non-empty)
 //   - "token" method requires the token field to be set
 //   - "api_key" method requires the api_key field to be set
-//   - "existing" method requires no additional fields
 //
 // The fieldPrefix is prepended to error messages (e.g., "agents.claude").
 //
@@ -186,7 +184,7 @@ func ValidateAgentConfig(cfg *AgentConfig, fieldPrefix string) error {
 
 	// Validate auth_method is a known value
 	if !validAuthMethods[cfg.AuthMethod] {
-		return fmt.Errorf("%s.auth_method: invalid value %q, must be one of: existing, token, api_key", fieldPrefix, cfg.AuthMethod)
+		return fmt.Errorf("%s.auth_method: invalid value %q, must be one of: token, api_key", fieldPrefix, cfg.AuthMethod)
 	}
 
 	// Validate required fields based on auth_method
@@ -199,8 +197,6 @@ func ValidateAgentConfig(cfg *AgentConfig, fieldPrefix string) error {
 		if cfg.APIKey == "" {
 			return fmt.Errorf("%s.api_key: required when auth_method is \"api_key\"", fieldPrefix)
 		}
-	case "existing":
-		// No additional fields required
 	}
 
 	return nil
