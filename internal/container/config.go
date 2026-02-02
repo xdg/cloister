@@ -3,10 +3,9 @@ package container
 
 import (
 	"fmt"
-)
 
-// DefaultImage is the default Docker image for cloister containers.
-const DefaultImage = "cloister:latest"
+	"github.com/xdg/cloister/internal/version"
+)
 
 // DefaultWorkDir is the working directory inside the container where
 // the project is mounted.
@@ -49,10 +48,10 @@ func (c *Config) ContainerName() string {
 	return "cloister-" + SanitizeName(c.Project)
 }
 
-// ImageName returns the Docker image to use, defaulting to DefaultImage.
+// ImageName returns the Docker image to use, defaulting to version.DefaultImage().
 func (c *Config) ImageName() string {
 	if c.Image == "" {
-		return DefaultImage
+		return version.DefaultImage()
 	}
 	return c.Image
 }

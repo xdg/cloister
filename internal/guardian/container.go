@@ -13,6 +13,7 @@ import (
 
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/executor"
+	"github.com/xdg/cloister/internal/version"
 )
 
 // DockerOps abstracts Docker operations for testing guardian container management.
@@ -73,9 +74,6 @@ func SetDockerOps(ops DockerOps) {
 
 // Container constants for the guardian service.
 const (
-	// DefaultImage is the Docker image used for the guardian container.
-	DefaultImage = "cloister:latest"
-
 	// BridgeNetwork is the default Docker bridge network for external access.
 	BridgeNetwork = "bridge"
 
@@ -264,7 +262,7 @@ func StartWithOptions(opts StartOptions) error {
 	}
 
 	// Add image and command
-	args = append(args, DefaultImage, "cloister", "guardian", "run")
+	args = append(args, version.DefaultImage(), "cloister", "guardian", "run")
 
 	// Create and start the container
 	_, err = defaultDockerOps.Run(args...)

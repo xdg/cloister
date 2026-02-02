@@ -1,5 +1,7 @@
 package config
 
+import "github.com/xdg/cloister/internal/version"
+
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
 	return &b
@@ -108,7 +110,7 @@ func DefaultGlobalConfig() *GlobalConfig {
 			},
 		},
 		Defaults: DefaultsConfig{
-			Image: "cloister:latest",
+			Image: version.DefaultImage(),
 			Shell: "/bin/bash",
 			User:  "cloister",
 			Agent: "claude",

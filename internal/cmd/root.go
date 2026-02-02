@@ -3,10 +3,9 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
-)
 
-// Version is set at build time via ldflags.
-var Version = "0.1.0-dev"
+	"github.com/xdg/cloister/internal/version"
+)
 
 // rootCmd represents the base command when called without any subcommands.
 var rootCmd = &cobra.Command{
@@ -17,7 +16,7 @@ in Docker containers with strict security controls.
 
 It prevents unintentional destruction, blocks data exfiltration via allowlist-only
 network access, and maintains development velocity without constant permission prompts.`,
-	Version: Version,
+	Version: version.Version,
 }
 
 // Execute runs the root command and returns any error.

@@ -5,6 +5,13 @@ GO_FILES := $(shell find . -name '*.go' -type f -not -name '*_test.go' -not -pat
 GO_MOD_FILES := go.mod go.sum
 GO_VERSION := $(shell grep '^go ' go.mod | cut -d' ' -f2 | cut -d. -f1,2)
 
+# Version settings
+# Set VERSION to build a release (e.g., VERSION=v1.0.0)
+# When VERSION is set, the binary uses cloister:<version> image; otherwise cloister:latest
+VERSION ?=
+VERSION_PKG := github.com/xdg/cloister/internal/version
+LDFLAGS := $(if $(VERSION),-ldflags "-X $(VERSION_PKG).Version=$(VERSION)")
+
 # Test settings
 #   COUNT=1    - bust cache, COUNT=N for flakiness testing
 #   RUN=regex  - run only tests matching regex (-run flag)
@@ -26,15 +33,18 @@ D2_SVGS := $(D2_SOURCES:.d2=.svg)
 
 # Go targets
 $(BINARY): $(GO_FILES) $(GO_MOD_FILES)
-	go build -o $(BINARY) $(CMD_PATH)
+	go build $(LDFLAGS) -o $(BINARY) $(CMD_PATH)
 
 build: $(BINARY)
 
+# Docker image tag: use VERSION if set, otherwise 'latest'
+DOCKER_TAG := $(if $(VERSION),$(VERSION),latest)
+
 docker:
-	docker build --build-arg GO_VERSION=$(GO_VERSION) -t cloister:latest .
+	docker build --build-arg GO_VERSION=$(GO_VERSION) $(if $(VERSION),--build-arg VERSION=$(VERSION)) -t cloister:$(DOCKER_TAG) .
 
 install:
-	go install $(CMD_PATH)
+	go install $(LDFLAGS) $(CMD_PATH)
 
 test:
 	go test $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
