@@ -44,7 +44,7 @@ The guardian container couldn't be created.
 
 **Check:**
 1. Docker is running: `docker info`
-2. Port 9999 isn't in use: `lsof -i :9999`
+2. Ports aren't in use: `lsof -i :9997` and `lsof -i :9999`
 3. Network exists: `docker network ls | grep cloister`
 
 **Reset if needed:**
@@ -63,8 +63,8 @@ Not in a git repository, or git isn't initialized.
 # Initialize git if needed
 git init
 
-# Or specify project explicitly
-cloister start -p my-project
+# Then try again
+cloister start
 ```
 
 ## Network Issues
@@ -78,20 +78,24 @@ The container tried to reach a domain that isn't allowed.
 1. Add to project config:
    ```yaml
    # ~/.config/cloister/projects/my-app.yaml
-   allowed_domains:
-     - docs.example.com
+   proxy:
+     allow:
+       - domain: docs.example.com
    ```
 
 2. Add to global config for all projects:
    ```yaml
    # ~/.config/cloister/config.yaml
-   allowed_domains:
-     - docs.example.com
+   proxy:
+     allow:
+       - domain: docs.example.com
    ```
 
 3. Enable approval mode for unlisted domains:
    ```yaml
-   unlisted_domain_behavior: request_approval
+   # ~/.config/cloister/config.yaml
+   proxy:
+     unlisted_domain_behavior: request_approval
    ```
 
 ### "Connection refused" inside container
@@ -102,7 +106,7 @@ Proxy isn't reachable.
 ```bash
 # Inside cloister
 echo $HTTPS_PROXY
-# Should show http://cloister:TOKEN@cloister-guardian:3128/
+# Should show http://token:TOKEN@cloister-guardian:3128
 
 # Test proxy connectivity
 curl -v https://api.anthropic.com/v1/models
@@ -121,22 +125,23 @@ The package registry domain might not be allowlisted.
 
 **Common registries to allowlist:**
 ```yaml
-allowed_domains:
-  # npm
-  - registry.npmjs.org
-  - registry.yarnpkg.com
+proxy:
+  allow:
+    # npm
+    - domain: registry.npmjs.org
+    - domain: registry.yarnpkg.com
 
-  # Python
-  - pypi.org
-  - files.pythonhosted.org
+    # Python
+    - domain: pypi.org
+    - domain: files.pythonhosted.org
 
-  # Go
-  - proxy.golang.org
-  - sum.golang.org
+    # Go
+    - domain: proxy.golang.org
+    - domain: sum.golang.org
 
-  # Rust
-  - crates.io
-  - static.crates.io
+    # Rust
+    - domain: crates.io
+    - domain: static.crates.io
 ```
 
 ## Credential Issues
@@ -166,13 +171,14 @@ Token may have expired.
    ```bash
    cloister setup claude
    ```
+3. Restart the cloister
 
 ### OAuth token expired
 
 OAuth tokens last about a year. If expired:
 
 ```bash
-claude setup-token  # Get new token
+claude setup-token  # Get new token (Claude Code CLI command)
 cloister setup claude  # Update config
 cloister stop && cloister start  # Restart
 ```
@@ -192,14 +198,14 @@ cloister stop && cloister start  # Restart
 
 ### Command denied unexpectedly
 
-May match an auto-deny pattern.
+Commands not matching any pattern are denied by default.
 
 **Check patterns:**
 ```bash
 cloister config show
 ```
 
-Look for `hostexec.auto_deny` patterns that might match.
+Look at `hostexec.auto_approve` and `hostexec.manual_approve` patterns.
 
 ### Hostexec timeout
 
@@ -211,7 +217,7 @@ Requests timeout after 5 minutes without approval.
   ```yaml
   hostexec:
     auto_approve:
-      - "^git push origin"
+      - pattern: "^git push origin"
   ```
 
 ## Container Issues
@@ -281,12 +287,6 @@ Proxy overhead is minimal but DNS resolution may add latency.
 cloister --version
 docker --version
 go version
-```
-
-### Debug output
-
-```bash
-cloister start -v  # Verbose mode
 ```
 
 ### Reporting issues

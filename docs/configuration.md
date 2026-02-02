@@ -16,30 +16,29 @@ The global config applies to all cloisters unless overridden by project config.
 ```yaml
 # ~/.config/cloister/config.yaml
 
-# Default agent to use (if multiple configured)
-default_agent: claude
-
-# Verbose output on cloister start
-verbose: true
+# Default agent
+defaults:
+  agent: claude
 
 # Network allowlist (applied to all projects)
-allowed_domains:
-  - api.anthropic.com
-  - api.openai.com
-  - registry.npmjs.org
-  - proxy.golang.org
-  # ... more domains
+proxy:
+  allow:
+    - domain: api.anthropic.com
+    - domain: api.openai.com
+    - domain: registry.npmjs.org
+    - domain: proxy.golang.org
+  # Options: "reject" or "request_approval"
+  unlisted_domain_behavior: request_approval
 
 # Hostexec patterns
 hostexec:
   # Commands matching these patterns auto-approve
   auto_approve:
-    - "^go mod tidy$"
-    - "^npm install$"
-
-  # Commands matching these patterns are denied without prompting
-  auto_deny:
-    - "^rm -rf /$"
+    - pattern: "^go mod tidy$"
+    - pattern: "^npm install$"
+  # Commands matching these patterns require manual approval
+  manual_approve:
+    - pattern: "^docker compose"
 ```
 
 ## Per-Project Configuration
@@ -50,20 +49,19 @@ Project configs override or extend global settings:
 # ~/.config/cloister/projects/my-api.yaml
 
 # Additional allowed domains for this project
-allowed_domains:
-  - docs.example.com
-  - internal-registry.company.com
+proxy:
+  allow:
+    - domain: docs.example.com
+    - domain: internal-registry.company.com
 
-# Project-specific hostexec patterns
-hostexec:
+# Project-specific command patterns
+commands:
   auto_approve:
-    - "^docker compose up"
-    - "^docker compose down"
+    - pattern: "^docker compose up"
+    - pattern: "^docker compose down"
 ```
 
 ## Using the Config Command
-
-<!-- TODO: Document cloister config subcommands -->
 
 ```bash
 # Show current effective config
@@ -73,10 +71,7 @@ cloister config show
 cloister config edit
 
 # Edit project config
-cloister config edit my-api
-
-# Set a single value
-cloister config set default.verbose false
+cloister project edit my-api
 ```
 
 ## Network Allowlist
@@ -88,18 +83,17 @@ The allowlist controls which domains containers can reach through the guardian p
 Cloister includes sensible defaults for common development:
 - AI provider APIs (Anthropic, OpenAI)
 - Package registries (npm, PyPI, Go proxy, crates.io)
-- Documentation sites
-- GitHub/GitLab (for dependency fetching)
+- Documentation sites (Go docs, etc.)
 
 ### Adding Domains
 
 ```yaml
-allowed_domains:
-  # Exact domain
-  - docs.example.com
-
-  # Wildcard subdomain
-  - "*.amazonaws.com"
+proxy:
+  allow:
+    # Exact domain
+    - domain: docs.example.com
+    # Each domain needs its own entry
+    - domain: api.example.com
 ```
 
 ### Unlisted Domain Behavior
@@ -107,8 +101,9 @@ allowed_domains:
 When a request is made to an unlisted domain:
 
 ```yaml
-# Options: "reject" or "request_approval"
-unlisted_domain_behavior: reject
+proxy:
+  # Options: "reject" or "request_approval"
+  unlisted_domain_behavior: reject
 ```
 
 With `request_approval`, the connection is held while a request appears in the approval UI.
@@ -122,27 +117,22 @@ Hostexec patterns use Go regular expressions to match command strings.
 ```yaml
 hostexec:
   auto_approve:
-    # Exact command
-    - "^go mod tidy$"
+    # Exact command only
+    - pattern: "^go mod tidy$"
 
     # Command with any arguments
-    - "^npm install"
+    - pattern: "^npm install"
 
-    # Specific subcommand
-    - "^docker compose (up|down|ps)"
+    # Specific subcommands
+    - pattern: "^docker compose (up|down|ps)"
 
-  auto_deny:
-    # Block dangerous patterns
-    - "^rm -rf"
-    - "^chmod 777"
+  manual_approve:
+    # Commands that need human review
+    - pattern: "^git push"
+    - pattern: "^rm -rf"
 ```
 
-### Approval Scopes
-
-When manually approving commands in the UI, you can save the pattern:
-- **Session only** — Forgotten when cloister stops
-- **Project** — Saved to project config
-- **Global** — Saved to global config
+Commands not matching any pattern are denied by default.
 
 ## Agent Configuration
 

@@ -30,16 +30,15 @@ make build
 Before using Cloister, configure your AI agent credentials. For Claude Code:
 
 ```bash
-# Run Claude's OAuth flow (opens browser)
-claude setup-token
-# Copy the displayed token
-
-# Store the token in Cloister config
 cloister setup claude
-# Paste token when prompted
 ```
 
-See [Credentials](credentials.md) for other agents and authentication methods.
+The setup wizard will prompt you to choose an authentication method:
+1. **Use existing Claude login** — If you're already logged in on the host
+2. **Long-lived OAuth token** — From running `claude setup-token`
+3. **API key** — From console.anthropic.com
+
+See [Credentials](credentials.md) for details on each method.
 
 ## Your First Cloister
 
@@ -58,12 +57,13 @@ cloister start
 4. You're dropped into a shell inside the container
 
 ```
-Starting guardian: use http://localhost:9999/ to monitor activity
-Detected project: my-app
-Creating cloister: my-app
+Started cloister: my-app
+Project: my-app (branch: main)
+Token: cloister_abc123...
 
-Entering cloister my-app. Type 'exit' to leave.
-cloister:my-app:/work$
+Attaching interactive shell...
+
+cloister@container:/work$
 ```
 
 ## Running Claude Inside the Cloister
@@ -71,7 +71,7 @@ cloister:my-app:/work$
 Inside the cloister, Claude Code runs with `--dangerously-skip-permissions` by default — the sandbox provides the safety net:
 
 ```bash
-cloister:my-app:/work$ claude
+cloister@container:/work$ claude
 ```
 
 Claude can now:
@@ -82,15 +82,14 @@ Claude can now:
 ## Monitoring Activity
 
 Open http://localhost:9999 in your browser to:
-- See active cloisters
-- Review pending command requests
-- Approve or deny hostexec requests
+- See pending hostexec requests
+- Approve or deny commands
 
 ## Exiting and Stopping
 
 ```bash
 # Exit the shell (container keeps running)
-cloister:my-app:/work$ exit
+cloister@container:/work$ exit
 
 # Re-enter the running cloister
 cloister start
@@ -99,8 +98,14 @@ cloister start
 cloister stop
 ```
 
+When you exit the shell:
+```
+Shell exited with code 0. Cloister still running.
+Use 'cloister stop my-app' to terminate.
+```
+
 ## Next Steps
 
 - [Configuration](configuration.md) — Customize allowlists and settings
-- [Working with Cloisters](working-with-cloisters.md) — Multiple cloisters, detached mode
+- [Working with Cloisters](working-with-cloisters.md) — Managing cloister lifecycle
 - [Host Commands](host-commands.md) — Using hostexec for git push, docker, etc.

@@ -16,7 +16,7 @@ This is by design. When legitimate host access is needed, `hostexec` routes the 
 From inside a cloister:
 
 ```bash
-cloister:my-app:/work$ hostexec git push origin main
+cloister@container:/work$ hostexec git push origin main
 ```
 
 What happens:
@@ -36,10 +36,10 @@ Open http://localhost:9999 to see pending requests:
 │  Pending Requests                                        │
 ├─────────────────────────────────────────────────────────┤
 │  my-app │ git push origin feature-branch                │
-│         │ [Approve] [Deny] [Approve & Save Pattern]     │
+│         │ [Approve] [Deny]                              │
 │                                                          │
 │  frontend │ docker compose up -d                        │
-│           │ [Approve] [Deny] [Approve & Save Pattern]   │
+│           │ [Approve] [Deny]                            │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -47,14 +47,6 @@ Open http://localhost:9999 to see pending requests:
 
 - **Approve** — Run this command once
 - **Deny** — Reject this request
-- **Approve & Save Pattern** — Run and remember (prompts for scope)
-
-### Pattern Scopes
-
-When saving a pattern:
-- **Session** — Valid until cloister stops
-- **Project** — Saved to project config
-- **Global** — Saved to global config
 
 ## Auto-Approve Patterns
 
@@ -64,10 +56,10 @@ Configure patterns to approve automatically without UI interaction:
 # ~/.config/cloister/config.yaml
 hostexec:
   auto_approve:
-    - "^go mod tidy$"
-    - "^npm install$"
-    - "^git status$"
-    - "^git diff"
+    - pattern: "^go mod tidy$"
+    - pattern: "^npm install$"
+    - pattern: "^git status$"
+    - pattern: "^git diff"
 ```
 
 Patterns are Go regular expressions matched against the command string.
@@ -75,42 +67,43 @@ Patterns are Go regular expressions matched against the command string.
 ### Pattern Examples
 
 ```yaml
-auto_approve:
-  # Exact command only
-  - "^go mod tidy$"
+hostexec:
+  auto_approve:
+    # Exact command only
+    - pattern: "^go mod tidy$"
 
-  # Command with any arguments
-  - "^npm install"
+    # Command with any arguments
+    - pattern: "^npm install"
 
-  # Specific docker compose commands
-  - "^docker compose (up|down|ps|logs)"
+    # Specific docker compose commands
+    - pattern: "^docker compose (up|down|ps|logs)"
 
-  # Git operations on specific remote
-  - "^git push origin"
+    # Git operations on specific remote
+    - pattern: "^git push origin"
 
-  # Allow any git command (use with caution)
-  - "^git "
+    # Allow any git command (use with caution)
+    - pattern: "^git "
 ```
 
-## Auto-Deny Patterns
+## Manual Approve Patterns
 
-Block dangerous commands without prompting:
+Commands matching `manual_approve` patterns require human approval. Note that `auto_approve` patterns are checked first—if a command matches an auto-approve pattern, it runs without checking manual_approve.
 
 ```yaml
 hostexec:
-  auto_deny:
-    - "^rm -rf /$"
-    - "^rm -rf /home$"
-    - "^chmod -R 777"
-    - "^curl .* | bash$"
+  manual_approve:
+    - pattern: "^rm -rf"
+    - pattern: "^chmod -R 777"
 ```
+
+Commands not matching any pattern are denied by default.
 
 ## Common Use Cases
 
 ### Git Push
 
 ```bash
-cloister:my-app:/work$ hostexec git push origin feature-branch
+cloister@container:/work$ hostexec git push origin feature-branch
 ```
 
 Git credentials are on the host, so push must go through hostexec.
@@ -118,8 +111,8 @@ Git credentials are on the host, so push must go through hostexec.
 ### Docker Commands
 
 ```bash
-cloister:my-app:/work$ hostexec docker compose up -d
-cloister:my-app:/work$ hostexec docker compose logs api
+cloister@container:/work$ hostexec docker compose up -d
+cloister@container:/work$ hostexec docker compose logs api
 ```
 
 Docker socket isn't in the container; docker commands run on host.
@@ -127,7 +120,7 @@ Docker socket isn't in the container; docker commands run on host.
 ### Package Managers (Host-level)
 
 ```bash
-cloister:my-app:/work$ hostexec brew install jq
+cloister@container:/work$ hostexec brew install jq
 ```
 
 Installing tools on the host (not in container).
@@ -143,8 +136,6 @@ Host commands run:
 
 Hostexec requests timeout after 5 minutes of waiting for approval. The AI agent receives a timeout error.
 
-Long-running commands (after approval) have a separate execution timeout.
-
 ## Security Considerations
 
 - Commands execute with your host user's full permissions
@@ -152,7 +143,6 @@ Long-running commands (after approval) have a separate execution timeout.
   - Commands with pipes or redirects
   - Commands accessing files outside the project
   - Network-related commands (curl, wget)
-- Use auto-deny for patterns you never want to run
 
 ## Troubleshooting
 
@@ -164,7 +154,7 @@ Long-running commands (after approval) have a separate execution timeout.
 
 ### Command denied unexpectedly
 
-Check auto-deny patterns in your config:
+Commands not matching any pattern are denied. Check your config:
 
 ```bash
 cloister config show

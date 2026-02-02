@@ -13,10 +13,10 @@ cloister setup claude
 ```
 
 The wizard will:
-1. Detect any existing Claude authentication
-2. Prompt for your preferred method
-3. Store credentials securely
-4. Configure the container environment
+1. Detect any existing Claude authentication on the host
+2. Present a menu of authentication methods
+3. Store credentials in config
+4. Configure injection for container startup
 
 ### Authentication Methods
 
@@ -25,13 +25,13 @@ The wizard will:
 Best for Claude Pro or Max subscribers:
 
 ```bash
-# First, get a token from Claude
+# First, get a token from Claude Code CLI
 claude setup-token
 # This opens a browser for OAuth and displays a token
 
 # Then configure Cloister
 cloister setup claude
-# Choose "OAuth token" and paste the token
+# Choose "Long-lived OAuth token" and paste the token
 ```
 
 Tokens are valid for approximately one year.
@@ -45,7 +45,7 @@ cloister setup claude
 # Choose "Use existing login"
 ```
 
-Cloister copies the necessary session files into the container.
+Cloister extracts credentials and injects them into the container at startup.
 
 **Note:** Session files may expire. Use OAuth tokens for long-running setups.
 
@@ -63,30 +63,36 @@ API usage is billed separately from Claude Pro/Max subscriptions.
 
 ## Credential Storage
 
-Credentials are stored in `~/.config/cloister/`:
+Credentials are stored in the global config file:
 
 ```
 ~/.config/cloister/
-├── config.yaml          # General config
-├── credentials/
-│   └── claude.yaml      # Claude credentials (encrypted)
-└── projects/
-    └── ...
+└── config.yaml          # Contains agent credentials under agents.claude
+```
+
+Example config structure:
+
+```yaml
+agents:
+  claude:
+    auth_method: token  # or "existing" or "api_key"
+    token: "..."        # if using OAuth token
+    api_key: "..."      # if using API key
 ```
 
 ### Security Notes
 
-- Credentials are **not** mounted directly into containers
-- The container receives only the authentication token/session needed
-- Host credential files (`~/.anthropic/`, etc.) are never exposed
-- Credentials in `~/.config/cloister/credentials/` have restricted permissions
+- Host credential files (`~/.anthropic/`, `~/.claude/`) are not bind-mounted into containers
+- For "existing" auth, credentials are extracted and written into the container at startup
+- For token/API key auth, values are injected via environment or config files
+- Config file permissions should be restricted (readable only by owner)
 
 ## Container Environment
 
 Inside the cloister, Claude Code is pre-configured:
 
 ```bash
-cloister:my-app:/work$ claude --version
+cloister@container:/work$ claude --version
 # Claude Code runs with injected credentials
 ```
 
@@ -121,8 +127,6 @@ cloister start
 
 ## Other Agents
 
-<!-- TODO: Document additional agents as they're implemented -->
-
 Support for additional AI coding agents is planned:
 
 - **OpenAI Codex** — Coming soon
@@ -144,15 +148,13 @@ cloister setup <agent>
 
 ### Claude prompts for login inside container
 
-The credential injection may have failed. Check:
+The credential injection may have failed. Re-run setup:
 
 ```bash
-# Inside cloister
-echo $CLAUDE_CODE_OAUTH_TOKEN
-# Should show a value if using OAuth token
+cloister setup claude
+cloister stop
+cloister start
 ```
-
-Re-run setup if needed.
 
 ## Next Steps
 
