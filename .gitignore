@@ -52,6 +52,9 @@ Thumbs.db
 .env.local
 .env.*.local
 
+# MkDocs
+site/
+
 # Misc
 tmp/
 *.tmp

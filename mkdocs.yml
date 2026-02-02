@@ -1,0 +1,79 @@
+# MkDocs configuration for Cloister documentation
+# To build: pip install mkdocs-material && mkdocs build
+# To serve locally: mkdocs serve
+
+site_name: Cloister
+site_description: Safe sandboxing for AI coding agents
+site_url: https://xdg.github.io/cloister/
+repo_url: https://github.com/xdg/cloister
+repo_name: xdg/cloister
+
+# Documentation structure
+docs_dir: docs
+site_dir: site
+
+nav:
+  - Getting Started: getting-started.md
+  - User Guide:
+    - Working with Cloisters: working-with-cloisters.md
+    - Configuration: configuration.md
+    - Credentials: credentials.md
+    - Host Commands: host-commands.md
+  - Reference:
+    - Command Reference: command-reference.md
+    - Troubleshooting: troubleshooting.md
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: blue grey
+      accent: blue
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: blue grey
+      accent: blue
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+  icon:
+    repo: fontawesome/brands/github
+  logo: img/cloister-logo.svg
+  favicon: img/cloister-logo.svg
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/xdg/cloister
