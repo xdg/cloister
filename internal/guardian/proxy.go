@@ -30,12 +30,61 @@ const (
 	idleTimeout = 5 * time.Minute
 )
 
+// Domain behavior constants for unlisted domains.
+const (
+	// DomainBehaviorReject immediately returns 403 for unlisted domains (default).
+	DomainBehaviorReject = "reject"
+	// DomainBehaviorRequestApproval holds the connection and prompts for approval.
+	DomainBehaviorRequestApproval = "request_approval"
+)
+
+// DefaultApprovalTimeout is the default timeout for domain approval requests.
+const DefaultApprovalTimeout = 60 * time.Second
+
 // TokenValidator validates authentication tokens for proxy requests.
 // Implementations should be thread-safe.
 type TokenValidator interface {
 	// Validate checks if a token is valid and returns true if so.
 	Validate(token string) bool
 }
+
+// TokenInfoLookup looks up detailed token info including cloister and project names.
+// Returns the info and true if the token is valid, empty info and false otherwise.
+// TokenInfo type is defined in api.go.
+type TokenInfoLookup func(token string) (TokenInfo, bool)
+
+// DomainApprovalQueue is the interface for domain approval queues.
+// This is satisfied by approval.DomainQueue.
+type DomainApprovalQueue interface {
+	Add(req interface{}) (string, error)
+}
+
+// ConfigPersister handles persisting domain approvals to config files.
+type ConfigPersister interface {
+	// AddToProjectAllowlist adds a domain to a project's allowlist config.
+	AddToProjectAllowlist(projectName, domain string) error
+	// AddToGlobalAllowlist adds a domain to the global allowlist config.
+	AddToGlobalAllowlist(domain string) error
+}
+
+// DomainApprovalResult is the result of a domain approval request.
+type DomainApprovalResult struct {
+	Approved bool
+	Scope    string // "session", "project", "global"
+	Reason   string // for denied/timeout
+}
+
+// DomainApprovalRequest contains the info needed to request domain approval.
+type DomainApprovalRequest struct {
+	Token    string
+	Cloister string
+	Project  string
+	Domain   string
+}
+
+// DomainApprover handles domain approval requests.
+// Returns the approval result after blocking for user decision or timeout.
+type DomainApprover func(req DomainApprovalRequest) DomainApprovalResult
 
 // ConfigReloader is a function that returns a new Allowlist based on reloaded configuration.
 type ConfigReloader func() (*Allowlist, error)
@@ -61,6 +110,23 @@ type ProxyServer struct {
 	// TokenLookup provides token-to-project mapping for per-project allowlists.
 	// If nil, the global Allowlist is used for all requests.
 	TokenLookup TokenLookupFunc
+
+	// TokenInfoLookup provides detailed token info for domain approval requests.
+	// If nil, domain approval will not include cloister/project info.
+	TokenInfoLookup TokenInfoLookup
+
+	// UnlistedBehavior controls what happens for domains not in the allowlist.
+	// "reject" (default) returns 403 immediately.
+	// "request_approval" holds the connection and prompts for approval.
+	UnlistedBehavior string
+
+	// DomainApprover handles domain approval requests when UnlistedBehavior is "request_approval".
+	// If nil, unlisted domains are rejected even if UnlistedBehavior is "request_approval".
+	DomainApprover DomainApprover
+
+	// ConfigPersister handles saving approved domains to config files.
+	// If nil, project and global scope approvals will only be session-scoped.
+	ConfigPersister ConfigPersister
 
 	server         *http.Server
 	listener       net.Listener
@@ -338,16 +404,128 @@ func isTimeoutError(err error) bool {
 func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// r.Host contains the target host:port for CONNECT requests
 	host := r.Host
+	domain := stripPort(host)
+
+	// Extract token for session-scoped checks and approval requests
+	token := p.extractToken(r)
 
 	// Get the allowlist to use for this request
 	allowlist := p.getAllowlistForRequest(r)
 
-	// Check allowlist
-	if allowlist == nil || !allowlist.IsAllowed(host) {
+	// Check static allowlist (global + project)
+	if allowlist != nil && allowlist.IsAllowed(host) {
+		p.tunnelConnection(w, r, host)
+		return
+	}
+
+	// Check session-scoped allowlist
+	if token != "" && p.AllowlistCache != nil && p.AllowlistCache.IsSessionAllowed(token, domain) {
+		p.tunnelConnection(w, r, host)
+		return
+	}
+
+	// Domain not allowed - check if we should request approval
+	if p.UnlistedBehavior != DomainBehaviorRequestApproval || p.DomainApprover == nil {
 		http.Error(w, "Forbidden - domain not in allowlist", http.StatusForbidden)
 		return
 	}
 
+	// Request approval
+	result := p.requestDomainApproval(token, domain)
+	if !result.Approved {
+		reason := result.Reason
+		if reason == "" {
+			reason = "domain not approved"
+		}
+		http.Error(w, fmt.Sprintf("Forbidden - %s", reason), http.StatusForbidden)
+		return
+	}
+
+	// Apply the approval based on scope
+	p.applyDomainApproval(token, domain, result.Scope)
+
+	// Now tunnel the connection
+	p.tunnelConnection(w, r, host)
+}
+
+// extractToken extracts the token from the Proxy-Authorization header.
+func (p *ProxyServer) extractToken(r *http.Request) string {
+	authHeader := r.Header.Get("Proxy-Authorization")
+	if authHeader == "" {
+		return ""
+	}
+	token, ok := p.parseBasicAuth(authHeader)
+	if !ok {
+		return ""
+	}
+	return token
+}
+
+// requestDomainApproval requests approval for a domain and blocks until a decision is made.
+func (p *ProxyServer) requestDomainApproval(token, domain string) DomainApprovalResult {
+	// Get token info for the approval request
+	var cloister, project string
+	if p.TokenInfoLookup != nil {
+		info, ok := p.TokenInfoLookup(token)
+		if ok {
+			cloister = info.CloisterName
+			project = info.ProjectName
+		}
+	}
+
+	req := DomainApprovalRequest{
+		Token:    token,
+		Cloister: cloister,
+		Project:  project,
+		Domain:   domain,
+	}
+
+	return p.DomainApprover(req)
+}
+
+// applyDomainApproval applies the domain approval based on scope.
+func (p *ProxyServer) applyDomainApproval(token, domain, scope string) {
+	switch scope {
+	case "session":
+		// Add to session-scoped cache only
+		if p.AllowlistCache != nil {
+			p.AllowlistCache.AddSessionDomain(token, domain)
+		}
+
+	case "project":
+		// Add to session cache AND persist to project config
+		if p.AllowlistCache != nil {
+			p.AllowlistCache.AddSessionDomain(token, domain)
+		}
+		if p.ConfigPersister != nil && p.TokenInfoLookup != nil {
+			if info, ok := p.TokenInfoLookup(token); ok && info.ProjectName != "" {
+				if err := p.ConfigPersister.AddToProjectAllowlist(info.ProjectName, domain); err != nil {
+					p.log("failed to persist domain to project config: %v", err)
+				}
+			}
+		}
+
+	case "global":
+		// Add to global allowlist AND persist
+		if p.Allowlist != nil {
+			p.Allowlist.Add([]string{domain})
+		}
+		if p.AllowlistCache != nil {
+			global := p.AllowlistCache.GetGlobal()
+			if global != nil {
+				global.Add([]string{domain})
+			}
+		}
+		if p.ConfigPersister != nil {
+			if err := p.ConfigPersister.AddToGlobalAllowlist(domain); err != nil {
+				p.log("failed to persist domain to global config: %v", err)
+			}
+		}
+	}
+}
+
+// tunnelConnection establishes a bidirectional tunnel to the upstream server.
+func (p *ProxyServer) tunnelConnection(w http.ResponseWriter, r *http.Request, host string) {
 	// Establish connection to upstream server.
 	// We use net.Dial (not TLS) because the client will perform TLS handshake
 	// through the tunnel - this is how HTTP CONNECT proxies work.

@@ -16,6 +16,10 @@ const (
 	EventRequestAdded EventType = "request-added"
 	// EventRequestRemoved is sent when a request is removed (approved/denied/timed out).
 	EventRequestRemoved EventType = "request-removed"
+	// EventDomainAdded is sent when a new domain request is added to the queue.
+	EventDomainAdded EventType = "domain-added"
+	// EventDomainRemoved is sent when a domain request is removed (approved/denied/timed out).
+	EventDomainRemoved EventType = "domain-removed"
 	// EventHeartbeat is sent periodically to keep the connection alive.
 	EventHeartbeat EventType = "heartbeat"
 )
@@ -144,6 +148,47 @@ func (h *EventHub) BroadcastRequestRemoved(id string) {
 	data, _ := json.Marshal(RemovedEventData{ID: id})
 	h.Broadcast(Event{
 		Type: EventRequestRemoved,
+		Data: string(data),
+	})
+}
+
+// templateDomainRequest holds domain request data for template rendering.
+type templateDomainRequest struct {
+	ID        string
+	Cloister  string
+	Project   string
+	Domain    string
+	Timestamp string
+	Expires   string
+}
+
+// BroadcastDomainRequestAdded broadcasts a domain-added event with rendered HTML.
+func (h *EventHub) BroadcastDomainRequestAdded(req *DomainRequest) {
+	// Render the domain request template
+	var buf bytes.Buffer
+	if err := templates.ExecuteTemplate(&buf, "domain-request", templateDomainRequest{
+		ID:        req.ID,
+		Cloister:  req.Cloister,
+		Project:   req.Project,
+		Domain:    req.Domain,
+		Timestamp: req.Timestamp.Format(time.RFC3339),
+		Expires:   req.Expires.Format(time.RFC3339),
+	}); err != nil {
+		// Log error but don't fail - SSE is best-effort
+		return
+	}
+
+	h.Broadcast(Event{
+		Type: EventDomainAdded,
+		Data: buf.String(),
+	})
+}
+
+// BroadcastDomainRequestRemoved broadcasts a domain-removed event with the request ID.
+func (h *EventHub) BroadcastDomainRequestRemoved(id string) {
+	data, _ := json.Marshal(RemovedEventData{ID: id})
+	h.Broadcast(Event{
+		Type: EventDomainRemoved,
 		Data: string(data),
 	})
 }

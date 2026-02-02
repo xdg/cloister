@@ -22,10 +22,20 @@
             font-size: 1.5rem;
             font-weight: 600;
         }
+        h2 {
+            margin: 30px 0 15px;
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #444;
+        }
+        h2:first-of-type {
+            margin-top: 0;
+        }
         .queue {
             background: #fff;
             border-radius: 8px;
             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
         }
         .queue-empty {
             padding: 40px 20px;
@@ -67,6 +77,14 @@
             white-space: pre-wrap;
             word-break: break-all;
         }
+        .request-domain {
+            font-family: "SF Mono", Monaco, "Courier New", monospace;
+            font-size: 1rem;
+            background: #f0f9ff;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border-left: 3px solid #3b82f6;
+        }
         .request-time {
             font-size: 0.75rem;
             color: #999;
@@ -75,6 +93,7 @@
             display: flex;
             gap: 8px;
             margin-top: 12px;
+            flex-wrap: wrap;
         }
         .btn {
             padding: 6px 16px;
@@ -90,6 +109,20 @@
         }
         .btn-approve:hover {
             background: #16a34a;
+        }
+        .btn-approve-persist {
+            background: #3b82f6;
+            color: #fff;
+        }
+        .btn-approve-persist:hover {
+            background: #2563eb;
+        }
+        .btn-approve-global {
+            background: #8b5cf6;
+            color: #fff;
+        }
+        .btn-approve-global:hover {
+            background: #7c3aed;
         }
         .btn-deny {
             background: #ef4444;
@@ -121,7 +154,7 @@
         .request-denied .result-status {
             color: #dc2626;
         }
-        .result-cmd {
+        .result-cmd, .result-domain {
             font-family: "SF Mono", Monaco, "Courier New", monospace;
             font-size: 0.875rem;
             color: #666;
@@ -131,7 +164,9 @@
 </head>
 <body>
     <h1>Cloister Approval Queue</h1>
-    <div class="queue">
+
+    <h2>Command Requests</h2>
+    <div class="queue" id="command-queue">
         {{if .Requests}}
         <ul class="request-list" id="request-list">
             {{range .Requests}}
@@ -140,10 +175,26 @@
         </ul>
         {{else}}
         <div class="queue-empty" id="queue-empty">
-            No pending requests
+            No pending command requests
         </div>
         {{end}}
     </div>
+
+    <h2>Domain Requests</h2>
+    <div class="queue" id="domain-queue">
+        {{if .DomainRequests}}
+        <ul class="request-list" id="domain-list">
+            {{range .DomainRequests}}
+            {{template "domain-request" .}}
+            {{end}}
+        </ul>
+        {{else}}
+        <div class="queue-empty" id="domain-queue-empty">
+            No pending domain requests
+        </div>
+        {{end}}
+    </div>
+
     <script>
         (function() {
             // Request notification permission on page load
@@ -153,6 +204,7 @@
 
             var eventSource = new EventSource('/events');
 
+            // Command request handlers
             eventSource.addEventListener('request-added', function(e) {
                 var emptyDiv = document.getElementById('queue-empty');
                 var list = document.getElementById('request-list');
@@ -184,9 +236,9 @@
                     var cloister = temp.querySelector('.request-meta strong')?.textContent || 'Unknown';
                     var cmd = temp.querySelector('.request-cmd')?.textContent || '';
 
-                    var notification = new Notification('Cloister: Approval Requested', {
+                    var notification = new Notification('Cloister: Command Approval Requested', {
                         body: cloister + ': ' + cmd.substring(0, 80),
-                        tag: 'cloister-request',  // Collapse multiple into one
+                        tag: 'cloister-request',
                         requireInteraction: false
                     });
 
@@ -210,7 +262,70 @@
                     var emptyDiv = document.createElement('div');
                     emptyDiv.className = 'queue-empty';
                     emptyDiv.id = 'queue-empty';
-                    emptyDiv.textContent = 'No pending requests';
+                    emptyDiv.textContent = 'No pending command requests';
+                    list.parentNode.replaceChild(emptyDiv, list);
+                }
+            });
+
+            // Domain request handlers
+            eventSource.addEventListener('domain-added', function(e) {
+                var emptyDiv = document.getElementById('domain-queue-empty');
+                var list = document.getElementById('domain-list');
+
+                // If the queue was empty, replace with a list
+                if (emptyDiv) {
+                    var ul = document.createElement('ul');
+                    ul.className = 'request-list';
+                    ul.id = 'domain-list';
+                    ul.innerHTML = e.data;
+                    emptyDiv.parentNode.replaceChild(ul, emptyDiv);
+                } else if (list) {
+                    // Append to existing list
+                    list.insertAdjacentHTML('beforeend', e.data);
+                }
+
+                // Re-initialize htmx for the new content
+                if (typeof htmx !== 'undefined') {
+                    htmx.process(document.getElementById('domain-list'));
+                }
+
+                // Show browser notification if permission granted
+                if ('Notification' in window &&
+                    Notification.permission === 'granted') {
+
+                    // Extract domain info from the rendered HTML
+                    var temp = document.createElement('div');
+                    temp.innerHTML = e.data;
+                    var cloister = temp.querySelector('.request-meta strong')?.textContent || 'Unknown';
+                    var domain = temp.querySelector('.request-domain')?.textContent || '';
+
+                    var notification = new Notification('Cloister: Domain Approval Requested', {
+                        body: cloister + ' wants to access: ' + domain,
+                        tag: 'cloister-domain',
+                        requireInteraction: false
+                    });
+
+                    notification.onclick = function() {
+                        window.focus();
+                        notification.close();
+                    };
+                }
+            });
+
+            eventSource.addEventListener('domain-removed', function(e) {
+                var data = JSON.parse(e.data);
+                var requestEl = document.getElementById('domain-' + data.id);
+                if (requestEl) {
+                    requestEl.remove();
+                }
+
+                // If list is now empty, show the empty message
+                var list = document.getElementById('domain-list');
+                if (list && list.children.length === 0) {
+                    var emptyDiv = document.createElement('div');
+                    emptyDiv.className = 'queue-empty';
+                    emptyDiv.id = 'domain-queue-empty';
+                    emptyDiv.textContent = 'No pending domain requests';
                     list.parentNode.replaceChild(emptyDiv, list);
                 }
             });

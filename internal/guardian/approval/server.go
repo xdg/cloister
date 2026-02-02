@@ -45,8 +45,12 @@ type Server struct {
 	// Addr is the address to listen on (e.g., "127.0.0.1:9999").
 	Addr string
 
-	// Queue holds pending requests awaiting human approval.
+	// Queue holds pending command requests awaiting human approval.
 	Queue *Queue
+
+	// DomainQueue holds pending domain requests awaiting human approval.
+	// If nil, domain approval endpoints are disabled.
+	DomainQueue *DomainQueue
 
 	// Events is the event hub for SSE connections.
 	Events *EventHub
@@ -99,6 +103,10 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /events", s.handleEvents)
 	mux.HandleFunc("POST /approve/{id}", s.handleApprove)
 	mux.HandleFunc("POST /deny/{id}", s.handleDeny)
+	// Domain approval endpoints
+	mux.HandleFunc("GET /pending-domains", s.handlePendingDomains)
+	mux.HandleFunc("POST /approve-domain/{id}", s.handleApproveDomain)
+	mux.HandleFunc("POST /deny-domain/{id}", s.handleDenyDomain)
 	staticSubFS, _ := fs.Sub(staticFS, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
 
@@ -150,7 +158,8 @@ func (s *Server) ListenAddr() string {
 
 // indexData holds the data passed to the index.html template.
 type indexData struct {
-	Requests []templateRequest
+	Requests       []templateRequest
+	DomainRequests []templateDomainRequest
 }
 
 // templateRequest holds request data for template rendering.
@@ -187,6 +196,22 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			Agent:     req.Agent,
 			Cmd:       req.Cmd,
 			Timestamp: req.Timestamp.Format(time.RFC3339),
+		}
+	}
+
+	// Add domain requests if DomainQueue is configured
+	if s.DomainQueue != nil {
+		pendingDomains := s.DomainQueue.List()
+		data.DomainRequests = make([]templateDomainRequest, len(pendingDomains))
+		for i, req := range pendingDomains {
+			data.DomainRequests[i] = templateDomainRequest{
+				ID:        req.ID,
+				Cloister:  req.Cloister,
+				Project:   req.Project,
+				Domain:    req.Domain,
+				Timestamp: req.Timestamp.Format(time.RFC3339),
+				Expires:   req.Expires.Format(time.RFC3339),
+			}
 		}
 	}
 
@@ -451,6 +476,212 @@ func (s *Server) writeResultHTML(w http.ResponseWriter, id, status, cmd string) 
 		Cmd:    cmd,
 	}
 	if err := templates.ExecuteTemplate(w, "result", data); err != nil {
+		http.Error(w, "template error", http.StatusInternalServerError)
+	}
+}
+
+// Domain approval handlers
+
+// pendingDomainJSON represents a pending domain request in JSON format for the API.
+type pendingDomainJSON struct {
+	ID        string `json:"id"`
+	Cloister  string `json:"cloister"`
+	Project   string `json:"project"`
+	Domain    string `json:"domain"`
+	Timestamp string `json:"timestamp"`
+	Expires   string `json:"expires"`
+}
+
+// pendingDomainsResponse is the response body for GET /pending-domains.
+type pendingDomainsResponse struct {
+	Requests []pendingDomainJSON `json:"requests"`
+}
+
+// handlePendingDomains returns a JSON array of pending domain requests.
+func (s *Server) handlePendingDomains(w http.ResponseWriter, r *http.Request) {
+	if s.DomainQueue == nil {
+		s.writeJSON(w, http.StatusOK, pendingDomainsResponse{Requests: []pendingDomainJSON{}})
+		return
+	}
+
+	pending := s.DomainQueue.List()
+
+	response := pendingDomainsResponse{
+		Requests: make([]pendingDomainJSON, len(pending)),
+	}
+
+	for i, req := range pending {
+		response.Requests[i] = pendingDomainJSON{
+			ID:        req.ID,
+			Cloister:  req.Cloister,
+			Project:   req.Project,
+			Domain:    req.Domain,
+			Timestamp: req.Timestamp.Format(time.RFC3339),
+			Expires:   req.Expires.Format(time.RFC3339),
+		}
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+// approveDomainRequest is the request body for POST /approve-domain/{id}.
+type approveDomainRequest struct {
+	Scope string `json:"scope"` // "session", "project", "global"
+}
+
+// approveDomainResponse is the response body for POST /approve-domain/{id}.
+type approveDomainResponse struct {
+	Status string `json:"status"`
+	ID     string `json:"id"`
+	Scope  string `json:"scope"`
+}
+
+// handleApproveDomain approves a pending domain request by ID with specified scope.
+func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
+	if s.DomainQueue == nil {
+		s.writeError(w, http.StatusNotFound, "domain approval not enabled")
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		s.writeError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+
+	req, ok := s.DomainQueue.Get(id)
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "request not found")
+		return
+	}
+
+	// Parse scope from request body
+	var approveReq approveDomainRequest
+	_ = json.NewDecoder(r.Body).Decode(&approveReq)
+
+	// Default to session scope if not specified
+	scope := approveReq.Scope
+	if scope == "" {
+		scope = string(ScopeSession)
+	}
+
+	// Validate scope
+	if scope != string(ScopeSession) && scope != string(ScopeProject) && scope != string(ScopeGlobal) {
+		s.writeError(w, http.StatusBadRequest, "invalid scope: must be session, project, or global")
+		return
+	}
+
+	// Capture request info before removing from queue
+	domain := req.Domain
+
+	// Send approved response on the request's channel
+	if req.Response != nil {
+		req.Response <- DomainResponse{
+			Status: "approved",
+			Scope:  DomainScope(scope),
+		}
+	}
+
+	// Remove from queue (also cancels timeout)
+	s.DomainQueue.Remove(id)
+
+	// Broadcast removal event to SSE clients
+	s.Events.BroadcastDomainRequestRemoved(id)
+
+	// Check if this is an htmx request
+	if r.Header.Get("HX-Request") == "true" {
+		s.writeDomainResultHTML(w, id, "approved", domain, scope)
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, approveDomainResponse{
+		Status: "approved",
+		ID:     id,
+		Scope:  scope,
+	})
+}
+
+// denyDomainResponse is the response body for POST /deny-domain/{id}.
+type denyDomainResponse struct {
+	Status string `json:"status"`
+	ID     string `json:"id"`
+}
+
+// handleDenyDomain denies a pending domain request by ID.
+func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
+	if s.DomainQueue == nil {
+		s.writeError(w, http.StatusNotFound, "domain approval not enabled")
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		s.writeError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+
+	req, ok := s.DomainQueue.Get(id)
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "request not found")
+		return
+	}
+
+	// Capture request info before removing from queue
+	domain := req.Domain
+
+	// Parse optional reason from request body
+	var denyReq denyRequest
+	_ = json.NewDecoder(r.Body).Decode(&denyReq)
+
+	reason := denyReq.Reason
+	if reason == "" {
+		reason = "Denied by user"
+	}
+
+	// Send denied response on the request's channel
+	if req.Response != nil {
+		req.Response <- DomainResponse{
+			Status: "denied",
+			Reason: reason,
+		}
+	}
+
+	// Remove from queue (also cancels timeout)
+	s.DomainQueue.Remove(id)
+
+	// Broadcast removal event to SSE clients
+	s.Events.BroadcastDomainRequestRemoved(id)
+
+	// Check if this is an htmx request
+	if r.Header.Get("HX-Request") == "true" {
+		s.writeDomainResultHTML(w, id, "denied", domain, "")
+		return
+	}
+
+	s.writeJSON(w, http.StatusOK, denyDomainResponse{
+		Status: "denied",
+		ID:     id,
+	})
+}
+
+// domainResultData holds the data passed to the domain-result template.
+type domainResultData struct {
+	ID     string
+	Status string
+	Domain string
+	Scope  string
+}
+
+// writeDomainResultHTML renders the domain result template for htmx responses.
+func (s *Server) writeDomainResultHTML(w http.ResponseWriter, id, status, domain, scope string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	data := domainResultData{
+		ID:     id,
+		Status: status,
+		Domain: domain,
+		Scope:  scope,
+	}
+	if err := templates.ExecuteTemplate(w, "domain-result", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
 }

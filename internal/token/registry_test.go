@@ -418,3 +418,64 @@ func TestRegistry_UpdateWithProject(t *testing.T) {
 		t.Errorf("count should be 1 after update, got %d", r.Count())
 	}
 }
+
+func TestRegistry_OnRevokeCallback(t *testing.T) {
+	r := NewRegistry()
+
+	var revokedToken string
+	callbackCount := 0
+
+	// Set up callback
+	r.SetOnRevoke(func(tok string) {
+		revokedToken = tok
+		callbackCount++
+	})
+
+	// Register and revoke a token
+	token := "callback-token"
+	r.Register(token, "test-cloister")
+
+	if !r.Revoke(token) {
+		t.Error("Revoke should return true for registered token")
+	}
+
+	// Callback should have been called
+	if callbackCount != 1 {
+		t.Errorf("callback should be called once, got %d calls", callbackCount)
+	}
+	if revokedToken != token {
+		t.Errorf("callback received token %q, expected %q", revokedToken, token)
+	}
+}
+
+func TestRegistry_OnRevokeCallback_NotCalledForNonexistent(t *testing.T) {
+	r := NewRegistry()
+
+	callbackCount := 0
+	r.SetOnRevoke(func(tok string) {
+		callbackCount++
+	})
+
+	// Revoke nonexistent token
+	if r.Revoke("nonexistent") {
+		t.Error("Revoke should return false for nonexistent token")
+	}
+
+	// Callback should not have been called
+	if callbackCount != 0 {
+		t.Errorf("callback should not be called for nonexistent token, got %d calls", callbackCount)
+	}
+}
+
+func TestRegistry_OnRevokeCallback_NilCallback(t *testing.T) {
+	r := NewRegistry()
+
+	// Register and revoke without setting callback (should not panic)
+	token := "no-callback-token"
+	r.Register(token, "test-cloister")
+
+	if !r.Revoke(token) {
+		t.Error("Revoke should return true for registered token")
+	}
+	// If we get here without panicking, the test passes
+}

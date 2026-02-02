@@ -11,11 +11,17 @@ type TokenInfo struct {
 	WorktreePath string // Absolute path to the worktree on the host
 }
 
+// RevokeCallback is called when a token is revoked.
+// The callback receives the token that was revoked.
+type RevokeCallback func(token string)
+
 // Registry is a thread-safe in-memory store mapping tokens to token info.
 // It implements the guardian.TokenValidator interface (Validate(string) bool).
 type Registry struct {
-	mu     sync.RWMutex
-	tokens map[string]TokenInfo // token -> TokenInfo
+	mu           sync.RWMutex
+	tokens       map[string]TokenInfo // token -> TokenInfo
+	onRevoke     RevokeCallback       // optional callback called when token is revoked
+	onRevokeLock sync.RWMutex         // protects onRevoke callback
 }
 
 // NewRegistry creates a new empty token registry.
@@ -75,17 +81,39 @@ func (r *Registry) Lookup(token string) (TokenInfo, bool) {
 	return info, ok
 }
 
+// SetOnRevoke sets a callback that is called when a token is revoked.
+// The callback is invoked after the token is removed from the registry.
+// This can be used to clean up resources associated with the token.
+func (r *Registry) SetOnRevoke(callback RevokeCallback) {
+	r.onRevokeLock.Lock()
+	defer r.onRevokeLock.Unlock()
+	r.onRevoke = callback
+}
+
 // Revoke removes a token from the registry.
 // This should be called when a container is stopped.
 // Returns true if the token was found and removed, false if it didn't exist.
+// If an OnRevoke callback is set, it is called after the token is removed.
 func (r *Registry) Revoke(token string) bool {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+	var revoked bool
 	if _, exists := r.tokens[token]; exists {
 		delete(r.tokens, token)
-		return true
+		revoked = true
 	}
-	return false
+	r.mu.Unlock()
+
+	// Call the onRevoke callback outside the main lock
+	if revoked {
+		r.onRevokeLock.RLock()
+		callback := r.onRevoke
+		r.onRevokeLock.RUnlock()
+		if callback != nil {
+			callback(token)
+		}
+	}
+
+	return revoked
 }
 
 // Count returns the number of registered tokens.

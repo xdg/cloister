@@ -1,6 +1,6 @@
 module github.com/xdg/cloister
 
-go 1.25.4
+go 1.24.7
 
 require (
 	github.com/spf13/cobra v1.10.2

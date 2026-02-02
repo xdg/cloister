@@ -232,6 +232,8 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	// Create an in-memory token registry
 	registry := token.NewRegistry()
 
+	// The onRevoke callback will be set after allowlistCache is created
+
 	// Load persisted tokens from disk (mounted from host)
 	store, err := token.NewStore(guardian.ContainerTokenDir)
 	if err != nil {
@@ -261,6 +263,12 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	// Create allowlist cache for per-project allowlists
 	allowlistCache := guardian.NewAllowlistCache(globalAllowlist)
+
+	// Set up token revocation cleanup to clear session-scoped domains
+	registry.SetOnRevoke(func(tok string) {
+		allowlistCache.ClearSession(tok)
+		log.Printf("Cleared session-scoped domains for revoked token")
+	})
 
 	// Create the proxy server with config-derived allowlist
 	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)
@@ -343,6 +351,9 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	// Create the approval queue for pending requests
 	approvalQueue := approval.NewQueue()
 
+	// Create the domain approval queue for proxy domain requests
+	domainQueue := approval.NewDomainQueueWithTimeout(guardian.DefaultApprovalTimeout)
+
 	// Create executor client if shared secret and port are available
 	var execClient request.CommandExecutor
 	sharedSecret := os.Getenv(guardian.SharedSecretEnvVar)
@@ -369,6 +380,58 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	// Create the approval server for the web UI (localhost only)
 	approvalServer := approval.NewServer(approvalQueue, nil)
+	approvalServer.DomainQueue = domainQueue
+
+	// Connect domain queue to the approval server's event hub for SSE broadcasts
+	domainQueue.SetEventHub(approvalServer.Events)
+
+	// Create the config persister for saving approved domains
+	configPersister := guardian.NewFileConfigPersister()
+
+	// Set up domain approval for the proxy
+	proxy.UnlistedBehavior = guardian.DomainBehaviorRequestApproval
+	proxy.ConfigPersister = configPersister
+	proxy.TokenInfoLookup = func(tok string) (guardian.TokenInfo, bool) {
+		info, ok := registry.Lookup(tok)
+		if !ok {
+			return guardian.TokenInfo{}, false
+		}
+		return guardian.TokenInfo{
+			CloisterName: info.CloisterName,
+			ProjectName:  info.ProjectName,
+			WorktreePath: info.WorktreePath,
+		}, true
+	}
+
+	// Create the DomainApprover callback that bridges the proxy to the domain queue
+	proxy.DomainApprover = func(req guardian.DomainApprovalRequest) guardian.DomainApprovalResult {
+		// Create a response channel
+		respChan := make(chan approval.DomainResponse, 1)
+
+		// Add to the domain queue
+		domainReq := &approval.DomainRequest{
+			Token:    req.Token,
+			Cloister: req.Cloister,
+			Project:  req.Project,
+			Domain:   req.Domain,
+			Response: respChan,
+		}
+		_, err := domainQueue.Add(domainReq)
+		if err != nil {
+			return guardian.DomainApprovalResult{
+				Approved: false,
+				Reason:   err.Error(),
+			}
+		}
+
+		// Wait for response (blocking)
+		resp := <-respChan
+		return guardian.DomainApprovalResult{
+			Approved: resp.Status == "approved",
+			Scope:    string(resp.Scope),
+			Reason:   resp.Reason,
+		}
+	}
 
 	// Start the proxy server
 	if err := proxy.Start(); err != nil {
