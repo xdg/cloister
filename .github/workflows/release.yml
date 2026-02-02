@@ -8,9 +8,26 @@ on:
 permissions:
   contents: write
   packages: write
+  id-token: write  # For container attestations
+  attestations: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run unit tests
+        run: go test ./...
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -40,9 +57,23 @@ jobs:
             COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
           fi
 
+          # Helper function to write fallback notes
+          write_fallback_notes() {
+            echo "## ${CURRENT_TAG}" > RELEASE_NOTES.md
+            echo "" >> RELEASE_NOTES.md
+            echo "$COMMITS" >> RELEASE_NOTES.md
+          }
+
           if [ -z "$COMMITS" ]; then
             echo "No commits found, using minimal release notes"
             echo "## ${CURRENT_TAG}" > RELEASE_NOTES.md
+            exit 0
+          fi
+
+          # Skip API call if no key configured (e.g., forks)
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "No ANTHROPIC_API_KEY configured, using commit list"
+            write_fallback_notes
             exit 0
           fi
 
@@ -52,7 +83,7 @@ jobs:
           Commits:
           ${COMMITS}"
 
-          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+          RESPONSE=$(curl -s --max-time 30 https://api.anthropic.com/v1/messages \
             -H "Content-Type: application/json" \
             -H "x-api-key: ${ANTHROPIC_API_KEY}" \
             -H "anthropic-version: 2023-06-01" \
@@ -69,9 +100,7 @@ jobs:
 
           if [ -z "$NOTES" ]; then
             echo "API call failed or returned empty, falling back to commit list"
-            echo "## ${CURRENT_TAG}" > RELEASE_NOTES.md
-            echo "" >> RELEASE_NOTES.md
-            echo "$COMMITS" >> RELEASE_NOTES.md
+            write_fallback_notes
           else
             echo "$NOTES" > RELEASE_NOTES.md
           fi
@@ -88,6 +117,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   container:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -118,6 +148,7 @@ jobs:
             type=raw,value=latest
 
       - name: Build and push
+        id: push
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -127,3 +158,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Generate artifact attestation
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
