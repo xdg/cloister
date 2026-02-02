@@ -16,10 +16,10 @@ import (
 // shortTempDir creates a short temp directory for socket files.
 // Unix socket paths have a length limit (~104 chars on macOS, ~108 on Linux).
 // Go's t.TempDir() can create very long paths that exceed this limit.
+// Uses os.TempDir() which respects TMPDIR for sandbox compatibility.
 func shortTempDir(t *testing.T) string {
 	t.Helper()
-	// Use /tmp directly for short paths
-	dir, err := os.MkdirTemp("/tmp", "sock")
+	dir, err := os.MkdirTemp(os.TempDir(), "sock")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}

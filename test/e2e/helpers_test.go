@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
+	"github.com/xdg/cloister/internal/version"
 )
 
 // testContainerInfo holds info about a test container with optional proxy auth.
@@ -32,10 +32,10 @@ func createTestContainer(t *testing.T, suffix string) string {
 	_, err := docker.Run("run", "-d",
 		"--name", containerName,
 		"--network", docker.CloisterNetworkName,
-		container.DefaultImage,
+		version.DefaultImage(),
 		"sleep", "infinity")
 	if err != nil {
-		t.Skipf("Could not create test container with %s: %v", container.DefaultImage, err)
+		t.Skipf("Could not create test container with %s: %v", version.DefaultImage(), err)
 	}
 
 	// Give the container a moment to start

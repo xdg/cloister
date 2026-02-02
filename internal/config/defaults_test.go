@@ -146,9 +146,7 @@ func TestDefaultGlobalConfig_AllFields(t *testing.T) {
 	}
 
 	// Defaults fields
-	if cfg.Defaults.Image == "" {
-		t.Error("DefaultGlobalConfig() Defaults.Image is empty")
-	}
+	// Note: Defaults.Image is intentionally empty to signal use of version-matched image
 	if cfg.Defaults.Shell == "" {
 		t.Error("DefaultGlobalConfig() Defaults.Shell is empty")
 	}
