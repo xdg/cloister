@@ -1,0 +1,87 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Generate release notes
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          # Get previous tag (empty if this is the first release)
+          CURRENT_TAG="${GITHUB_REF#refs/tags/}"
+          PREVIOUS_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_TAG}$" | head -n1 || true)
+
+          # Get commit log
+          if [ -n "$PREVIOUS_TAG" ]; then
+            echo "Generating notes for ${PREVIOUS_TAG}..${CURRENT_TAG}"
+            COMMITS=$(git log "${PREVIOUS_TAG}..${CURRENT_TAG}" --pretty=format:"- %s (%h)" --no-merges)
+          else
+            echo "First release, using all commits"
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges)
+          fi
+
+          if [ -z "$COMMITS" ]; then
+            echo "No commits found, using minimal release notes"
+            echo "## ${CURRENT_TAG}" > RELEASE_NOTES.md
+            exit 0
+          fi
+
+          # Call Anthropic API
+          PROMPT="Generate concise, user-focused release notes for version ${CURRENT_TAG}. Group changes into Features, Fixes, and Other sections. Skip trivial commits like typos, CI changes, or chores. If a section would be empty, omit it. Use markdown formatting. Be brief - one line per change.
+
+          Commits:
+          ${COMMITS}"
+
+          RESPONSE=$(curl -s https://api.anthropic.com/v1/messages \
+            -H "Content-Type: application/json" \
+            -H "x-api-key: ${ANTHROPIC_API_KEY}" \
+            -H "anthropic-version: 2023-06-01" \
+            -d "$(jq -n \
+              --arg prompt "$PROMPT" \
+              '{
+                model: "claude-sonnet-4-20250514",
+                max_tokens: 1024,
+                messages: [{role: "user", content: $prompt}]
+              }')")
+
+          # Extract content from response
+          NOTES=$(echo "$RESPONSE" | jq -r '.content[0].text // empty')
+
+          if [ -z "$NOTES" ]; then
+            echo "API call failed or returned empty, falling back to commit list"
+            echo "## ${CURRENT_TAG}" > RELEASE_NOTES.md
+            echo "" >> RELEASE_NOTES.md
+            echo "$COMMITS" >> RELEASE_NOTES.md
+          else
+            echo "$NOTES" > RELEASE_NOTES.md
+          fi
+
+          echo "Generated release notes:"
+          cat RELEASE_NOTES.md
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: '~> v2'
+          args: release --clean --release-notes=RELEASE_NOTES.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
