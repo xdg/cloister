@@ -1,0 +1,42 @@
+# Deploy documentation to GitHub Pages
+# Builds MkDocs site and deploys to gh-pages branch
+
+name: Deploy Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - mkdocs.yml
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write  # Needed to push to gh-pages branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs
+        run: pip install mkdocs-material
+
+      - name: Build site
+        run: mkdocs build
+
+      - name: Add custom landing page
+        run: |
+          cp docs/index.html site/index.html
+          cp -r docs/img/* site/img/
+
+      - name: Deploy to gh-pages
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdocs gh-deploy --force --no-history
