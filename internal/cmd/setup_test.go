@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xdg/cloister/internal/claude"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/prompt"
 )
@@ -50,21 +49,17 @@ func TestSetupCmd_HasClaudeSubcommand(t *testing.T) {
 func TestSetupClaudeCmd_Runs(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Use mock prompter to avoid stdin requirement
-	mockPrompter := prompt.NewMockPrompter(0) // Select first option
+	// Use mock prompter to select token option (index 0)
+	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"test":"data"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-oauth-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	var stdout bytes.Buffer
 
@@ -84,7 +79,7 @@ func TestSetupClaudeCmd_Runs(t *testing.T) {
 	}
 }
 
-func TestSetupClaudeCmd_DefaultSelectsExistingLogin(t *testing.T) {
+func TestSetupClaudeCmd_DefaultSelectsToken(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	// Mock prompter that returns default (simulates user pressing Enter)
@@ -93,15 +88,11 @@ func TestSetupClaudeCmd_DefaultSelectsExistingLogin(t *testing.T) {
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"test":"data"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-oauth-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	var stdout bytes.Buffer
 	setupClaudeCmd.SetOut(&stdout)
@@ -119,21 +110,21 @@ func TestSetupClaudeCmd_DefaultSelectsExistingLogin(t *testing.T) {
 
 	call := mockPrompter.Calls[0]
 	if call.DefaultIdx != 0 {
-		t.Errorf("default index should be 0 (existing login), got %d", call.DefaultIdx)
+		t.Errorf("default index should be 0 (token), got %d", call.DefaultIdx)
 	}
 
-	// Verify "existing" auth method was selected
+	// Verify "token" auth method was selected
 	output := stdout.String()
-	if !strings.Contains(output, "Auth method: existing") {
-		t.Errorf("default should select existing login method, got: %s", output)
+	if !strings.Contains(output, "Auth method: token") {
+		t.Errorf("default should select token method, got: %s", output)
 	}
 }
 
 func TestSetupClaudeCmd_SelectsOAuthToken(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Mock prompter that returns option 2 (index 1)
-	mockPrompter := prompt.NewMockPrompter(1)
+	// Mock prompter that returns option 1 (index 0)
+	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -165,8 +156,8 @@ func TestSetupClaudeCmd_SelectsOAuthToken(t *testing.T) {
 func TestSetupClaudeCmd_SelectsAPIKey(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Mock prompter that returns option 3 (index 2)
-	mockPrompter := prompt.NewMockPrompter(2)
+	// Mock prompter that returns option 2 (index 1)
+	mockPrompter := prompt.NewMockPrompter(1)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -231,26 +222,21 @@ func (e *testError) Error() string {
 }
 
 func TestAuthMethodOptions_ContainsExpectedChoices(t *testing.T) {
-	if len(authMethodOptions) != 3 {
-		t.Errorf("expected 3 auth method options, got %d", len(authMethodOptions))
+	if len(authMethodOptions) != 2 {
+		t.Errorf("expected 2 auth method options, got %d", len(authMethodOptions))
 	}
 
-	// Verify first option mentions "existing" and "recommended"
-	if !strings.Contains(authMethodOptions[0], "existing") {
-		t.Error("first option should mention 'existing'")
+	// Verify first option mentions OAuth/token and recommended
+	if !strings.Contains(strings.ToLower(authMethodOptions[0]), "token") {
+		t.Error("first option should mention 'token'")
 	}
 	if !strings.Contains(authMethodOptions[0], "recommended") {
 		t.Error("first option should be marked as recommended")
 	}
 
-	// Verify second option mentions OAuth/token
-	if !strings.Contains(strings.ToLower(authMethodOptions[1]), "token") {
-		t.Error("second option should mention 'token'")
-	}
-
-	// Verify third option mentions API key
-	if !strings.Contains(strings.ToLower(authMethodOptions[2]), "api key") {
-		t.Error("third option should mention 'API key'")
+	// Verify second option mentions API key
+	if !strings.Contains(strings.ToLower(authMethodOptions[1]), "api key") {
+		t.Error("second option should mention 'API key'")
 	}
 }
 
@@ -259,7 +245,6 @@ func TestAuthMethod_String(t *testing.T) {
 		method AuthMethod
 		want   string
 	}{
-		{AuthMethodExisting, "existing"},
 		{AuthMethodToken, "token"},
 		{AuthMethodAPIKey, "api_key"},
 		{AuthMethod(99), "unknown"},
@@ -274,152 +259,10 @@ func TestAuthMethod_String(t *testing.T) {
 	}
 }
 
-func TestSetupClaudeCmd_ExistingLogin_MacOS_Success(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	mockPrompter := prompt.NewMockPrompter(0) // Select "existing login"
-	oldPrompter := setupClaudePrompter
-	setupClaudePrompter = mockPrompter
-	defer func() { setupClaudePrompter = oldPrompter }()
-
-	// Mock extractor that returns macOS credentials
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"accessToken":"test-token"}`},
-		FileChecker:   &mockFileChecker{},
-		UserLookup:    &mockUserLookup{username: "alice", home: "/Users/alice"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
-
-	var stdout bytes.Buffer
-	setupClaudeCmd.SetOut(&stdout)
-	setupClaudeCmd.SetErr(&stdout)
-
-	err := setupClaudeCmd.RunE(setupClaudeCmd, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	output := stdout.String()
-	if !strings.Contains(output, "macOS Keychain") {
-		t.Errorf("should mention macOS Keychain on success, got: %s", output)
-	}
-}
-
-func TestSetupClaudeCmd_ExistingLogin_Linux_Success(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	mockPrompter := prompt.NewMockPrompter(0) // Select "existing login"
-	oldPrompter := setupClaudePrompter
-	setupClaudePrompter = mockPrompter
-	defer func() { setupClaudePrompter = oldPrompter }()
-
-	// Mock extractor that returns Linux credentials
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "alice", home: "/home/alice"},
-		Platform:      "linux",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
-
-	var stdout bytes.Buffer
-	setupClaudeCmd.SetOut(&stdout)
-	setupClaudeCmd.SetErr(&stdout)
-
-	err := setupClaudeCmd.RunE(setupClaudeCmd, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	output := stdout.String()
-	if !strings.Contains(output, "credentials file") {
-		t.Errorf("should mention credentials file on Linux, got: %s", output)
-	}
-	if !strings.Contains(output, "/home/alice/.claude/.credentials.json") {
-		t.Errorf("should show credentials path, got: %s", output)
-	}
-}
-
-func TestSetupClaudeCmd_ExistingLogin_NotFound(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
-	mockPrompter := prompt.NewMockPrompter(0) // Select "existing login"
-	oldPrompter := setupClaudePrompter
-	setupClaudePrompter = mockPrompter
-	defer func() { setupClaudePrompter = oldPrompter }()
-
-	// Mock extractor that returns credentials not found
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{err: errors.New("keychain error")},
-		FileChecker:   &mockFileChecker{exists: false},
-		UserLookup:    &mockUserLookup{username: "alice", home: "/home/alice"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
-
-	var stdout bytes.Buffer
-	setupClaudeCmd.SetOut(&stdout)
-	setupClaudeCmd.SetErr(&stdout)
-
-	err := setupClaudeCmd.RunE(setupClaudeCmd, nil)
-	if err == nil {
-		t.Fatal("expected error when credentials not found")
-	}
-	if !errors.Is(err, claude.ErrCredentialsNotFound) {
-		t.Errorf("expected ErrCredentialsNotFound, got: %v", err)
-	}
-
-	output := stdout.String()
-	if !strings.Contains(output, "Credentials not found") {
-		t.Errorf("should display helpful message, got: %s", output)
-	}
-	if !strings.Contains(output, "claude login") {
-		t.Errorf("should suggest running 'claude login', got: %s", output)
-	}
-}
-
-// Mock implementations for claude.Extractor dependencies
-
-type mockCommandRunner struct {
-	output string
-	err    error
-}
-
-func (m *mockCommandRunner) Run(name string, args ...string) (string, error) {
-	return m.output, m.err
-}
-
-type mockFileChecker struct {
-	exists bool
-}
-
-func (m *mockFileChecker) Exists(path string) bool {
-	return m.exists
-}
-
-type mockUserLookup struct {
-	username    string
-	usernameErr error
-	home        string
-	homeErr     error
-}
-
-func (m *mockUserLookup) CurrentUsername() (string, error) {
-	return m.username, m.usernameErr
-}
-
-func (m *mockUserLookup) HomeDir() (string, error) {
-	return m.home, m.homeErr
-}
-
 func TestSetupClaudeCmd_OAuthToken_CorrectPrompt(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	mockPrompter := prompt.NewMockPrompter(1) // Select "OAuth token"
+	mockPrompter := prompt.NewMockPrompter(0) // Select "OAuth token"
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -451,7 +294,7 @@ func TestSetupClaudeCmd_OAuthToken_CorrectPrompt(t *testing.T) {
 func TestSetupClaudeCmd_APIKey_CorrectPrompt(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	mockPrompter := prompt.NewMockPrompter(2) // Select "API key"
+	mockPrompter := prompt.NewMockPrompter(1) // Select "API key"
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -483,7 +326,7 @@ func TestSetupClaudeCmd_APIKey_CorrectPrompt(t *testing.T) {
 func TestSetupClaudeCmd_OAuthToken_EmptyInput_Error(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	mockPrompter := prompt.NewMockPrompter(1) // Select "OAuth token"
+	mockPrompter := prompt.NewMockPrompter(0) // Select "OAuth token"
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -510,7 +353,7 @@ func TestSetupClaudeCmd_OAuthToken_EmptyInput_Error(t *testing.T) {
 func TestSetupClaudeCmd_APIKey_EmptyInput_Error(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	mockPrompter := prompt.NewMockPrompter(2) // Select "API key"
+	mockPrompter := prompt.NewMockPrompter(1) // Select "API key"
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -537,7 +380,7 @@ func TestSetupClaudeCmd_APIKey_EmptyInput_Error(t *testing.T) {
 func TestSetupClaudeCmd_OAuthToken_WhitespaceOnly_Error(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	mockPrompter := prompt.NewMockPrompter(1) // Select "OAuth token"
+	mockPrompter := prompt.NewMockPrompter(0) // Select "OAuth token"
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -564,7 +407,7 @@ func TestSetupClaudeCmd_OAuthToken_WhitespaceOnly_Error(t *testing.T) {
 func TestSetupClaudeCmd_CredentialReader_Error(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	mockPrompter := prompt.NewMockPrompter(1) // Select "OAuth token"
+	mockPrompter := prompt.NewMockPrompter(0) // Select "OAuth token"
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -591,26 +434,22 @@ func TestSetupClaudeCmd_CredentialReader_Error(t *testing.T) {
 	}
 }
 
-// Skip-permissions prompt tests (Phase 3.2.5)
+// Skip-permissions prompt tests
 
 func TestSetupClaudeCmd_SkipPermissions_DefaultYes(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Mock prompter that returns existing login (index 0)
+	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"test":"data"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	// Mock yes/no prompter that returns default (empty input -> true)
 	mockYesNo := &prompt.MockYesNoPrompter{} // No responses = returns default
@@ -654,21 +493,17 @@ func TestSetupClaudeCmd_SkipPermissions_DefaultYes(t *testing.T) {
 func TestSetupClaudeCmd_SkipPermissions_ExplicitNo(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Mock prompter that returns existing login (index 0)
+	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"test":"data"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	// Mock yes/no prompter that returns false (user typed "n")
 	mockYesNo := prompt.NewMockYesNoPrompter(false)
@@ -695,21 +530,17 @@ func TestSetupClaudeCmd_SkipPermissions_ExplicitNo(t *testing.T) {
 func TestSetupClaudeCmd_SkipPermissions_ExplicitYes(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Mock prompter that returns existing login (index 0)
+	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"test":"data"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	// Mock yes/no prompter that returns true (user typed "y")
 	mockYesNo := prompt.NewMockYesNoPrompter(true)
@@ -736,21 +567,17 @@ func TestSetupClaudeCmd_SkipPermissions_ExplicitYes(t *testing.T) {
 func TestSetupClaudeCmd_SkipPermissions_Error(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Mock prompter that returns existing login (index 0)
+	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"test":"data"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	// Mock yes/no prompter that returns an error
 	testErr := errors.New("input error")
@@ -777,8 +604,8 @@ func TestSetupClaudeCmd_SkipPermissions_Error(t *testing.T) {
 func TestSetupClaudeCmd_SkipPermissions_WithTokenAuth(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Mock prompter that returns OAuth token (index 1)
-	mockPrompter := prompt.NewMockPrompter(1)
+	// Mock prompter that returns OAuth token (index 0)
+	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -817,8 +644,8 @@ func TestSetupClaudeCmd_SkipPermissions_WithTokenAuth(t *testing.T) {
 func TestSetupClaudeCmd_SkipPermissions_WithAPIKeyAuth(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Mock prompter that returns API key (index 2)
-	mockPrompter := prompt.NewMockPrompter(2)
+	// Mock prompter that returns API key (index 1)
+	mockPrompter := prompt.NewMockPrompter(1)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -854,71 +681,14 @@ func TestSetupClaudeCmd_SkipPermissions_WithAPIKeyAuth(t *testing.T) {
 	}
 }
 
-// Phase 3.2.6 tests - Save credentials to config
-
-func TestSetupClaudeCmd_SavesExistingAuthToConfig(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmpDir)
-
-	// Mock prompter that returns existing login (index 0)
-	mockPrompter := prompt.NewMockPrompter(0)
-	oldPrompter := setupClaudePrompter
-	setupClaudePrompter = mockPrompter
-	defer func() { setupClaudePrompter = oldPrompter }()
-
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"accessToken":"test-token"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
-
-	// Mock yes/no prompter that returns true (default)
-	mockYesNo := prompt.NewMockYesNoPrompter(true)
-	oldYesNo := setupClaudeYesNoPrompter
-	setupClaudeYesNoPrompter = mockYesNo
-	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
-
-	var stdout bytes.Buffer
-	setupClaudeCmd.SetOut(&stdout)
-	setupClaudeCmd.SetErr(&stdout)
-
-	err := setupClaudeCmd.RunE(setupClaudeCmd, nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Verify config was saved
-	output := stdout.String()
-	if !strings.Contains(output, "Configuration saved to:") {
-		t.Errorf("output should show config saved message, got: %s", output)
-	}
-
-	// Read and verify the config file
-	configPath := config.GlobalConfigPath()
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("failed to read config file: %v", err)
-	}
-
-	content := string(data)
-	if !strings.Contains(content, "auth_method: existing") {
-		t.Errorf("config should contain auth_method: existing, got:\n%s", content)
-	}
-	if !strings.Contains(content, "skip_permissions: true") {
-		t.Errorf("config should contain skip_permissions: true, got:\n%s", content)
-	}
-}
+// Save credentials to config tests
 
 func TestSetupClaudeCmd_SavesTokenAuthToConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	// Mock prompter that returns OAuth token (index 1)
-	mockPrompter := prompt.NewMockPrompter(1)
+	// Mock prompter that returns OAuth token (index 0)
+	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -973,8 +743,8 @@ func TestSetupClaudeCmd_SavesAPIKeyAuthToConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	// Mock prompter that returns API key (index 2)
-	mockPrompter := prompt.NewMockPrompter(2)
+	// Mock prompter that returns API key (index 1)
+	mockPrompter := prompt.NewMockPrompter(1)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -1043,8 +813,8 @@ func TestSetupClaudeCmd_ClearsOldCredentialsOnMethodChange(t *testing.T) {
 		t.Fatalf("failed to write initial config: %v", err)
 	}
 
-	// Mock prompter that returns API key (index 2)
-	mockPrompter := prompt.NewMockPrompter(2)
+	// Mock prompter that returns API key (index 1)
+	mockPrompter := prompt.NewMockPrompter(1)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -1056,7 +826,7 @@ func TestSetupClaudeCmd_ClearsOldCredentialsOnMethodChange(t *testing.T) {
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	// Mock yes/no prompter
-	mockYesNo := prompt.NewMockYesNoPrompter(true)
+	mockYesNo := prompt.NewMockYesNoPrompter(true, true)
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
@@ -1112,21 +882,17 @@ agents:
 		t.Fatalf("failed to write initial config: %v", err)
 	}
 
-	// Mock prompter that returns existing login (index 0)
+	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"accessToken":"test-token"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	// Mock yes/no prompter
 	mockYesNo := prompt.NewMockYesNoPrompter(true)
@@ -1164,34 +930,12 @@ agents:
 	if !ok {
 		t.Fatal("claude agent config should exist")
 	}
-	if claudeCfg.AuthMethod != "existing" {
-		t.Errorf("claude auth_method should be 'existing', got: %s", claudeCfg.AuthMethod)
+	if claudeCfg.AuthMethod != "token" {
+		t.Errorf("claude auth_method should be 'token', got: %s", claudeCfg.AuthMethod)
 	}
 }
 
 func TestSetupClaudeCmd_ConfigLoadError(t *testing.T) {
-	// Mock prompter that returns existing login (index 0)
-	mockPrompter := prompt.NewMockPrompter(0)
-	oldPrompter := setupClaudePrompter
-	setupClaudePrompter = mockPrompter
-	defer func() { setupClaudePrompter = oldPrompter }()
-
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"accessToken":"test-token"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
-
-	// Mock yes/no prompter
-	mockYesNo := prompt.NewMockYesNoPrompter(true)
-	oldYesNo := setupClaudeYesNoPrompter
-	setupClaudeYesNoPrompter = mockYesNo
-	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
-
 	// Mock config loader that returns an error
 	loadErr := errors.New("config load error")
 	oldLoader := setupClaudeConfigLoader
@@ -1217,21 +961,17 @@ func TestSetupClaudeCmd_ConfigWriteError(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	// Mock prompter that returns existing login (index 0)
+	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"accessToken":"test-token"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	// Mock yes/no prompter
 	mockYesNo := prompt.NewMockYesNoPrompter(true)
@@ -1264,21 +1004,17 @@ func TestSetupClaudeCmd_ShowsCorrectConfigPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	// Mock prompter that returns existing login (index 0)
+	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"accessToken":"test-token"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	// Mock yes/no prompter
 	mockYesNo := prompt.NewMockYesNoPrompter(true)
@@ -1303,7 +1039,7 @@ func TestSetupClaudeCmd_ShowsCorrectConfigPath(t *testing.T) {
 	}
 }
 
-// Phase 3.2.7 tests - Handle existing credentials
+// Handle existing credentials tests
 
 func TestHasExistingCredentials_NoConfig(t *testing.T) {
 	if hasExistingCredentials(nil) {
@@ -1343,7 +1079,7 @@ func TestHasExistingCredentials_EmptyClaudeConfig(t *testing.T) {
 func TestHasExistingCredentials_AuthMethodSet(t *testing.T) {
 	cfg := &config.GlobalConfig{
 		Agents: map[string]config.AgentConfig{
-			"claude": {AuthMethod: "existing"},
+			"claude": {AuthMethod: "token"},
 		},
 	}
 	if !hasExistingCredentials(cfg) {
@@ -1477,8 +1213,8 @@ func TestSetupClaudeCmd_ExistingCredentials_UserAcceptsReplace(t *testing.T) {
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
-	// Mock prompter that returns API key (index 2)
-	mockPrompter := prompt.NewMockPrompter(2)
+	// Mock prompter that returns API key (index 1)
+	mockPrompter := prompt.NewMockPrompter(1)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
@@ -1551,21 +1287,17 @@ func TestSetupClaudeCmd_NoExistingCredentials_NoReplacementPrompt(t *testing.T) 
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
-	// Mock prompter that returns existing login (index 0)
+	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
 	oldPrompter := setupClaudePrompter
 	setupClaudePrompter = mockPrompter
 	defer func() { setupClaudePrompter = oldPrompter }()
 
-	// Mock extractor that succeeds
-	oldExtractor := setupClaudeExtractor
-	setupClaudeExtractor = &claude.Extractor{
-		CommandRunner: &mockCommandRunner{output: `{"accessToken":"test-token"}`},
-		FileChecker:   &mockFileChecker{exists: true},
-		UserLookup:    &mockUserLookup{username: "testuser", home: "/home/test"},
-		Platform:      "darwin",
-	}
-	defer func() { setupClaudeExtractor = oldExtractor }()
+	// Mock credential reader that returns a token
+	mockReader := prompt.NewMockCredentialReader("test-token")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	var stdout bytes.Buffer
 	setupClaudeCmd.SetOut(&stdout)
@@ -1628,7 +1360,8 @@ func TestSetupClaudeCmd_ExistingCredentials_PromptError(t *testing.T) {
 	}
 	existingConfig := `agents:
   claude:
-    auth_method: existing
+    auth_method: token
+    token: existing-token-value
 `
 	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0600); err != nil {
 		t.Fatalf("failed to write initial config: %v", err)

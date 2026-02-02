@@ -63,15 +63,13 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 **Goal:** Claude Code works inside cloister with no manual setup.
 
 **Delivers:**
-- `cloister setup claude` wizard with three auth options:
-  1. **Existing login** — extracts from macOS Keychain or verifies Linux `~/.claude/.credentials.json`
-  2. **Long-lived OAuth token** — user runs `claude setup-token`, pastes result
-  3. **API key** — user pastes key from console.anthropic.com
-- Platform-aware credential injection:
-  - macOS: extract from Keychain (`security find-generic-password`), write `.credentials.json` to container
-  - Linux: copy existing `~/.claude/.credentials.json` to container
-  - Token/API key: inject via environment variable
-- Copy host `~/.claude/` settings (excluding `.credentials.json` on macOS) into container
+- `cloister setup claude` wizard with two auth options:
+  1. **Long-lived OAuth token** (recommended) — user runs `claude setup-token`, pastes result
+  2. **API key** — user pastes key from console.anthropic.com
+- Credential injection via environment variables:
+  - Token: inject via `CLAUDE_CODE_OAUTH_TOKEN` environment variable
+  - API key: inject via `ANTHROPIC_API_KEY` environment variable
+- Copy host `~/.claude/` settings into container
 - Generate `~/.claude.json` in container (onboarding skip, bypass-permissions acceptance)
 - Remove reliance on host env vars for credentials (Phase 1 workaround)
 
@@ -80,12 +78,11 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - Hardcoded `~/.claude.json` creation in Phase 1 replaced by config-driven generation
 
 **Verification:**
-- Run `cloister setup claude`, select "existing login" → credentials extracted/verified
+- Run `cloister setup claude`, select "Long-lived OAuth token" → token stored in config
 - `cloister start` → `claude` command works without additional auth
 - Claude can reach api.anthropic.com, edit files in `/work`
 - User settings from host `~/.claude/` available in container
 - `~/.claude.json` contains onboarding skip flags
-- Token refresh works (for existing login method)
 
 ---
 

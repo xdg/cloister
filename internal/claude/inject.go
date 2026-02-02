@@ -3,13 +3,9 @@ package claude
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/xdg/cloister/internal/config"
 )
-
-// Container path where credentials file should be written.
-const ContainerCredentialsPath = "/home/cloister/.claude/.credentials.json"
 
 // Environment variable names for credential injection.
 const (
@@ -19,9 +15,8 @@ const (
 
 // Auth method constants matching config.AgentConfig.AuthMethod values.
 const (
-	AuthMethodExisting = "existing"
-	AuthMethodToken    = "token"
-	AuthMethodAPIKey   = "api_key"
+	AuthMethodToken  = "token"
+	AuthMethodAPIKey = "api_key"
 )
 
 // ErrNoAuthMethod indicates that no authentication method is configured.
@@ -49,28 +44,15 @@ type InjectionConfig struct {
 }
 
 // Injector handles credential injection for Claude Code.
-type Injector struct {
-	// Extractor extracts credentials for "existing" auth method.
-	// If nil, NewExtractor() will be called.
-	Extractor *Extractor
+type Injector struct{}
 
-	// FileReader reads files from the filesystem.
-	// If nil, os.ReadFile is used.
-	FileReader func(path string) ([]byte, error)
-}
-
-// NewInjector creates a new Injector with production implementations.
+// NewInjector creates a new Injector.
 func NewInjector() *Injector {
-	return &Injector{
-		Extractor:  NewExtractor(),
-		FileReader: os.ReadFile,
-	}
+	return &Injector{}
 }
 
 // InjectCredentials generates an InjectionConfig based on the agent configuration.
 // The auth_method field determines how credentials are injected:
-//   - "existing": Extract credentials from host (Keychain on macOS, file on Linux)
-//     and write to container as .credentials.json file
 //   - "token": Set CLAUDE_CODE_OAUTH_TOKEN environment variable
 //   - "api_key": Set ANTHROPIC_API_KEY environment variable
 //
@@ -86,8 +68,6 @@ func (i *Injector) InjectCredentials(cfg *config.AgentConfig) (*InjectionConfig,
 	}
 
 	switch cfg.AuthMethod {
-	case AuthMethodExisting:
-		return i.injectExisting(result)
 	case AuthMethodToken:
 		return i.injectToken(cfg, result)
 	case AuthMethodAPIKey:
@@ -95,43 +75,6 @@ func (i *Injector) InjectCredentials(cfg *config.AgentConfig) (*InjectionConfig,
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrInvalidAuthMethod, cfg.AuthMethod)
 	}
-}
-
-// injectExisting handles the "existing" auth method by extracting credentials
-// from the host system and configuring them to be written as a file in the container.
-func (i *Injector) injectExisting(result *InjectionConfig) (*InjectionConfig, error) {
-	extractor := i.Extractor
-	if extractor == nil {
-		extractor = NewExtractor()
-	}
-
-	creds, err := extractor.Extract()
-	if err != nil {
-		return nil, fmt.Errorf("failed to extract credentials: %w", err)
-	}
-
-	// Get the credential JSON content
-	var credJSON string
-	if creds.JSON != "" {
-		// macOS: JSON was extracted from Keychain
-		credJSON = creds.JSON
-	} else if creds.FilePath != "" {
-		// Linux: Read from file path
-		reader := i.FileReader
-		if reader == nil {
-			reader = os.ReadFile
-		}
-		content, err := reader(creds.FilePath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read credentials file %s: %w", creds.FilePath, err)
-		}
-		credJSON = string(content)
-	} else {
-		return nil, errors.New("extracted credentials have neither JSON nor FilePath set")
-	}
-
-	result.Files[ContainerCredentialsPath] = credJSON
-	return result, nil
 }
 
 // injectToken handles the "token" auth method by setting the OAuth token
