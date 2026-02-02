@@ -1,12 +1,16 @@
 # Build stage: compile cloister binary
 ARG GO_VERSION=1.25
+ARG VERSION
 FROM golang:${GO_VERSION} AS builder
 WORKDIR /build
 COPY go.mod go.sum ./
 RUN go mod download
 COPY cmd/ cmd/
 COPY internal/ internal/
-RUN CGO_ENABLED=0 go build -o cloister ./cmd/cloister
+ARG VERSION
+RUN CGO_ENABLED=0 go build \
+    ${VERSION:+-ldflags "-X github.com/xdg/cloister/internal/version.Version=${VERSION}"} \
+    -o cloister ./cmd/cloister
 
 # Runtime stage
 FROM ubuntu:24.04

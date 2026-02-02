@@ -108,7 +108,7 @@ func DefaultGlobalConfig() *GlobalConfig {
 			},
 		},
 		Defaults: DefaultsConfig{
-			Image: "cloister:latest",
+			// Image intentionally empty - signals use of version-matched image
 			Shell: "/bin/bash",
 			User:  "cloister",
 			Agent: "claude",
