@@ -204,6 +204,14 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 - Lifecycle command execution (postCreateCommand, etc.)
 - Build caching by config hash
 - Signal handling: inject `--init` flag for images without tini (ensures fast shutdown)
+- **Update default config** with `Devcontainer` section including:
+  - Feature allowlist (`ghcr.io/devcontainers/features/*`, `ghcr.io/devcontainers-contrib/features/*`)
+  - Blocked mounts for credential directories:
+    - `~/.ssh`, `~/.aws`, `~/.config/gcloud`, `~/.gnupg`, `~/.config/gh` (cloud/auth)
+    - `~/.kube`, `~/.docker` (container orchestration)
+    - `~/.npmrc`, `~/.pypirc`, `~/.gem/credentials`, `~/.cargo/credentials` (package registries)
+    - `~/.netrc`, `~/.config/op`, `~/.password-store` (general credentials)
+    - `/var/run/docker.sock` (container escape vector)
 
 **Verification:**
 - Project with devcontainer.json uses custom image

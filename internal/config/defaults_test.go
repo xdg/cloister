@@ -43,6 +43,9 @@ func TestDefaultGlobalConfig_ContainsDomains(t *testing.T) {
 		"files.pythonhosted.org",
 		"crates.io",
 		"static.crates.io",
+		"rubygems.org",
+		"index.rubygems.org",
+		"yarnpkg.com",
 	}
 	for _, domain := range registries {
 		if !domains[domain] {
@@ -63,6 +66,14 @@ func TestDefaultGlobalConfig_ContainsDomains(t *testing.T) {
 		"stackoverflow.com",
 		"man7.org",
 		"linux.die.net",
+		"cppreference.com",
+		"en.cppreference.com",
+		"typescriptlang.org",
+		"nodejs.org",
+		"docs.docker.com",
+		"kubernetes.io",
+		"ruby-doc.org",
+		"docs.npmjs.com",
 	}
 	for _, domain := range docSites {
 		if !domains[domain] {
@@ -113,16 +124,8 @@ func TestDefaultGlobalConfig_AllFields(t *testing.T) {
 		t.Error("DefaultGlobalConfig() Hostexec.ManualApprove is empty")
 	}
 
-	// Devcontainer fields
-	if !cfg.Devcontainer.Enabled {
-		t.Error("DefaultGlobalConfig() Devcontainer.Enabled is false")
-	}
-	if len(cfg.Devcontainer.Features.Allow) == 0 {
-		t.Error("DefaultGlobalConfig() Devcontainer.Features.Allow is empty")
-	}
-	if len(cfg.Devcontainer.BlockedMounts) == 0 {
-		t.Error("DefaultGlobalConfig() Devcontainer.BlockedMounts is empty")
-	}
+	// Devcontainer fields intentionally not set in defaults
+	// (devcontainer support is not yet implemented)
 
 	// Agents
 	if len(cfg.Agents) == 0 {
