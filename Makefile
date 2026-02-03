@@ -12,11 +12,12 @@ VERSION ?=
 VERSION_PKG := github.com/xdg/cloister/internal/version
 LDFLAGS := $(if $(VERSION),-ldflags "-X $(VERSION_PKG).Version=$(VERSION)")
 
-# Docker image settings for worktree isolation
-# Uses commit hash by default for concurrent worktree safety; VERSION overrides
+# Docker image settings
+# make docker       -> cloister:latest (or cloister:$(VERSION) if set)
+# make docker-commit-tag -> cloister:<commit> for worktree-isolated tests
 GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
-DOCKER_TAG := $(if $(VERSION),$(VERSION),$(GIT_COMMIT))
-TEST_IMAGE := cloister:$(DOCKER_TAG)
+DOCKER_TAG := $(if $(VERSION),$(VERSION),latest)
+TEST_IMAGE := cloister:$(GIT_COMMIT)
 
 # Test settings
 #   COUNT=1    - bust cache, COUNT=N for flakiness testing
@@ -35,7 +36,7 @@ VERBOSE_FLAG = $(if $(VERBOSE),-v)
 D2_SOURCES := $(wildcard specs/diagrams/*.d2)
 D2_SVGS := $(D2_SOURCES:.d2=.svg)
 
-.PHONY: docker install test test-race test-integration test-e2e test-all fmt lint clean diagrams clean-diagrams
+.PHONY: docker docker-commit-tag install test test-race test-integration test-e2e test-all fmt lint clean diagrams clean-diagrams
 
 # Go targets
 $(BINARY): $(GO_FILES) $(GO_MOD_FILES)
@@ -44,7 +45,10 @@ $(BINARY): $(GO_FILES) $(GO_MOD_FILES)
 build: $(BINARY)
 
 docker:
-	docker build --build-arg GO_VERSION=$(GO_VERSION) $(if $(VERSION),--build-arg VERSION=$(VERSION)) -t $(TEST_IMAGE) .
+	docker build --build-arg GO_VERSION=$(GO_VERSION) $(if $(VERSION),--build-arg VERSION=$(VERSION)) -t cloister:$(DOCKER_TAG) .
+
+docker-commit-tag:
+	docker build --build-arg GO_VERSION=$(GO_VERSION) -t $(TEST_IMAGE) .
 
 install:
 	go install $(LDFLAGS) $(CMD_PATH)
@@ -55,10 +59,10 @@ test:
 test-race:
 	go test -race $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
 
-test-integration: $(BINARY) docker
+test-integration: $(BINARY) docker-commit-tag
 	CLOISTER_IMAGE=$(TEST_IMAGE) go test -tags=integration $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 $(PKG)
 
-test-e2e: $(BINARY) docker
+test-e2e: $(BINARY) docker-commit-tag
 	CLOISTER_IMAGE=$(TEST_IMAGE) go test -tags=e2e $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 ./test/e2e/...
 
 test-all: test-integration test-e2e
