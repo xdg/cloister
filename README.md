@@ -161,7 +161,7 @@ See [specs/config-reference.md](specs/config-reference.md) for the full schema.
 
 Cloister is in active development. Current limitations include:
 
-- **Claude Code only** — Other AI agents (Codex, Gemini CLI) not yet supported
+- **Claude Code and Codex only** — Other AI agents not yet supported
 - **No git worktree support** — Each worktree currently needs its own cloister
 - **No devcontainer integration** — Custom devcontainer.json configs not yet honored
 
