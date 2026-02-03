@@ -23,21 +23,34 @@
 
 - Linux or macOS
 - Docker (or compatible equivalent like OrbStack)
-- Go 1.25+ (for building from source)
 - A git repository to work in
 - Claude Code credentials (OAuth token or API key)
 
-### Build and Install
+### Install
 
 ```bash
-# Clone and build
+curl -fsSL https://raw.githubusercontent.com/xdg/cloister/main/install.sh | sh
+```
+
+This installs to `~/.local/bin`. To install a specific version:
+
+```bash
+VERSION=v1.0.0 curl -fsSL https://raw.githubusercontent.com/xdg/cloister/main/install.sh | sh
+```
+
+<details>
+<summary>Alternative: Build from source</summary>
+
+```bash
+# Requires Go 1.22+
+go install github.com/xdg/cloister/cmd/cloister@latest
+
+# Or clone and build
 git clone https://github.com/xdg/cloister.git
 cd cloister
-make build          # creates ./cloister binary
-
-# Or install directly
-go install github.com/xdg/cloister/cmd/cloister@latest
+make build
 ```
+</details>
 
 ### Configure Credentials
 
