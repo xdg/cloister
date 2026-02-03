@@ -7,11 +7,16 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strconv"
 	"strings"
 
 	"golang.org/x/term"
 )
+
+// execCommand is a variable to allow testing without actually running commands.
+// In production, this is exec.Command. In tests, it can be replaced.
+var execCommand = exec.Command
 
 // Prompter defines the interface for presenting options to a user and
 // getting their selection.
@@ -325,4 +330,77 @@ func (m *MockYesNoPrompter) PromptYesNo(prompt string, defaultYes bool) (bool, e
 	// No more responses configured, return default
 	m.callIndex++
 	return defaultYes, nil
+}
+
+// CommandRunner defines the interface for running external commands.
+// It is used to run commands like `claude setup-token` in a testable way.
+type CommandRunner interface {
+	// Run executes a command and returns its combined stdout/stderr output.
+	// Returns an error if the command fails or cannot be executed.
+	Run(name string, args ...string) (string, error)
+}
+
+// ExecCommandRunner implements CommandRunner using os/exec.
+type ExecCommandRunner struct{}
+
+// NewExecCommandRunner creates a new ExecCommandRunner.
+func NewExecCommandRunner() *ExecCommandRunner {
+	return &ExecCommandRunner{}
+}
+
+// Run executes the command and returns its combined output.
+func (r *ExecCommandRunner) Run(name string, args ...string) (string, error) {
+	cmd := execCommand(name, args...)
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+// MockCommandRunner implements CommandRunner for testing.
+type MockCommandRunner struct {
+	// Outputs is a queue of outputs to return for successive calls.
+	Outputs []string
+	// Errors is a queue of errors to return for successive calls.
+	Errors []error
+	// Calls records all commands that were run.
+	Calls []MockCommandCall
+
+	callIndex int
+}
+
+// MockCommandCall records a single call to Run.
+type MockCommandCall struct {
+	Name string
+	Args []string
+}
+
+// NewMockCommandRunner creates a MockCommandRunner with the given outputs.
+func NewMockCommandRunner(outputs ...string) *MockCommandRunner {
+	return &MockCommandRunner{Outputs: outputs}
+}
+
+// Run returns the next pre-configured output or error.
+func (m *MockCommandRunner) Run(name string, args ...string) (string, error) {
+	// Record the call
+	m.Calls = append(m.Calls, MockCommandCall{
+		Name: name,
+		Args: args,
+	})
+
+	// Check for error
+	if m.callIndex < len(m.Errors) && m.Errors[m.callIndex] != nil {
+		err := m.Errors[m.callIndex]
+		m.callIndex++
+		return "", err
+	}
+
+	// Return configured output
+	if m.callIndex < len(m.Outputs) {
+		output := m.Outputs[m.callIndex]
+		m.callIndex++
+		return output, nil
+	}
+
+	// No more outputs configured, return empty
+	m.callIndex++
+	return "", nil
 }
