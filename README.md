@@ -42,7 +42,7 @@ VERSION=v1.0.0 curl -fsSL https://raw.githubusercontent.com/xdg/cloister/main/in
 <summary>Alternative: Build from source</summary>
 
 ```bash
-# Requires Go 1.22+
+# Requires Go 1.25+
 go install github.com/xdg/cloister/cmd/cloister@latest
 
 # Or clone and build
