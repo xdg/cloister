@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -10,6 +11,9 @@ import (
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/prompt"
 )
+
+// oauthTokenPattern matches OAuth tokens in the format sk-ant-oaXXX...
+var oauthTokenPattern = regexp.MustCompile(`sk-ant-oa[A-Za-z0-9_-]+`)
 
 // AuthMethod represents the authentication method selected by the user.
 type AuthMethod int
@@ -80,6 +84,10 @@ var setupClaudeConfigWriter func(*config.GlobalConfig) error
 // It can be overridden for testing.
 var setupClaudeConfigPath func() string
 
+// setupClaudeCommandRunner is the command runner used by setup claude.
+// It can be overridden for testing.
+var setupClaudeCommandRunner prompt.CommandRunner
+
 func init() {
 	setupCmd.AddCommand(setupClaudeCmd)
 }
@@ -136,6 +144,15 @@ func getSetupClaudeConfigPath() func() string {
 		return setupClaudeConfigPath
 	}
 	return config.GlobalConfigPath
+}
+
+// getSetupClaudeCommandRunner returns the command runner to use for setup claude.
+// Uses production implementation by default, but can be overridden for testing.
+func getSetupClaudeCommandRunner() prompt.CommandRunner {
+	if setupClaudeCommandRunner != nil {
+		return setupClaudeCommandRunner
+	}
+	return prompt.NewExecCommandRunner()
 }
 
 // credentialResult holds the credential data collected during setup.
@@ -285,12 +302,80 @@ func saveCredentialsToConfig(cmd *cobra.Command, creds credentialResult, skipPer
 }
 
 // handleTokenInput prompts for and reads a long-lived OAuth token.
+// Offers to run `claude setup-token` automatically or allows manual input.
 // Returns the token on success.
 func handleTokenInput(cmd *cobra.Command) (string, error) {
+	yesNo := getSetupClaudeYesNoPrompter(cmd)
+
+	// Ask if the user wants to run claude setup-token automatically
+	fmt.Fprintln(cmd.OutOrStdout())
+	fmt.Fprintln(cmd.OutOrStdout(), "You can generate an OAuth token by running `claude setup-token`.")
+	fmt.Fprintln(cmd.OutOrStdout(), "This will open your browser to authenticate with Anthropic.")
+	fmt.Fprintln(cmd.OutOrStdout())
+
+	runAuto, err := yesNo.PromptYesNo("Run `claude setup-token` automatically? [Y/n]: ", true)
+	if err != nil {
+		return "", fmt.Errorf("failed to get confirmation: %w", err)
+	}
+
+	if runAuto {
+		return runClaudeSetupToken(cmd)
+	}
+
+	return handleManualTokenInput(cmd)
+}
+
+// runClaudeSetupToken runs `claude setup-token` and parses the OAuth token from output.
+func runClaudeSetupToken(cmd *cobra.Command) (string, error) {
+	runner := getSetupClaudeCommandRunner()
+
+	fmt.Fprintln(cmd.OutOrStdout())
+	fmt.Fprintln(cmd.OutOrStdout(), "Running `claude setup-token`...")
+	fmt.Fprintln(cmd.OutOrStdout(), "Your browser will open for authentication. Please approve the request.")
+	fmt.Fprintln(cmd.OutOrStdout())
+
+	output, err := runner.Run("claude", "setup-token")
+	if err != nil {
+		fmt.Fprintf(cmd.OutOrStdout(), "Failed to run `claude setup-token`: %v\n", err)
+		fmt.Fprintln(cmd.OutOrStdout())
+		fmt.Fprintln(cmd.OutOrStdout(), "Falling back to manual token entry.")
+		return handleManualTokenInput(cmd)
+	}
+
+	// Parse the OAuth token from the output
+	token := parseOAuthToken(output)
+	if token == "" {
+		fmt.Fprintln(cmd.OutOrStdout(), "Could not find OAuth token in command output.")
+		fmt.Fprintln(cmd.OutOrStdout())
+		fmt.Fprintln(cmd.OutOrStdout(), "Command output:")
+		fmt.Fprintln(cmd.OutOrStdout(), output)
+		fmt.Fprintln(cmd.OutOrStdout())
+		fmt.Fprintln(cmd.OutOrStdout(), "Falling back to manual token entry.")
+		return handleManualTokenInput(cmd)
+	}
+
+	fmt.Fprintln(cmd.OutOrStdout(), "OAuth token obtained successfully.")
+	return token, nil
+}
+
+// parseOAuthToken extracts an OAuth token (sk-ant-oa...) from command output.
+func parseOAuthToken(output string) string {
+	match := oauthTokenPattern.FindString(output)
+	return match
+}
+
+// handleManualTokenInput prompts the user to manually paste their OAuth token.
+func handleManualTokenInput(cmd *cobra.Command) (string, error) {
 	reader := getSetupClaudeCredentialReader(cmd)
 
 	fmt.Fprintln(cmd.OutOrStdout())
-	token, err := reader.ReadCredential("Paste your OAuth token (from `claude setup-token`): ")
+	fmt.Fprintln(cmd.OutOrStdout(), "To generate a token manually:")
+	fmt.Fprintln(cmd.OutOrStdout(), "  1. Run: claude setup-token")
+	fmt.Fprintln(cmd.OutOrStdout(), "  2. Approve the request in your browser")
+	fmt.Fprintln(cmd.OutOrStdout(), "  3. Copy the token (starts with 'sk-ant-oa...')")
+	fmt.Fprintln(cmd.OutOrStdout())
+
+	token, err := reader.ReadCredential("Paste your OAuth token: ")
 	if err != nil {
 		return "", fmt.Errorf("failed to read OAuth token: %w", err)
 	}

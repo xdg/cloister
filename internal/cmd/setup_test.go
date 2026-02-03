@@ -61,6 +61,12 @@ func TestSetupClaudeCmd_Runs(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
+	// Mock yes/no prompter: false for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, true)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
+
 	var stdout bytes.Buffer
 
 	// Reset the command for testing
@@ -93,6 +99,12 @@ func TestSetupClaudeCmd_DefaultSelectsToken(t *testing.T) {
 	oldReader := setupClaudeCredentialReader
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
+
+	// Mock yes/no prompter: false for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, true)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
 	setupClaudeCmd.SetOut(&stdout)
@@ -134,6 +146,12 @@ func TestSetupClaudeCmd_SelectsOAuthToken(t *testing.T) {
 	oldReader := setupClaudeCredentialReader
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
+
+	// Mock yes/no prompter: false for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, true)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
 	setupClaudeCmd.SetOut(&stdout)
@@ -272,6 +290,12 @@ func TestSetupClaudeCmd_OAuthToken_CorrectPrompt(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
+	// Mock yes/no prompter: false for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, true)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
+
 	var stdout bytes.Buffer
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
@@ -281,11 +305,11 @@ func TestSetupClaudeCmd_OAuthToken_CorrectPrompt(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify the correct prompt was shown
+	// Verify the correct prompt was shown (now using manual input flow)
 	if len(mockReader.Calls) != 1 {
 		t.Fatalf("expected 1 credential read call, got %d", len(mockReader.Calls))
 	}
-	expectedPrompt := "Paste your OAuth token (from `claude setup-token`): "
+	expectedPrompt := "Paste your OAuth token: "
 	if mockReader.Calls[0] != expectedPrompt {
 		t.Errorf("prompt = %q, want %q", mockReader.Calls[0], expectedPrompt)
 	}
@@ -336,6 +360,12 @@ func TestSetupClaudeCmd_OAuthToken_EmptyInput_Error(t *testing.T) {
 	oldReader := setupClaudeCredentialReader
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
+
+	// Mock yes/no prompter: false for auto setup
+	mockYesNo := prompt.NewMockYesNoPrompter(false)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
 	setupClaudeCmd.SetOut(&stdout)
@@ -391,6 +421,12 @@ func TestSetupClaudeCmd_OAuthToken_WhitespaceOnly_Error(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
+	// Mock yes/no prompter: false for auto setup
+	mockYesNo := prompt.NewMockYesNoPrompter(false)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
+
 	var stdout bytes.Buffer
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
@@ -420,6 +456,12 @@ func TestSetupClaudeCmd_CredentialReader_Error(t *testing.T) {
 	oldReader := setupClaudeCredentialReader
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
+
+	// Mock yes/no prompter: false for auto setup
+	mockYesNo := prompt.NewMockYesNoPrompter(false)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
 	setupClaudeCmd.SetOut(&stdout)
@@ -451,8 +493,9 @@ func TestSetupClaudeCmd_SkipPermissions_DefaultYes(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
-	// Mock yes/no prompter that returns default (empty input -> true)
-	mockYesNo := &prompt.MockYesNoPrompter{} // No responses = returns default
+	// Mock yes/no prompter: first false (for auto setup), then default for skip permissions
+	// Using explicit false + default behavior for skip perms
+	mockYesNo := prompt.NewMockYesNoPrompter(false) // Only first response, second uses default
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
@@ -466,13 +509,13 @@ func TestSetupClaudeCmd_SkipPermissions_DefaultYes(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Verify the yes/no prompter was called
-	if len(mockYesNo.Calls) != 1 {
-		t.Fatalf("expected 1 yes/no prompt call, got %d", len(mockYesNo.Calls))
+	// Verify the yes/no prompter was called twice (auto setup + skip permissions)
+	if len(mockYesNo.Calls) != 2 {
+		t.Fatalf("expected 2 yes/no prompt calls, got %d", len(mockYesNo.Calls))
 	}
 
-	// Verify the correct prompt was used
-	call := mockYesNo.Calls[0]
+	// Verify the second prompt (skip permissions) has correct settings
+	call := mockYesNo.Calls[1]
 	expectedPrompt := "Skip Claude's built-in permission prompts? (recommended inside cloister) [Y/n]: "
 	if call.Prompt != expectedPrompt {
 		t.Errorf("prompt = %q, want %q", call.Prompt, expectedPrompt)
@@ -505,8 +548,8 @@ func TestSetupClaudeCmd_SkipPermissions_ExplicitNo(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
-	// Mock yes/no prompter that returns false (user typed "n")
-	mockYesNo := prompt.NewMockYesNoPrompter(false)
+	// Mock yes/no prompter: false for auto setup, false for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, false)
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
@@ -542,8 +585,8 @@ func TestSetupClaudeCmd_SkipPermissions_ExplicitYes(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
-	// Mock yes/no prompter that returns true (user typed "y")
-	mockYesNo := prompt.NewMockYesNoPrompter(true)
+	// Mock yes/no prompter: false for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, true)
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
@@ -579,10 +622,11 @@ func TestSetupClaudeCmd_SkipPermissions_Error(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
-	// Mock yes/no prompter that returns an error
+	// Mock yes/no prompter: false for auto setup, error for skip permissions
 	testErr := errors.New("input error")
 	mockYesNo := &prompt.MockYesNoPrompter{
-		Errors: []error{testErr},
+		Responses: []bool{false},
+		Errors:    []error{nil, testErr}, // First succeeds, second errors
 	}
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
@@ -616,8 +660,8 @@ func TestSetupClaudeCmd_SkipPermissions_WithTokenAuth(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
-	// Mock yes/no prompter that returns false (user typed "n")
-	mockYesNo := prompt.NewMockYesNoPrompter(false)
+	// Mock yes/no prompter: false for auto setup, false for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, false)
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
@@ -699,8 +743,8 @@ func TestSetupClaudeCmd_SavesTokenAuthToConfig(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
-	// Mock yes/no prompter that returns false
-	mockYesNo := prompt.NewMockYesNoPrompter(false)
+	// Mock yes/no prompter: false for auto setup, false for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, false)
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
@@ -894,8 +938,8 @@ agents:
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
-	// Mock yes/no prompter
-	mockYesNo := prompt.NewMockYesNoPrompter(true)
+	// Mock yes/no prompter: false for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, true)
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
@@ -973,8 +1017,8 @@ func TestSetupClaudeCmd_ConfigWriteError(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
-	// Mock yes/no prompter
-	mockYesNo := prompt.NewMockYesNoPrompter(true)
+	// Mock yes/no prompter: false for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, true)
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
@@ -1016,8 +1060,8 @@ func TestSetupClaudeCmd_ShowsCorrectConfigPath(t *testing.T) {
 	setupClaudeCredentialReader = mockReader
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
-	// Mock yes/no prompter
-	mockYesNo := prompt.NewMockYesNoPrompter(true)
+	// Mock yes/no prompter: false for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, true)
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
@@ -1371,6 +1415,349 @@ func TestSetupClaudeCmd_ExistingCredentials_PromptError(t *testing.T) {
 	promptErr := errors.New("input error")
 	mockYesNo := &prompt.MockYesNoPrompter{
 		Errors: []error{promptErr},
+	}
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
+
+	var stdout bytes.Buffer
+	setupClaudeCmd.SetOut(&stdout)
+	setupClaudeCmd.SetErr(&stdout)
+
+	err := setupClaudeCmd.RunE(setupClaudeCmd, nil)
+	if err == nil {
+		t.Fatal("expected error from yes/no prompter")
+	}
+	if !strings.Contains(err.Error(), "failed to get confirmation") {
+		t.Errorf("error should mention confirmation failure, got: %v", err)
+	}
+}
+
+// Automatic OAuth token setup tests
+
+func TestParseOAuthToken_ValidToken(t *testing.T) {
+	tests := []struct {
+		name   string
+		input  string
+		want   string
+	}{
+		{
+			name:  "simple token",
+			input: "Your token is: sk-ant-oaABC123xyz",
+			want:  "sk-ant-oaABC123xyz",
+		},
+		{
+			name:  "token with surrounding text",
+			input: "Token generated successfully!\nsk-ant-oaToken123-abc_DEF\nPlease keep it safe.",
+			want:  "sk-ant-oaToken123-abc_DEF",
+		},
+		{
+			name:  "token at end of output",
+			input: "OAuth token: sk-ant-oaXYZ789",
+			want:  "sk-ant-oaXYZ789",
+		},
+		{
+			name:  "realistic claude output",
+			input: "Opening browser for authentication...\nAuthentication successful!\nYour OAuth token is: sk-ant-oaTest-Token-12345\nThis token will not be shown again.",
+			want:  "sk-ant-oaTest-Token-12345",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseOAuthToken(tt.input)
+			if got != tt.want {
+				t.Errorf("parseOAuthToken() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseOAuthToken_NoToken(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "empty output",
+			input: "",
+		},
+		{
+			name:  "no token in output",
+			input: "Authentication failed. Please try again.",
+		},
+		{
+			name:  "wrong token prefix",
+			input: "Your API key is: sk-ant-api123",
+		},
+		{
+			name:  "partial match",
+			input: "sk-ant-o (incomplete)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseOAuthToken(tt.input)
+			if got != "" {
+				t.Errorf("parseOAuthToken() = %q, want empty string", got)
+			}
+		})
+	}
+}
+
+func TestSetupClaudeCmd_AutomaticTokenSetup_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Mock prompter that returns token (index 0)
+	mockPrompter := prompt.NewMockPrompter(0)
+	oldPrompter := setupClaudePrompter
+	setupClaudePrompter = mockPrompter
+	defer func() { setupClaudePrompter = oldPrompter }()
+
+	// Mock yes/no prompter: true for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(true, true)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
+
+	// Mock command runner that returns a successful token
+	mockRunner := prompt.NewMockCommandRunner("Token generated: sk-ant-oaTestToken123ABC")
+	oldRunner := setupClaudeCommandRunner
+	setupClaudeCommandRunner = mockRunner
+	defer func() { setupClaudeCommandRunner = oldRunner }()
+
+	var stdout bytes.Buffer
+	setupClaudeCmd.SetOut(&stdout)
+	setupClaudeCmd.SetErr(&stdout)
+
+	err := setupClaudeCmd.RunE(setupClaudeCmd, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify the command was run
+	if len(mockRunner.Calls) != 1 {
+		t.Fatalf("expected 1 command call, got %d", len(mockRunner.Calls))
+	}
+	if mockRunner.Calls[0].Name != "claude" {
+		t.Errorf("command name = %q, want %q", mockRunner.Calls[0].Name, "claude")
+	}
+	if len(mockRunner.Calls[0].Args) != 1 || mockRunner.Calls[0].Args[0] != "setup-token" {
+		t.Errorf("command args = %v, want [setup-token]", mockRunner.Calls[0].Args)
+	}
+
+	// Verify the token was extracted and saved
+	output := stdout.String()
+	if !strings.Contains(output, "OAuth token obtained successfully") {
+		t.Errorf("output should confirm token obtained, got: %s", output)
+	}
+
+	// Verify config was saved with the token
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	claudeCfg := cfg.Agents["claude"]
+	if claudeCfg.Token != "sk-ant-oaTestToken123ABC" {
+		t.Errorf("saved token = %q, want %q", claudeCfg.Token, "sk-ant-oaTestToken123ABC")
+	}
+}
+
+func TestSetupClaudeCmd_AutomaticTokenSetup_CommandFails_FallbackToManual(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Mock prompter that returns token (index 0)
+	mockPrompter := prompt.NewMockPrompter(0)
+	oldPrompter := setupClaudePrompter
+	setupClaudePrompter = mockPrompter
+	defer func() { setupClaudePrompter = oldPrompter }()
+
+	// Mock yes/no prompter: true for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(true, true)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
+
+	// Mock command runner that fails
+	mockRunner := &prompt.MockCommandRunner{
+		Errors: []error{errors.New("command not found: claude")},
+	}
+	oldRunner := setupClaudeCommandRunner
+	setupClaudeCommandRunner = mockRunner
+	defer func() { setupClaudeCommandRunner = oldRunner }()
+
+	// Mock credential reader for fallback manual input
+	mockReader := prompt.NewMockCredentialReader("sk-ant-oaManualToken456")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
+
+	var stdout bytes.Buffer
+	setupClaudeCmd.SetOut(&stdout)
+	setupClaudeCmd.SetErr(&stdout)
+
+	err := setupClaudeCmd.RunE(setupClaudeCmd, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify fallback message was shown
+	output := stdout.String()
+	if !strings.Contains(output, "Falling back to manual token entry") {
+		t.Errorf("output should show fallback message, got: %s", output)
+	}
+
+	// Verify manual token was accepted
+	if !strings.Contains(output, "OAuth token received") {
+		t.Errorf("output should confirm token received, got: %s", output)
+	}
+
+	// Verify config was saved with the manual token
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	claudeCfg := cfg.Agents["claude"]
+	if claudeCfg.Token != "sk-ant-oaManualToken456" {
+		t.Errorf("saved token = %q, want %q", claudeCfg.Token, "sk-ant-oaManualToken456")
+	}
+}
+
+func TestSetupClaudeCmd_AutomaticTokenSetup_NoTokenInOutput_FallbackToManual(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Mock prompter that returns token (index 0)
+	mockPrompter := prompt.NewMockPrompter(0)
+	oldPrompter := setupClaudePrompter
+	setupClaudePrompter = mockPrompter
+	defer func() { setupClaudePrompter = oldPrompter }()
+
+	// Mock yes/no prompter: true for auto setup, true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(true, true)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
+
+	// Mock command runner that succeeds but without a token
+	mockRunner := prompt.NewMockCommandRunner("Authentication failed. Please try again.")
+	oldRunner := setupClaudeCommandRunner
+	setupClaudeCommandRunner = mockRunner
+	defer func() { setupClaudeCommandRunner = oldRunner }()
+
+	// Mock credential reader for fallback manual input
+	mockReader := prompt.NewMockCredentialReader("sk-ant-oaManualFallback789")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
+
+	var stdout bytes.Buffer
+	setupClaudeCmd.SetOut(&stdout)
+	setupClaudeCmd.SetErr(&stdout)
+
+	err := setupClaudeCmd.RunE(setupClaudeCmd, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify token not found message was shown
+	output := stdout.String()
+	if !strings.Contains(output, "Could not find OAuth token in command output") {
+		t.Errorf("output should show token not found message, got: %s", output)
+	}
+
+	// Verify fallback message was shown
+	if !strings.Contains(output, "Falling back to manual token entry") {
+		t.Errorf("output should show fallback message, got: %s", output)
+	}
+
+	// Verify manual token was accepted
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	claudeCfg := cfg.Agents["claude"]
+	if claudeCfg.Token != "sk-ant-oaManualFallback789" {
+		t.Errorf("saved token = %q, want %q", claudeCfg.Token, "sk-ant-oaManualFallback789")
+	}
+}
+
+func TestSetupClaudeCmd_AutomaticTokenSetup_UserDeclinesAuto(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Mock prompter that returns token (index 0)
+	mockPrompter := prompt.NewMockPrompter(0)
+	oldPrompter := setupClaudePrompter
+	setupClaudePrompter = mockPrompter
+	defer func() { setupClaudePrompter = oldPrompter }()
+
+	// Mock yes/no prompter: false for auto setup (user declines), true for skip permissions
+	mockYesNo := prompt.NewMockYesNoPrompter(false, true)
+	oldYesNo := setupClaudeYesNoPrompter
+	setupClaudeYesNoPrompter = mockYesNo
+	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
+
+	// Mock command runner - should NOT be called
+	mockRunner := prompt.NewMockCommandRunner("should not be used")
+	oldRunner := setupClaudeCommandRunner
+	setupClaudeCommandRunner = mockRunner
+	defer func() { setupClaudeCommandRunner = oldRunner }()
+
+	// Mock credential reader for manual input
+	mockReader := prompt.NewMockCredentialReader("sk-ant-oaManualInput123")
+	oldReader := setupClaudeCredentialReader
+	setupClaudeCredentialReader = mockReader
+	defer func() { setupClaudeCredentialReader = oldReader }()
+
+	var stdout bytes.Buffer
+	setupClaudeCmd.SetOut(&stdout)
+	setupClaudeCmd.SetErr(&stdout)
+
+	err := setupClaudeCmd.RunE(setupClaudeCmd, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Verify the command was NOT run
+	if len(mockRunner.Calls) != 0 {
+		t.Errorf("command should not be called when user declines, got %d calls", len(mockRunner.Calls))
+	}
+
+	// Verify manual instructions were shown
+	output := stdout.String()
+	if !strings.Contains(output, "To generate a token manually:") {
+		t.Errorf("output should show manual instructions, got: %s", output)
+	}
+
+	// Verify token was saved
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	claudeCfg := cfg.Agents["claude"]
+	if claudeCfg.Token != "sk-ant-oaManualInput123" {
+		t.Errorf("saved token = %q, want %q", claudeCfg.Token, "sk-ant-oaManualInput123")
+	}
+}
+
+func TestSetupClaudeCmd_AutoSetupPrompt_Error(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+
+	// Mock prompter that returns token (index 0)
+	mockPrompter := prompt.NewMockPrompter(0)
+	oldPrompter := setupClaudePrompter
+	setupClaudePrompter = mockPrompter
+	defer func() { setupClaudePrompter = oldPrompter }()
+
+	// Mock yes/no prompter that errors on first call (auto setup prompt)
+	testErr := errors.New("prompt error")
+	mockYesNo := &prompt.MockYesNoPrompter{
+		Errors: []error{testErr},
 	}
 	oldYesNo := setupClaudeYesNoPrompter
 	setupClaudeYesNoPrompter = mockYesNo
