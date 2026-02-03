@@ -15,7 +15,7 @@ This guide walks you through installing Cloister and running your first sandboxe
 curl -fsSL https://raw.githubusercontent.com/xdg/cloister/main/install.sh | sh
 ```
 
-This downloads the latest release and installs it to `~/.local/bin`. The script will prompt to add this directory to your PATH if needed.
+This downloads the latest release and installs it to `~/.local/bin`. If this directory isn't already in your PATH, the script will offer to add it to your shell configuration (bash, zsh, or fish).
 
 To install a specific version:
 

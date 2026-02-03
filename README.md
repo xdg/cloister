@@ -32,7 +32,7 @@
 curl -fsSL https://raw.githubusercontent.com/xdg/cloister/main/install.sh | sh
 ```
 
-This installs to `~/.local/bin`. To install a specific version:
+This installs to `~/.local/bin` and will prompt to add it to your PATH if needed. To install a specific version:
 
 ```bash
 VERSION=v1.0.0 curl -fsSL https://raw.githubusercontent.com/xdg/cloister/main/install.sh | sh
