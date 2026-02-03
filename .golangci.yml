@@ -19,6 +19,7 @@ linters:
     - misspell      # Find misspelled words
     - bodyclose     # Check HTTP response body is closed
     - nilerr        # Find nil error returns
+    - forbidigo     # Forbid fmt.Print* and log.* outside designated packages
 
 linters-settings:
   errcheck:
@@ -33,7 +34,36 @@ linters-settings:
   misspell:
     locale: US
 
+  forbidigo:
+    forbid:
+      # Forbid direct fmt.Print* - use term.* for user output
+      - pattern: '^fmt\.Print.*$'
+        msg: "use term.* for user output or clog.* for logging"
+      # Forbid log.Print* - use clog.* for structured logging
+      - pattern: '^log\.(Print|Fatal|Panic).*$'
+        msg: "use clog.* for logging"
+    exclude-godoc-examples: true
+    analyze-types: true
+
 issues:
   # Show all issues from a linter
   max-issues-per-linter: 0
   max-same-issues: 0
+
+  exclude-rules:
+    # Allow fmt.Print* in the term package (it's the designated output package)
+    - path: internal/term/
+      linters:
+        - forbidigo
+    # Allow fmt.Print* in the prompt package (interactive user input)
+    - path: internal/prompt/
+      linters:
+        - forbidigo
+    # Allow fmt.Print* in test files for debugging
+    - path: _test\.go
+      linters:
+        - forbidigo
+    # Allow fmt.Fprint in audit package (structured log writing)
+    - path: internal/audit/
+      linters:
+        - forbidigo
