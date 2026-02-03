@@ -14,10 +14,13 @@ func init() {
 }
 
 const (
-	agentName      = "claude"
-	settingsDir    = ".claude"
-	configFileName = ".claude.json"
+	claudeAgentName      = "claude"
+	claudeSettingsDir    = ".claude"
+	claudeConfigFileName = ".claude.json"
 )
+
+// claudeSkipPermsAlias is the alias line added to bashrc for --dangerously-skip-permissions.
+const claudeSkipPermsAlias = `alias claude='claude --dangerously-skip-permissions'`
 
 // cloisterRulesPath is the path to the cloister rules file in the container.
 const cloisterRulesPath = containerHomeDir + "/.claude/rules/cloister.md"
@@ -117,7 +120,7 @@ func NewClaudeAgent() *ClaudeAgent {
 
 // Name returns the agent identifier.
 func (a *ClaudeAgent) Name() string {
-	return agentName
+	return claudeAgentName
 }
 
 // GetCredentialEnvVars implements CredentialEnvProvider.
@@ -191,7 +194,7 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 
 	// Step 1: Copy settings directory (~/.claude/)
 	// This is a one-way snapshot - writes inside container are isolated
-	if err := CopyDirToContainer(containerName, settingsDir, settingsExcludePatterns); err != nil {
+	if err := CopyDirToContainer(containerName, claudeSettingsDir, settingsExcludePatterns); err != nil {
 		// Log but don't fail - missing settings is not fatal
 		_ = err
 	}
@@ -228,7 +231,7 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 	}
 
 	// Step 3: Generate ~/.claude.json config file
-	configJSON, err := MergeJSONConfig(configFileName, configFieldsToCopy, configForcedValues, nil)
+	configJSON, err := MergeJSONConfig(claudeConfigFileName, configFieldsToCopy, configForcedValues, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate config: %w", err)
 	}
@@ -240,7 +243,7 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 	// Step 4: Add skip-permissions alias if enabled (default true)
 	// SkipPerms is *bool: nil or true means add the alias, only explicit false skips it
 	if agentCfg == nil || agentCfg.SkipPerms == nil || *agentCfg.SkipPerms {
-		if err := appendSkipPermsAlias(containerName); err != nil {
+		if err := AppendBashAlias(containerName, claudeSkipPermsAlias); err != nil {
 			return nil, fmt.Errorf("failed to add skip-permissions alias: %w", err)
 		}
 	}

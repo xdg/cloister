@@ -253,9 +253,12 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	}
 
 	// Resolve agent: use injected agent, or look up from registry
-	// For now, default to "claude" agent - this will be configurable later
+	// Priority: 1) injected agent, 2) config default, 3) fallback to "claude"
 	agentImpl := deps.agent
-	agentName := "claude"
+	agentName := "claude" // fallback default
+	if globalCfg != nil && globalCfg.Defaults.Agent != "" {
+		agentName = globalCfg.Defaults.Agent
+	}
 	var agentCfg *config.AgentConfig
 	if globalCfg != nil {
 		if cfg, ok := globalCfg.Agents[agentName]; ok {
@@ -283,7 +286,7 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		usedEnvVars := token.CredentialEnvVarsUsed() //nolint:staticcheck // intentional fallback
 		if len(usedEnvVars) > 0 {
 			fmt.Fprintf(deps.stderr, "Warning: Using %s from environment.\n", usedEnvVars[0])
-			fmt.Fprintln(deps.stderr, "Run 'cloister setup claude' to store credentials in config.")
+			fmt.Fprintf(deps.stderr, "Run 'cloister setup %s' to store credentials in config.\n", agentName)
 		}
 		envVars = append(envVars, token.CredentialEnvVars()...) //nolint:staticcheck // intentional fallback
 	}
