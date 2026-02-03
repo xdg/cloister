@@ -3,16 +3,17 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/cloister"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/project"
+	"github.com/xdg/cloister/internal/term"
 )
 
 var startCmd = &cobra.Command{
@@ -68,7 +69,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 	reg, err := project.LoadRegistry()
 	if err != nil {
 		// Log warning but continue - registry is not critical for operation
-		fmt.Fprintf(os.Stderr, "Warning: failed to load project registry: %v\n", err)
+		clog.Warn("failed to load project registry: %v", err)
 	} else {
 		info := &project.ProjectInfo{
 			Name:   projectName,
@@ -80,13 +81,13 @@ func runStart(cmd *cobra.Command, args []string) error {
 			// Check for name collision
 			var collisionErr *project.NameCollisionError
 			if errors.As(err, &collisionErr) {
-				fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+				clog.Warn("%v", err)
 			} else {
-				fmt.Fprintf(os.Stderr, "Warning: failed to register project: %v\n", err)
+				clog.Warn("failed to register project: %v", err)
 			}
 		} else {
 			if err := project.SaveRegistry(reg); err != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to save project registry: %v\n", err)
+				clog.Warn("failed to save project registry: %v", err)
 			}
 		}
 	}
@@ -127,12 +128,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print startup information
-	fmt.Printf("Started cloister: %s\n", cloisterName)
-	fmt.Printf("Project: %s (branch: %s)\n", projectName, branch)
-	fmt.Printf("Token: %s\n", tok)
-	fmt.Println()
-	fmt.Println("Attaching interactive shell...")
-	fmt.Println()
+	term.Printf("Started cloister: %s\n", cloisterName)
+	term.Printf("Project: %s (branch: %s)\n", projectName, branch)
+	term.Printf("Token: %s\n", tok)
+	term.Println()
+	term.Println("Attaching interactive shell...")
+	term.Println()
 
 	// Step 6: Attach interactive shell
 	exitCode, err := cloister.Attach(containerName)
@@ -141,9 +142,9 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Step 7: Print exit message
-	fmt.Println()
-	fmt.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
-	fmt.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
+	term.Println()
+	term.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
+	term.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
 
 	// Step 8: Propagate shell exit code
 	if exitCode != 0 {
@@ -169,15 +170,15 @@ func attachToExisting(containerName string) error {
 
 	if !running {
 		// Container exists but is stopped - start it first
-		fmt.Printf("Starting stopped cloister: %s\n", cloisterName)
+		term.Printf("Starting stopped cloister: %s\n", cloisterName)
 		if err := mgr.StartContainer(containerName); err != nil {
 			return fmt.Errorf("failed to start cloister: %w", err)
 		}
 	}
 
 	// Attach to the cloister
-	fmt.Printf("Entering cloister %s. Type 'exit' to leave.\n", cloisterName)
-	fmt.Println()
+	term.Printf("Entering cloister %s. Type 'exit' to leave.\n", cloisterName)
+	term.Println()
 
 	exitCode, err := cloister.Attach(containerName)
 	if err != nil {
@@ -185,9 +186,9 @@ func attachToExisting(containerName string) error {
 	}
 
 	// Print exit message
-	fmt.Println()
-	fmt.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
-	fmt.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
+	term.Println()
+	term.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
+	term.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
 
 	// Propagate shell exit code
 	if exitCode != 0 {

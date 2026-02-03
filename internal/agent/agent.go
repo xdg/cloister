@@ -6,11 +6,11 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/docker"
 )
@@ -149,7 +149,7 @@ func CopyDirToContainer(containerName, dirName string, excludePatterns []string)
 	// Try rsync first (fast, supports exclusions natively)
 	if err := copyWithRsync(srcDir, tmpDestDir, excludePatterns); err != nil {
 		// rsync failed or not available, fall back to cp (no exclusion support)
-		log.Printf("cloister: warning: rsync failed, falling back to cp (exclusions will not apply): %v", err)
+		clog.Warn("rsync failed, falling back to cp (exclusions will not apply): %v", err)
 		if err := copyWithCp(srcDir, tmpDestDir); err != nil {
 			return err
 		}
@@ -158,7 +158,7 @@ func CopyDirToContainer(containerName, dirName string, excludePatterns []string)
 	// Clear any pre-existing directory in the container (from image build)
 	clearCmd := exec.Command("docker", "exec", containerName, "rm", "-rf", containerHomeDir+"/"+dirName)
 	if output, err := clearCmd.CombinedOutput(); err != nil {
-		log.Printf("cloister: warning: failed to clear existing %s: %v: %s", dirName, err, output)
+		clog.Warn("failed to clear existing %s: %v: %s", dirName, err, output)
 	}
 
 	// Copy the filtered directory to the container

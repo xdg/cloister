@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"text/tabwriter"
 
@@ -11,6 +10,7 @@ import (
 
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
+	"github.com/xdg/cloister/internal/term"
 )
 
 var listCmd = &cobra.Command{
@@ -53,12 +53,12 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	// Handle empty list
 	if len(cloisters) == 0 {
-		fmt.Println("No running cloisters.")
+		term.Println("No running cloisters.")
 		return nil
 	}
 
 	// Create tabwriter for table formatting
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(term.Stdout(), 0, 0, 2, ' ', 0)
 
 	// Print header
 	fmt.Fprintln(w, "NAME\tPROJECT\tBRANCH\tUPTIME\tSTATUS")

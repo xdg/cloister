@@ -9,9 +9,11 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/project"
+	"github.com/xdg/cloister/internal/term"
 )
 
 var projectRemoveConfig bool
@@ -88,12 +90,12 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 
 	projects := reg.List()
 	if len(projects) == 0 {
-		fmt.Println("No registered projects.")
+		term.Println("No registered projects.")
 		return nil
 	}
 
 	// Create tabwriter for table formatting
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	w := tabwriter.NewWriter(term.Stdout(), 0, 0, 2, ' ', 0)
 
 	// Print header
 	fmt.Fprintln(w, "NAME\tROOT\tREMOTE\tLAST USED")
@@ -145,42 +147,42 @@ func runProjectShow(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print project details
-	fmt.Printf("Name:        %s\n", entry.Name)
-	fmt.Printf("Root:        %s\n", entry.Root)
-	fmt.Printf("Remote:      %s\n", entry.Remote)
-	fmt.Printf("Config:      %s\n", config.ProjectConfigPath(name))
+	term.Printf("Name:        %s\n", entry.Name)
+	term.Printf("Root:        %s\n", entry.Root)
+	term.Printf("Remote:      %s\n", entry.Remote)
+	term.Printf("Config:      %s\n", config.ProjectConfigPath(name))
 
 	// Print last used time
 	if !entry.LastUsed.IsZero() {
-		fmt.Printf("Last Used:   %s\n", entry.LastUsed.Format("2006-01-02 15:04:05"))
+		term.Printf("Last Used:   %s\n", entry.LastUsed.Format("2006-01-02 15:04:05"))
 	} else {
-		fmt.Printf("Last Used:   never\n")
+		term.Printf("Last Used:   never\n")
 	}
 
 	// Print allowlist additions if any
 	if len(cfg.Proxy.Allow) > 0 {
-		fmt.Println()
-		fmt.Println("Allowlist Additions:")
+		term.Println()
+		term.Println("Allowlist Additions:")
 		for _, allow := range cfg.Proxy.Allow {
-			fmt.Printf("  - %s\n", allow.Domain)
+			term.Printf("  - %s\n", allow.Domain)
 		}
 	}
 
 	// Print auto-approve patterns if any
 	if len(cfg.Commands.AutoApprove) > 0 {
-		fmt.Println()
-		fmt.Println("Auto-Approve Patterns:")
+		term.Println()
+		term.Println("Auto-Approve Patterns:")
 		for _, pattern := range cfg.Commands.AutoApprove {
-			fmt.Printf("  - %s\n", pattern.Pattern)
+			term.Printf("  - %s\n", pattern.Pattern)
 		}
 	}
 
 	// Print refs if any
 	if len(cfg.Refs) > 0 {
-		fmt.Println()
-		fmt.Println("Reference Paths:")
+		term.Println()
+		term.Println("Reference Paths:")
 		for _, ref := range cfg.Refs {
-			fmt.Printf("  - %s\n", ref)
+			term.Printf("  - %s\n", ref)
 		}
 	}
 
@@ -198,9 +200,9 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 
 	entry := reg.FindByName(name)
 	if entry == nil {
-		fmt.Fprintf(os.Stderr, "Warning: project %q not found in registry\n", name)
-		fmt.Fprintf(os.Stderr, "Use 'cloister project list' to see registered projects.\n")
-		fmt.Fprintf(os.Stderr, "Creating config file anyway. Register with 'cloister start' from the project directory.\n\n")
+		term.Warn("project %q not found in registry", name)
+		term.Printf("Use 'cloister project list' to see registered projects.\n")
+		term.Printf("Creating config file anyway. Register with 'cloister start' from the project directory.\n\n")
 	}
 
 	if err := config.EditProjectConfig(name); err != nil {
@@ -230,7 +232,7 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 	containers, err := mgr.List()
 	if err != nil {
 		// If Docker isn't running, we can't check - proceed with warning
-		fmt.Fprintf(os.Stderr, "Warning: could not check for running cloisters (Docker may not be running)\n")
+		clog.Warn("could not check for running cloisters (Docker may not be running)")
 	} else {
 		for _, c := range containers {
 			if c.Name == "cloister-guardian" || c.State != "running" {
@@ -258,19 +260,19 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to save registry: %w", err)
 	}
 
-	fmt.Printf("Removed project %q from registry\n", name)
+	term.Printf("Removed project %q from registry\n", name)
 
 	// Optionally remove config file
 	if projectRemoveConfig {
 		configPath := config.ProjectConfigPath(name)
 		if err := os.Remove(configPath); err != nil {
 			if os.IsNotExist(err) {
-				fmt.Println("Config file does not exist.")
+				term.Println("Config file does not exist.")
 			} else {
 				return fmt.Errorf("failed to remove config file: %w", err)
 			}
 		} else {
-			fmt.Printf("Removed config file: %s\n", configPath)
+			term.Printf("Removed config file: %s\n", configPath)
 		}
 	}
 

@@ -1,8 +1,9 @@
 package patterns
 
 import (
-	"log"
 	"regexp"
+
+	"github.com/xdg/cloister/internal/clog"
 )
 
 // compiledPattern holds a compiled regex and its original pattern string.
@@ -36,7 +37,7 @@ func compilePatterns(patterns []string, category string) []compiledPattern {
 	for _, p := range patterns {
 		re, err := regexp.Compile(p)
 		if err != nil {
-			log.Printf("WARNING: invalid %s pattern %q: %v (skipped)", category, p, err)
+			clog.Warn("invalid %s pattern %q: %v (skipped)", category, p, err)
 			continue
 		}
 		result = append(result, compiledPattern{regex: re, pattern: p})

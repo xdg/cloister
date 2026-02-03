@@ -2,9 +2,10 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
+
+	"github.com/xdg/cloister/internal/clog"
 )
 
 // EditProjectConfig opens the project configuration file in the user's editor.
@@ -32,7 +33,7 @@ func EditProjectConfig(name string) error {
 	// Validate the edited config
 	_, err := LoadProjectConfig(name)
 	if err != nil {
-		log.Printf("warning: project config %q has errors after edit: %v", name, err)
+		clog.Warn("project config %q has errors after edit: %v", name, err)
 		// Don't fail - user may want to fix it later
 	}
 
@@ -64,7 +65,7 @@ func EditGlobalConfig() error {
 	// Validate the edited config
 	_, err := LoadGlobalConfig()
 	if err != nil {
-		log.Printf("warning: global config has errors after edit: %v", err)
+		clog.Warn("global config has errors after edit: %v", err)
 		// Don't fail - user may want to fix it later
 	}
 
