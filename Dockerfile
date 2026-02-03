@@ -43,8 +43,10 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     procps \
     ripgrep \
+    shellcheck \
     sqlite3 \
     tini \
+    tmux \
     tree \
     unzip \
     vim \
@@ -82,6 +84,13 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     python3-venv \
     && rm -rf /var/lib/apt/lists/*
+
+# yq (YAML processor, like jq for YAML)
+ARG YQ_VERSION=4.45.1
+RUN set -eux; \
+    curl -fsSL "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_${TARGETARCH}" \
+      -o /usr/local/bin/yq; \
+    chmod +x /usr/local/bin/yq
 
 # Create unprivileged user (UID 1000) with passwordless sudo
 # Remove existing user with UID 1000 if present (ubuntu base image has 'ubuntu' user)
