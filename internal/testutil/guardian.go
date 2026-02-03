@@ -42,12 +42,16 @@ func RequireGuardian(t *testing.T) {
 
 	// Generate unique instance ID for test isolation
 	t.Setenv(guardian.InstanceIDEnvVar, guardian.GenerateInstanceID())
+	// Capture container name now while instance ID is set
+	containerName := guardian.ContainerName()
 
 	if err := guardian.EnsureRunning(); err != nil {
 		t.Skipf("Guardian not available: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = guardian.Stop()
+		_ = guardian.StopExecutor()
+		_, _ = docker.Run("stop", containerName)
+		_, _ = docker.Run("rm", containerName)
 	})
 }
 
@@ -61,6 +65,8 @@ func RequireCleanGuardianState(t *testing.T) {
 	// Generate unique instance ID for test isolation.
 	// This means IsRunning() will check for our isolated instance, not production.
 	t.Setenv(guardian.InstanceIDEnvVar, guardian.GenerateInstanceID())
+	// Capture container name now while instance ID is set
+	containerName := guardian.ContainerName()
 
 	running, err := guardian.IsRunning()
 	if err != nil {
@@ -71,14 +77,9 @@ func RequireCleanGuardianState(t *testing.T) {
 		t.Skip("Skipping: guardian is already running (parallel test conflict)")
 	}
 	t.Cleanup(func() {
-		_, _ = CleanupGuardian()
+		_ = guardian.StopExecutor()
+		_, _ = docker.Run("stop", containerName)
+		_, _ = docker.Run("rm", containerName)
 	})
 }
 
-// CleanupGuardian stops the executor and removes the guardian container if they exist.
-// Returns any output and error from the docker commands.
-func CleanupGuardian() (string, error) {
-	_ = guardian.StopExecutor()
-	_, _ = docker.Run("stop", guardian.ContainerName())
-	return docker.Run("rm", guardian.ContainerName())
-}

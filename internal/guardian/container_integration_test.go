@@ -48,27 +48,30 @@ func requireCloisterBinary(t *testing.T) {
 	t.Setenv(ExecutableEnvVar, binaryPath)
 }
 
-// cleanupGuardian removes the guardian container and executor if they exist.
-func cleanupGuardian() {
-	// Best effort cleanup - ignore errors
-	_ = StopExecutor()
-	_, _ = docker.Run("stop", ContainerName())
-	_, _ = docker.Run("rm", ContainerName())
-}
-
 // requireCleanGuardianState ensures no guardian is running and registers cleanup.
-// Skips the test if guardian is unexpectedly running (another package may be using it).
+// Generates a unique instance ID for test isolation, preventing conflicts with
+// production guardians or other concurrent tests.
 func requireCleanGuardianState(t *testing.T) {
 	t.Helper()
 	requireDocker(t)
+	// Generate unique instance ID for test isolation
+	t.Setenv(InstanceIDEnvVar, GenerateInstanceID())
+	// Capture container name now while instance ID is set
+	containerName := ContainerName()
 	running, err := IsRunning()
 	if err != nil {
 		t.Fatalf("IsRunning() error: %v", err)
 	}
 	if running {
-		t.Skip("Skipping: guardian is already running (parallel test conflict)")
+		// With instance isolation this should not happen, but check anyway
+		t.Skip("Skipping: guardian instance already running")
 	}
-	t.Cleanup(cleanupGuardian)
+	t.Cleanup(func() {
+		// Best effort cleanup - ignore errors
+		_ = StopExecutor()
+		_, _ = docker.Run("stop", containerName)
+		_, _ = docker.Run("rm", containerName)
+	})
 }
 
 // TestGuardian_WhenNotRunning tests guardian behavior when no container exists.

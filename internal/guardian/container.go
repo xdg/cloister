@@ -233,6 +233,8 @@ func StartWithOptions(opts StartOptions) error {
 	}
 
 	// Build docker run arguments
+	// Container is created on bridge network first so port publishing works.
+	// We then connect to cloister-net for internal proxy traffic.
 	// Token API port is exposed to the host for the token management API
 	// (used by CLI to register/revoke tokens)
 	// Approval port is exposed to the host for the approval web UI
@@ -243,7 +245,7 @@ func StartWithOptions(opts StartOptions) error {
 	args := []string{
 		"run", "-d",
 		"--name", ContainerName(),
-		"--network", docker.CloisterNetworkName,
+		"--network", BridgeNetwork,
 		"-p", fmt.Sprintf("127.0.0.1:%d:9997", tokenAPIPort),
 		"-p", fmt.Sprintf("127.0.0.1:%d:9999", approvalPort),
 		"-e", "XDG_CONFIG_HOME=/etc",
@@ -270,12 +272,12 @@ func StartWithOptions(opts StartOptions) error {
 		return fmt.Errorf("failed to start guardian container: %w", err)
 	}
 
-	// Connect to bridge network for external access to upstream servers
-	_, err = defaultDockerOps.Run("network", "connect", BridgeNetwork, ContainerName())
+	// Connect to cloister-net for internal proxy traffic from cloister containers
+	_, err = defaultDockerOps.Run("network", "connect", docker.CloisterNetworkName, ContainerName())
 	if err != nil {
-		// If connecting to bridge fails, clean up the container
+		// If connecting to cloister-net fails, clean up the container
 		_ = removeContainer()
-		return fmt.Errorf("failed to connect guardian to bridge network: %w", err)
+		return fmt.Errorf("failed to connect guardian to cloister network: %w", err)
 	}
 
 	return nil
@@ -382,7 +384,8 @@ func WaitReady(timeout time.Duration) error {
 // WaitReadyWithPort polls the guardian API on a specific port until it responds.
 func WaitReadyWithPort(port int, timeout time.Duration) error {
 	client := &http.Client{Timeout: 500 * time.Millisecond}
-	url := fmt.Sprintf("http://localhost:%d/tokens", port)
+	// Use 127.0.0.1 explicitly since Docker port is bound to IPv4 only
+	url := fmt.Sprintf("http://127.0.0.1:%d/tokens", port)
 
 	deadline := time.Now().Add(timeout)
 	var lastErr error
@@ -445,8 +448,9 @@ func removeContainer() error {
 }
 
 // DefaultAPIAddr is the address where the guardian API is exposed to the host.
-// For production, this is "localhost:9997". For test instances, use APIAddr().
-const DefaultAPIAddr = "localhost:9997"
+// For production, this is "127.0.0.1:9997". For test instances, use APIAddr().
+// Uses explicit IPv4 since Docker ports are bound to 127.0.0.1.
+const DefaultAPIAddr = "127.0.0.1:9997"
 
 // APIPort returns the port where the guardian token API is exposed.
 // For production (no instance ID), returns 9997.
@@ -465,10 +469,11 @@ func APIPort() int {
 }
 
 // APIAddr returns the address where the guardian token API is exposed.
-// For production, returns "localhost:9997".
+// For production, returns "127.0.0.1:9997".
 // For test instances, returns the dynamic port from executor state.
+// Uses explicit IPv4 since Docker ports are bound to 127.0.0.1.
 func APIAddr() string {
-	return fmt.Sprintf("localhost:%d", APIPort())
+	return fmt.Sprintf("127.0.0.1:%d", APIPort())
 }
 
 // withGuardianClient checks if the guardian is running and returns a client.
