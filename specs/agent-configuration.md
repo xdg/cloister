@@ -127,14 +127,108 @@ This defaults to `true`. Set to `false` to omit the alias, allowing Claude to us
 
 ---
 
-## Other Agents
+## Codex CLI
 
-TODO: Document as we add support.
+### Authentication
+
+Codex CLI uses OpenAI API key authentication. The `cloister setup codex` command handles setup interactively.
+
+#### Interactive Setup
+
+```bash
+$ cloister setup codex
+# Prompts for:
+#   1. OpenAI API key (from platform.openai.com/api-keys)
+#   2. Whether to enable full-auto mode (default: yes)
+```
+
+#### API Key Setup
+
+1. Get your API key from platform.openai.com/api-keys
+2. Run `cloister setup codex`
+3. Paste the key when prompted
+
+Key is stored in `~/.config/cloister/config.yaml` under `agents.codex.api_key` and injected via `OPENAI_API_KEY` env var.
+
+#### Legacy: Environment Variable Fallback
+
+If no credentials are configured via `cloister setup codex`, cloister will fall back to the host's `OPENAI_API_KEY` environment variable. This fallback is deprecated. Run `cloister setup codex` to migrate.
+
+### Container Configuration
+
+**What cloister does at container launch:**
+
+1. **Injects authentication:**
+   - Sets `OPENAI_API_KEY` env var from configured API key
+
+2. **Copies `~/.codex/` settings from host:**
+   - Contains user settings, custom prompts, skills, and AGENTS.md
+   - One-way copy (host → container); changes don't persist back to host
+   - Missing directory is handled gracefully (first-time users)
+
+3. **Appends cloister rules to `~/.codex/AGENTS.md`:**
+   - Explains the cloister environment (proxy, hostexec, /work mount)
+   - Appended to preserve any existing user instructions
+   - Uses a marker to avoid duplicating on repeated runs
+
+4. **Generates/merges `~/.codex/config.toml`:**
+
+   Cloister reads the host's config.toml (if present) and appends forced values:
+
+   | Setting | Value | Purpose |
+   |---------|-------|---------|
+   | `approval_policy` | `"full-auto"` | Skip approval prompts (if enabled) |
+   | `sandbox_workspace_write.network_access` | `true` | Allow proxy access |
+
+5. **If full-auto mode is enabled, creates a shell alias:**
+   ```bash
+   alias codex='codex --approval-mode full-auto'
+   ```
+   This is added to `~/.bashrc` in the container.
+
+**Why enable full-auto mode?**
+
+Codex CLI has its own approval system that prompts before certain operations. Inside a cloister, this is redundant — the cloister *is* the sandbox. Enabling full-auto mode allows uninterrupted operation while cloister enforces the actual security boundary.
+
+**Configuration:**
+
+Full-auto mode is controlled by `agents.codex.skip_permissions` in `~/.config/cloister/config.yaml`:
+
+```yaml
+agents:
+  codex:
+    skip_permissions: true  # default
+```
+
+This defaults to `true`. Set to `false` to disable full-auto mode, allowing Codex to use its normal approval prompts inside the container.
+
+**Implementation notes:**
+
+- API key stored in `~/.config/cloister/config.yaml` under `agents.codex.api_key`
+- `~/.codex/` settings copied from host (one-way snapshot)
+- Cloister rules appended to `~/.codex/AGENTS.md`
+- `~/.codex/config.toml` merged with forced values for container environment
+
+---
+
+## Switching Between Agents
+
+To change the default agent, edit `~/.config/cloister/config.yaml`:
+
+```yaml
+defaults:
+  agent: codex  # or "claude", "gemini"
+```
+
+The default is `claude`. When you run `cloister start`, it uses the configured default agent.
+
+---
+
+## Other Agents
 
 | Agent | Auth Mechanism | Config Location | Notes |
 |-------|---------------|-----------------|-------|
-| Codex (OpenAI) | API key | `OPENAI_API_KEY` | |
-| Gemini CLI | API key | `GOOGLE_API_KEY` | |
+| Gemini CLI | API key | `GOOGLE_API_KEY` | Not yet implemented |
 | GitHub Copilot CLI | gh auth | `~/.config/gh/` | May need special handling |
 | Aider | API keys | Various | Supports multiple providers |
 

@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
@@ -262,20 +264,102 @@ func MergeJSONConfig(hostFileName string, fieldsToCopy []string, forcedValues ma
 	return string(configJSON) + "\n", nil
 }
 
-// skipPermsAlias is the alias line added to bashrc for --dangerously-skip-permissions.
-const skipPermsAlias = `alias claude='claude --dangerously-skip-permissions'`
+// MergeTOMLConfig reads a TOML config file from the host and appends forced values.
+// This is a simple implementation that copies the existing config and appends
+// cloister-specific overrides at the end (TOML allows later values to override earlier ones).
+//
+// Parameters:
+//   - hostFileName: the config file path under $HOME (e.g., ".codex/config.toml")
+//   - fieldsToCopy: unused (reserved for future use, can be nil)
+//   - forcedValues: fields that are always set to specific values (override host)
+//     Keys can use dot notation for nested values (e.g., "sandbox_workspace_write.network_access")
+//
+// Returns the merged TOML as a string.
+// If the host file doesn't exist, only forcedValues are included.
+func MergeTOMLConfig(hostFileName string, fieldsToCopy []string, forcedValues map[string]any) (string, error) {
+	var result strings.Builder
 
-// appendSkipPermsAlias adds the --dangerously-skip-permissions alias to the container's bashrc.
+	// Try to read host config file
+	homeDir, err := UserHomeDirFunc()
+	if err == nil {
+		hostPath := filepath.Join(homeDir, hostFileName)
+		if content, readErr := os.ReadFile(hostPath); readErr == nil {
+			result.Write(content)
+			// Ensure there's a newline before our additions
+			if len(content) > 0 && content[len(content)-1] != '\n' {
+				result.WriteString("\n")
+			}
+		}
+	}
+
+	// Add a comment to mark cloister additions
+	result.WriteString("\n# Cloister forced values (these override any earlier settings)\n")
+
+	// Group forced values by their section (keys with dots go in sections)
+	topLevel := make(map[string]any)
+	sections := make(map[string]map[string]any)
+
+	for key, value := range forcedValues {
+		if idx := strings.Index(key, "."); idx != -1 {
+			section := key[:idx]
+			subkey := key[idx+1:]
+			if sections[section] == nil {
+				sections[section] = make(map[string]any)
+			}
+			sections[section][subkey] = value
+		} else {
+			topLevel[key] = value
+		}
+	}
+
+	// Write top-level values first
+	for key, value := range topLevel {
+		result.WriteString(formatTOMLValue(key, value))
+	}
+
+	// Write sections (sorted for deterministic output)
+	sectionNames := make([]string, 0, len(sections))
+	for name := range sections {
+		sectionNames = append(sectionNames, name)
+	}
+	sort.Strings(sectionNames)
+
+	for _, section := range sectionNames {
+		result.WriteString(fmt.Sprintf("\n[%s]\n", section))
+		for key, value := range sections[section] {
+			result.WriteString(formatTOMLValue(key, value))
+		}
+	}
+
+	return result.String(), nil
+}
+
+// formatTOMLValue formats a key-value pair as a TOML line.
+func formatTOMLValue(key string, value any) string {
+	switch v := value.(type) {
+	case string:
+		return fmt.Sprintf("%s = %q\n", key, v)
+	case bool:
+		return fmt.Sprintf("%s = %t\n", key, v)
+	case int, int64, float64:
+		return fmt.Sprintf("%s = %v\n", key, v)
+	default:
+		// Fall back to quoted string representation
+		return fmt.Sprintf("%s = %q\n", key, fmt.Sprintf("%v", v))
+	}
+}
+
+// AppendBashAlias adds an alias line to the container's bashrc.
 // The alias is only added if not already present (idempotent).
 // The container must be running.
-func appendSkipPermsAlias(containerName string) error {
+func AppendBashAlias(containerName, aliasLine string) error {
 	bashrcPath := containerHomeDir + "/.bashrc"
 
 	// Use grep to check if alias already exists, then append if not.
 	// The command exits 0 if alias exists, 1 if not. We use || to append only when grep fails.
 	cmd := exec.Command("docker", "exec", containerName, "sh", "-c",
 		fmt.Sprintf(`grep -qF %q %s || echo %q >> %s`,
-			skipPermsAlias, bashrcPath, skipPermsAlias, bashrcPath))
+			aliasLine, bashrcPath, aliasLine, bashrcPath))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("failed to add alias: %w: %s", err, output)

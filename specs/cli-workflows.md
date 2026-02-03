@@ -15,7 +15,7 @@ This document defines cloister CLI commands through concrete scenarios.
 
 Before using cloister, configure your AI agent credentials.
 
-### Claude Code (Pro/Max subscription)
+### Claude Code
 
 ```bash
 # Run Claude's OAuth flow (opens browser)
@@ -27,9 +27,32 @@ $ cloister setup claude
 # Prompts for token (hidden input)
 ```
 
-By default, this will alias `claude` to run with `--dangerously-skip-permissions` within the cloister container, as the cloister provides a safe sandbox.
+By default, this aliases `claude` to run with `--dangerously-skip-permissions` within the cloister container.
 
-See [agent-configuration.md](agent-configuration.md) for other agents and authentication methods.
+### Codex CLI
+
+```bash
+# Store your OpenAI API key in cloister config
+$ cloister setup codex
+# Prompts for API key (from platform.openai.com/api-keys)
+```
+
+By default, this aliases `codex` to run with `--approval-mode full-auto` within the cloister container.
+
+### Agent Selection
+
+The default agent is `claude`. To change it:
+
+```bash
+# Edit config to change default
+$ cloister config edit
+# Set defaults.agent: codex
+
+# Or override per-session
+$ cloister start --agent codex
+```
+
+See [agent-configuration.md](agent-configuration.md) for detailed setup and configuration.
 
 ---
 
@@ -68,8 +91,13 @@ or to run commands on the host.
 **Inside the cloister:**
 
 ```bash
+# If using Claude Code (default):
 cloister:my-project:/work$ claude
-# Claude Code starts, can edit files in /work, network proxied through guardian
+
+# If using Codex CLI:
+cloister:my-project:/work$ codex
+
+# Agent can edit files in /work, network proxied through guardian
 # When done:
 cloister:my-project:/work$ exit
 ```

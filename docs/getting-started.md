@@ -42,16 +42,23 @@ make build
 
 ## First-Time Setup
 
-Before using Cloister, configure your AI agent credentials. For Claude Code:
+Before using Cloister, configure your AI agent credentials.
+
+**For Claude Code:**
 
 ```bash
 cloister setup claude
 ```
 
-The setup wizard will prompt you to choose an authentication method:
-1. **Use existing Claude login** — If you're already logged in on the host
-2. **Long-lived OAuth token** — From running `claude setup-token`
-3. **API key** — From console.anthropic.com
+The setup wizard prompts for authentication method (OAuth token or API key).
+
+**For Codex CLI:**
+
+```bash
+cloister setup codex
+```
+
+The setup wizard prompts for your OpenAI API key.
 
 See [Credentials](credentials.md) for details on each method.
 
@@ -81,15 +88,29 @@ Attaching interactive shell...
 cloister@container:/work$
 ```
 
-## Running Claude Inside the Cloister
+## Running Your Agent Inside the Cloister
 
-Inside the cloister, Claude Code runs with `--dangerously-skip-permissions` by default — the sandbox provides the safety net:
+Inside the cloister, your configured agent runs with permissions auto-approved — the sandbox provides the safety net.
+
+**Claude Code** (default):
 
 ```bash
 cloister@container:/work$ claude
 ```
 
-Claude can now:
+**Codex CLI:**
+
+```bash
+cloister@container:/work$ codex
+```
+
+To use a different agent than your default, start with `--agent`:
+
+```bash
+cloister start --agent codex
+```
+
+Your agent can:
 - Read and write files in `/work` (your project)
 - Access allowlisted domains (AI APIs, package registries, docs)
 - Request host commands via the approval UI

@@ -183,6 +183,10 @@ type StartOptions struct {
 
 	// Image is the Docker image to use. If empty, defaults to container.DefaultImage.
 	Image string
+
+	// Agent is the name of the agent to use (e.g., "claude", "codex").
+	// If empty, uses the config's defaults.agent or falls back to "claude".
+	Agent string
 }
 
 // Start orchestrates starting a cloister container with all necessary setup:
@@ -254,9 +258,15 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	}
 
 	// Resolve agent: use injected agent, or look up from registry
-	// For now, default to "claude" agent - this will be configurable later
+	// Priority: 1) injected agent, 2) CLI flag (opts.Agent), 3) config default, 4) fallback to "claude"
 	agentImpl := deps.agent
-	agentName := "claude"
+	agentName := "claude" // fallback default
+	if globalCfg != nil && globalCfg.Defaults.Agent != "" {
+		agentName = globalCfg.Defaults.Agent
+	}
+	if opts.Agent != "" {
+		agentName = opts.Agent
+	}
 	var agentCfg *config.AgentConfig
 	if globalCfg != nil {
 		if cfg, ok := globalCfg.Agents[agentName]; ok {
@@ -283,7 +293,7 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		// Using deprecated functions intentionally - this is the fallback path.
 		usedEnvVars := token.CredentialEnvVarsUsed() //nolint:staticcheck // intentional fallback
 		if len(usedEnvVars) > 0 {
-			term.Warn("Using %s from environment. Run 'cloister setup claude' to store credentials in config.", usedEnvVars[0])
+			term.Warn("Using %s from environment. Run 'cloister setup %s' to store credentials in config.", usedEnvVars[0], agentName)
 		}
 		envVars = append(envVars, token.CredentialEnvVars()...) //nolint:staticcheck // intentional fallback
 	}

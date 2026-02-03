@@ -125,14 +125,87 @@ cloister stop my-app
 cloister start
 ```
 
+## Codex CLI
+
+Codex CLI uses OpenAI API key authentication.
+
+### Running the Setup Wizard
+
+```bash
+cloister setup codex
+```
+
+The wizard will:
+1. Prompt for your OpenAI API key
+2. Ask about full-auto mode preference
+3. Store credentials in config
+4. Configure injection for container startup
+
+### Authentication
+
+Get your API key from [platform.openai.com/api-keys](https://platform.openai.com/api-keys):
+
+```bash
+cloister setup codex
+# Paste your sk-... key when prompted
+```
+
+API key is stored in `~/.config/cloister/config.yaml` under `agents.codex.api_key` and injected via `OPENAI_API_KEY` env var.
+
+### Credential Storage
+
+```yaml
+agents:
+  codex:
+    api_key: "sk-..."
+    skip_permissions: true  # enables full-auto mode
+```
+
+### Container Environment
+
+Inside the cloister, Codex CLI is pre-configured:
+
+```bash
+cloister@container:/work$ codex --version
+# Codex runs with injected credentials
+```
+
+By default, Codex is aliased to include `--approval-mode full-auto` since the sandbox provides containment.
+
+### Disabling Full-Auto Mode
+
+If you prefer Codex's normal approval prompts inside the cloister:
+
+```yaml
+# ~/.config/cloister/config.yaml
+agents:
+  codex:
+    skip_permissions: false
+```
+
+### Refreshing Credentials
+
+To update credentials:
+
+```bash
+cloister setup codex
+# Re-run the wizard
+```
+
+For running cloisters, restart to pick up new credentials:
+
+```bash
+cloister stop my-app
+cloister start
+```
+
 ## Other Agents
 
 Support for additional AI coding agents is planned:
 
-- **OpenAI Codex** — Coming soon
 - **Gemini CLI** — Coming soon
 
-The setup pattern will be similar:
+The setup pattern is the same:
 
 ```bash
 cloister setup <agent>
@@ -140,10 +213,10 @@ cloister setup <agent>
 
 ## Troubleshooting
 
-### "Authentication failed" inside cloister
+### Claude: "Authentication failed" inside cloister
 
 1. Verify credentials are configured: `cloister setup claude`
-2. Check token hasn't expired
+2. Check token hasn't expired (OAuth tokens last ~1 year)
 3. Restart the cloister after updating credentials
 
 ### Claude prompts for login inside container
@@ -152,6 +225,22 @@ The credential injection may have failed. Re-run setup:
 
 ```bash
 cloister setup claude
+cloister stop
+cloister start
+```
+
+### Codex: "Authentication failed" inside cloister
+
+1. Verify credentials are configured: `cloister setup codex`
+2. Verify API key is valid at platform.openai.com
+3. Restart the cloister after updating credentials
+
+### Codex prompts for API key inside container
+
+The credential injection may have failed. Re-run setup:
+
+```bash
+cloister setup codex
 cloister stop
 cloister start
 ```

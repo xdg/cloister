@@ -18,21 +18,31 @@ These flags apply to all commands:
 Start or enter a cloister for the current project.
 
 ```bash
-cloister start
+cloister start [--agent <name>]
 ```
 
 Must be run from within a git repository. Detects the project automatically and starts a sandboxed container with the project mounted at `/work`.
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--agent` | Override the default agent (e.g., `claude`, `codex`) |
 
 **Behavior:**
 - If no cloister exists, creates one and attaches an interactive shell
 - If a cloister already exists, attaches to it
 - The guardian proxy auto-starts if not running
+- Agent selection: CLI flag > config default > "claude"
 
 **Examples:**
 ```bash
-# Start cloister for current directory
+# Start cloister for current directory (uses default agent)
 cd ~/projects/my-app
 cloister start
+
+# Start with a specific agent
+cloister start --agent codex
 ```
 
 ### cloister stop
@@ -196,10 +206,21 @@ Configure Claude Code credentials for use in cloisters.
 cloister setup claude
 ```
 
-Runs an interactive wizard that offers three authentication methods:
-1. Use existing Claude login
-2. Long-lived OAuth token
-3. API key
+Runs an interactive wizard that offers two authentication methods:
+1. Long-lived OAuth token (from `claude setup-token`)
+2. API key (from console.anthropic.com)
+
+### cloister setup codex
+
+Configure Codex CLI credentials for use in cloisters.
+
+```bash
+cloister setup codex
+```
+
+Runs an interactive wizard that prompts for:
+1. OpenAI API key (from platform.openai.com/api-keys)
+2. Full-auto mode preference (default: enabled)
 
 ## Exit Codes
 

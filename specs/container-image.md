@@ -92,7 +92,7 @@ RUN apt-get update && apt-get install -y \
 RUN useradd -m -s /bin/bash -u 1000 cloister
 
 # AI CLIs (installed globally)
-RUN npm install -g @anthropic-ai/claude-code
+RUN npm install -g @anthropic-ai/claude-code @openai/codex
 
 # hostexec wrapper
 COPY hostexec /usr/local/bin/hostexec
@@ -132,15 +132,26 @@ Both uppercase and lowercase proxy variables are set for maximum compatibility w
 
 When a cloister starts, the launcher configures agent-specific settings by writing to the container's home directory. This happens after container creation but before the user's shell starts.
 
-**For Claude Code:**
+Each agent has its own configuration requirements. Common patterns:
 
-1. Creates `~/.claude.json` with `{"hasCompletedOnboarding": true, "bypassPermissionsModeAccepted": true}`
-2. Appends alias to `~/.bashrc`:
-   ```bash
-   alias claude='claude --dangerously-skip-permissions'
-   ```
+- **Settings copy:** Agent config directories (e.g., `~/.claude/`, `~/.codex/`) copied from host
+- **Config generation:** Runtime config files generated with forced values for container environment
+- **Alias setup:** Shell aliases added to skip permission prompts (redundant inside sandbox)
 
-The alias is necessary because Claude Code's permission system is redundant inside a cloister — the cloister enforces the security boundary, so Claude's internal prompts just add friction. There is no config file option to disable permissions, so we use a shell alias.
+**Example (Claude Code):**
+
+1. Copies `~/.claude/` settings from host
+2. Creates `~/.claude.json` with `{"hasCompletedOnboarding": true, "bypassPermissionsModeAccepted": true}`
+3. Appends alias: `alias claude='claude --dangerously-skip-permissions'`
+
+**Example (Codex CLI):**
+
+1. Copies `~/.codex/` settings from host
+2. Appends cloister rules to `~/.codex/AGENTS.md`
+3. Merges `~/.codex/config.toml` with forced values
+4. Appends alias: `alias codex='codex --approval-mode full-auto'`
+
+These aliases are necessary because each agent's permission system is redundant inside a cloister — the cloister enforces the security boundary.
 
 See [agent-configuration.md](agent-configuration.md) for full details on each supported agent.
 

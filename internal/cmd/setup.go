@@ -13,7 +13,8 @@ The setup wizard helps you configure authentication for various AI coding tools
 so they work seamlessly inside cloister containers.
 
 Use the subcommands to set up specific agents:
-  cloister setup claude    Configure Claude Code authentication`,
+  cloister setup claude    Configure Claude Code authentication
+  cloister setup codex     Configure Codex CLI authentication`,
 }
 
 func init() {

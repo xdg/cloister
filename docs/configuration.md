@@ -16,9 +16,9 @@ The global config applies to all cloisters unless overridden by project config.
 ```yaml
 # ~/.config/cloister/config.yaml
 
-# Default agent
+# Default agent (claude or codex)
 defaults:
-  agent: claude
+  agent: claude  # or "codex"
 
 # Network allowlist (applied to all projects)
 proxy:

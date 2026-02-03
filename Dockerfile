@@ -122,6 +122,12 @@ RUN echo '{"hasCompletedOnboarding": true, "bypassPermissionsModeAccepted": true
 # 3. Clean up backup files created during install/config
 RUN rm -f /home/cloister/.claude.json.backup.*
 
+# Install Codex CLI (OpenAI's CLI tool)
+# https://github.com/openai/codex
+USER root
+RUN npm install -g @openai/codex
+USER cloister
+
 # hostexec wrapper for host command execution (rarely changes, so cache-friendly here)
 USER root
 COPY hostexec /usr/local/bin/hostexec

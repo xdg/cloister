@@ -7,11 +7,14 @@ import "os"
 //
 // Deprecated: This direct credential passthrough is a fallback mechanism.
 // Prefer config-based credential management via agent-specific setup commands
-// (e.g., `cloister setup claude`). Host env var passthrough remains available
-// for backward compatibility when no config-based credentials are set.
+// (e.g., `cloister setup claude`, `cloister setup codex`). Host env var passthrough
+// remains available for backward compatibility when no config-based credentials are set.
 var credentialEnvVarNames = []string{
+	// Claude credentials
 	"ANTHROPIC_API_KEY",
 	"CLAUDE_CODE_OAUTH_TOKEN",
+	// Codex credentials
+	"OPENAI_API_KEY",
 }
 
 // CredentialEnvVars returns environment variables for AI agent credentials
@@ -24,6 +27,7 @@ var credentialEnvVarNames = []string{
 // Passes through:
 //   - ANTHROPIC_API_KEY: API key for Anthropic API access
 //   - CLAUDE_CODE_OAUTH_TOKEN: OAuth token for Claude Code authentication
+//   - OPENAI_API_KEY: API key for OpenAI/Codex access
 func CredentialEnvVars() []string {
 	var envVars []string
 	for _, name := range credentialEnvVarNames {

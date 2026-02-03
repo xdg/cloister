@@ -165,7 +165,7 @@ proxy:
 
 ## Credential Issues
 
-### Claude prompts for login inside container
+### Claude: Prompts for login inside container
 
 Credentials weren't injected properly.
 
@@ -177,7 +177,7 @@ Credentials weren't injected properly.
    cloister start
    ```
 
-### "Authentication failed" with Claude
+### Claude: "Authentication failed"
 
 Token may have expired.
 
@@ -192,7 +192,7 @@ Token may have expired.
    ```
 3. Restart the cloister
 
-### OAuth token expired
+### Claude: OAuth token expired
 
 OAuth tokens last about a year. If expired:
 
@@ -201,6 +201,30 @@ claude setup-token  # Get new token (Claude Code CLI command)
 cloister setup claude  # Update config
 cloister stop && cloister start  # Restart
 ```
+
+### Codex: Prompts for API key inside container
+
+Credentials weren't injected properly.
+
+**Solution:**
+1. Re-run setup: `cloister setup codex`
+2. Restart the cloister:
+   ```bash
+   cloister stop
+   cloister start
+   ```
+
+### Codex: "Authentication failed"
+
+API key may be invalid or revoked.
+
+**Solution:**
+1. Verify key at platform.openai.com/api-keys
+2. Update Cloister:
+   ```bash
+   cloister setup codex
+   ```
+3. Restart the cloister
 
 ## Hostexec Issues
 

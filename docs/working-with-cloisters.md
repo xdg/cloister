@@ -78,7 +78,7 @@ Programs respecting `HTTPS_PROXY` automatically use the allowlisted proxy.
 The default container image includes:
 - Go, Node.js, Python
 - Git, curl, common CLI tools
-- Claude Code (with your credentials)
+- AI agents: Claude Code, Codex CLI (configured with your credentials)
 
 ## Managing the Guardian
 
