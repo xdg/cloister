@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/agent"
 	"github.com/xdg/cloister/internal/cloister"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
@@ -29,12 +30,24 @@ the shell, the cloister remains running. Use 'cloister stop' to terminate it.`,
 	RunE: runStart,
 }
 
+// startAgentFlag holds the --agent flag value.
+var startAgentFlag string
+
 func init() {
 	rootCmd.AddCommand(startCmd)
+	startCmd.Flags().StringVar(&startAgentFlag, "agent", "", "AI agent to use (e.g., claude, codex). Overrides config default.")
 }
 
 func runStart(cmd *cobra.Command, args []string) error {
-	// Step 0: Ensure config exists (creates default if missing)
+	// Step 0a: Validate agent flag if provided
+	if startAgentFlag != "" {
+		if agent.Get(startAgentFlag) == nil {
+			availableAgents := agent.List()
+			return fmt.Errorf("unknown agent %q. Available agents: %s", startAgentFlag, strings.Join(availableAgents, ", "))
+		}
+	}
+
+	// Step 0b: Ensure config exists (creates default if missing)
 	// This must happen before starting the guardian so the config file
 	// exists when mounted into the container.
 	globalCfg, err := config.LoadGlobalConfig()
@@ -100,6 +113,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		ProjectPath: gitRoot,
 		ProjectName: projectName,
 		BranchName:  branch,
+		Agent:       startAgentFlag,
 	}, cloister.WithGlobalConfig(globalCfg))
 	if err != nil {
 		// Check for common error conditions

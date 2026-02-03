@@ -182,6 +182,10 @@ type StartOptions struct {
 
 	// Image is the Docker image to use. If empty, defaults to container.DefaultImage.
 	Image string
+
+	// Agent is the name of the agent to use (e.g., "claude", "codex").
+	// If empty, uses the config's defaults.agent or falls back to "claude".
+	Agent string
 }
 
 // Start orchestrates starting a cloister container with all necessary setup:
@@ -253,11 +257,14 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	}
 
 	// Resolve agent: use injected agent, or look up from registry
-	// Priority: 1) injected agent, 2) config default, 3) fallback to "claude"
+	// Priority: 1) injected agent, 2) CLI flag (opts.Agent), 3) config default, 4) fallback to "claude"
 	agentImpl := deps.agent
 	agentName := "claude" // fallback default
 	if globalCfg != nil && globalCfg.Defaults.Agent != "" {
 		agentName = globalCfg.Defaults.Agent
+	}
+	if opts.Agent != "" {
+		agentName = opts.Agent
 	}
 	var agentCfg *config.AgentConfig
 	if globalCfg != nil {
