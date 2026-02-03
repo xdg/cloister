@@ -59,7 +59,7 @@ func TestWriteDefaultConfig_Creates(t *testing.T) {
 		"domain: \"api.anthropic.com\"",
 		"request:",
 		"hostexec:",
-		"devcontainer:",
+		// Note: devcontainer section not in defaults (not yet implemented)
 		"agents:",
 		"defaults:",
 		"log:",

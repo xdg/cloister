@@ -7,6 +7,13 @@ func boolPtr(b bool) *bool {
 
 // DefaultGlobalConfig returns a GlobalConfig with all defaults populated.
 // These defaults provide a secure baseline configuration for cloister.
+//
+// Security philosophy for hostexec patterns:
+//   - AutoApprove: Only read-only commands with no side effects
+//   - ManualApprove: Specific patterns for common operations; broad patterns
+//     like "aws .+" or "curl .+" are intentionally excluded because they
+//     could be used for data exfiltration or credential abuse
+//   - Network access should go through the proxy allowlist, not hostexec
 func DefaultGlobalConfig() *GlobalConfig {
 	return &GlobalConfig{
 		Proxy: ProxyConfig{
@@ -24,6 +31,14 @@ func DefaultGlobalConfig() *GlobalConfig {
 				{Domain: "stackoverflow.com"},
 				{Domain: "man7.org"},
 				{Domain: "linux.die.net"},
+				{Domain: "cppreference.com"},
+				{Domain: "en.cppreference.com"},
+				{Domain: "typescriptlang.org"},
+				{Domain: "nodejs.org"},
+				{Domain: "docs.docker.com"},
+				{Domain: "kubernetes.io"},
+				{Domain: "ruby-doc.org"},
+				{Domain: "docs.npmjs.com"},
 
 				// Package registries
 				{Domain: "registry.npmjs.org"},
@@ -33,6 +48,9 @@ func DefaultGlobalConfig() *GlobalConfig {
 				{Domain: "files.pythonhosted.org"},
 				{Domain: "crates.io"},
 				{Domain: "static.crates.io"},
+				{Domain: "rubygems.org"},
+				{Domain: "index.rubygems.org"},
+				{Domain: "yarnpkg.com"},
 
 				// AI provider APIs
 				{Domain: "api.anthropic.com"},
@@ -51,38 +69,21 @@ func DefaultGlobalConfig() *GlobalConfig {
 		Hostexec: HostexecConfig{
 			Listen: "127.0.0.1:9999",
 			AutoApprove: []CommandPattern{
-				{Pattern: "^docker compose ps$"},
-				{Pattern: "^docker compose logs.*$"},
+				// Read-only container inspection (safe, no side effects)
+				{Pattern: "^docker ps.*$"},
 			},
 			ManualApprove: []CommandPattern{
-				// Dev environment lifecycle
-				{Pattern: "^docker compose (up|down|restart|build).*$"},
-				// External tools requiring credentials
-				{Pattern: "^gh .+$"},
-				{Pattern: "^jira .+$"},
-				{Pattern: "^aws .+$"},
-				{Pattern: "^gcloud .+$"},
-				// Network access with full path visibility
-				{Pattern: "^curl .+$"},
-				{Pattern: "^wget .+$"},
+				// GitHub CLI - read-only operations only
+				// Patterns like "gh pr create" excluded: could exfiltrate data in PR body
+				{Pattern: `^gh pr (view|list|status|checks|diff)( .+)?$`},
+				{Pattern: `^gh issue (view|list)( .+)?$`},
+				{Pattern: `^gh repo view( .+)?$`},
+				{Pattern: `^gh run (list|view|watch)( .+)?$`},
 			},
-		},
-		Devcontainer: DevcontainerConfig{
-			Enabled: true,
-			Features: FeaturesConfig{
-				Allow: []string{
-					"ghcr.io/devcontainers/features/*",
-					"ghcr.io/devcontainers-contrib/features/*",
-				},
-			},
-			BlockedMounts: []string{
-				"~/.ssh",
-				"~/.aws",
-				"~/.config/gcloud",
-				"~/.gnupg",
-				"~/.config/gh",
-				"/var/run/docker.sock",
-			},
+			// Intentionally excluded from defaults (users can add to project config):
+			// - curl/wget: Network access should use proxy allowlist, not hostexec
+			// - aws/gcloud: Too broad; could exfiltrate data or create resources
+			// - docker compose: Project-specific; add narrower patterns if needed
 		},
 		Agents: map[string]AgentConfig{
 			"claude": {

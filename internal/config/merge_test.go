@@ -278,12 +278,12 @@ commands:
 	}
 
 	// Verify merged auto_approve patterns
-	// Global has "^docker compose ps$", "^docker compose logs.*$"
+	// Global has "^docker ps.*$"
 	// Project adds "^make test$", "^npm run build$"
 	foundDockerPs := false
 	foundMakeTest := false
 	for _, pattern := range cfg.AutoApprove {
-		if pattern.Pattern == "^docker compose ps$" {
+		if pattern.Pattern == "^docker ps.*$" {
 			foundDockerPs = true
 		}
 		if pattern.Pattern == "^make test$" {
@@ -291,7 +291,7 @@ commands:
 		}
 	}
 	if !foundDockerPs {
-		t.Error("cfg.AutoApprove should contain global pattern '^docker compose ps$'")
+		t.Error("cfg.AutoApprove should contain global pattern '^docker ps.*$'")
 	}
 	if !foundMakeTest {
 		t.Error("cfg.AutoApprove should contain project pattern '^make test$'")
@@ -360,7 +360,7 @@ proxy:
     - domain: "unique.project.com"
 commands:
   auto_approve:
-    - pattern: "^docker compose ps$"
+    - pattern: "^docker ps.*$"
     - pattern: "^project-specific$"
 `
 	projectPath := filepath.Join(projectsDir, "dedup-test.yaml")
@@ -384,15 +384,15 @@ commands:
 		t.Errorf("'golang.org' appears %d times in allowlist, want 1", golangCount)
 	}
 
-	// Count occurrences of "^docker compose ps$" in auto_approve
+	// Count occurrences of "^docker ps.*$" in auto_approve
 	dockerPsCount := 0
 	for _, pattern := range cfg.AutoApprove {
-		if pattern.Pattern == "^docker compose ps$" {
+		if pattern.Pattern == "^docker ps.*$" {
 			dockerPsCount++
 		}
 	}
 	if dockerPsCount != 1 {
-		t.Errorf("'^docker compose ps$' appears %d times in auto_approve, want 1", dockerPsCount)
+		t.Errorf("'^docker ps.*$' appears %d times in auto_approve, want 1", dockerPsCount)
 	}
 }
 
@@ -426,14 +426,14 @@ commands:
 	}
 
 	// Verify merged manual_approve patterns
-	// Global has patterns like "^docker compose (up|down|restart|build).*$", "^gh .+$", etc.
+	// Global has specific gh patterns like "^gh pr (view|list|status|checks|diff)( .+)?$"
 	// Project adds "^./deploy\\.sh.*$", "^terraform apply.*$"
-	foundGlobalGh := false
+	foundGlobalGhPr := false
 	foundProjectDeploy := false
 	foundProjectTerraform := false
 	for _, pattern := range cfg.ManualApprove {
-		if pattern.Pattern == "^gh .+$" {
-			foundGlobalGh = true
+		if pattern.Pattern == `^gh pr (view|list|status|checks|diff)( .+)?$` {
+			foundGlobalGhPr = true
 		}
 		if pattern.Pattern == "^./deploy\\.sh.*$" {
 			foundProjectDeploy = true
@@ -442,8 +442,8 @@ commands:
 			foundProjectTerraform = true
 		}
 	}
-	if !foundGlobalGh {
-		t.Error("cfg.ManualApprove should contain global pattern '^gh .+$'")
+	if !foundGlobalGhPr {
+		t.Error("cfg.ManualApprove should contain global pattern '^gh pr (view|list|status|checks|diff)( .+)?$'")
 	}
 	if !foundProjectDeploy {
 		t.Error("cfg.ManualApprove should contain project pattern '^./deploy\\.sh.*$'")
@@ -468,7 +468,7 @@ func TestResolveConfig_ManualApproveDedup(t *testing.T) {
 remote: "git@github.com:example/dedup-manual.git"
 commands:
   manual_approve:
-    - pattern: "^gh .+$"
+    - pattern: "^gh pr (view|list|status|checks|diff)( .+)?$"
     - pattern: "^project-specific-manual$"
 `
 	projectPath := filepath.Join(projectsDir, "dedup-manual.yaml")
@@ -481,15 +481,15 @@ commands:
 		t.Fatalf("ResolveConfig(\"dedup-manual\") error = %v", err)
 	}
 
-	// Count occurrences of "^gh .+$" in manual_approve
-	ghCount := 0
+	// Count occurrences of "^gh pr (view|list|status|checks|diff)( .+)?$" in manual_approve
+	ghPrCount := 0
 	for _, pattern := range cfg.ManualApprove {
-		if pattern.Pattern == "^gh .+$" {
-			ghCount++
+		if pattern.Pattern == `^gh pr (view|list|status|checks|diff)( .+)?$` {
+			ghPrCount++
 		}
 	}
-	if ghCount != 1 {
-		t.Errorf("'^gh .+$' appears %d times in manual_approve, want 1", ghCount)
+	if ghPrCount != 1 {
+		t.Errorf("'^gh pr (view|list|status|checks|diff)( .+)?$' appears %d times in manual_approve, want 1", ghPrCount)
 	}
 
 	// Verify project-specific pattern was added
@@ -515,25 +515,25 @@ func TestResolveConfig_GlobalOnlyManualApprove(t *testing.T) {
 	}
 
 	// Verify global manual_approve patterns are present
-	// Default global config has patterns like "^gh .+$", "^docker compose (up|down|restart|build).*$"
+	// Default global config has specific gh patterns (read-only operations only)
 	if len(cfg.ManualApprove) == 0 {
 		t.Error("cfg.ManualApprove should not be empty for global config")
 	}
 
-	foundGh := false
-	foundDocker := false
+	foundGhPr := false
+	foundGhIssue := false
 	for _, pattern := range cfg.ManualApprove {
-		if pattern.Pattern == "^gh .+$" {
-			foundGh = true
+		if pattern.Pattern == `^gh pr (view|list|status|checks|diff)( .+)?$` {
+			foundGhPr = true
 		}
-		if pattern.Pattern == "^docker compose (up|down|restart|build).*$" {
-			foundDocker = true
+		if pattern.Pattern == `^gh issue (view|list)( .+)?$` {
+			foundGhIssue = true
 		}
 	}
-	if !foundGh {
-		t.Error("cfg.ManualApprove should contain global pattern '^gh .+$'")
+	if !foundGhPr {
+		t.Error("cfg.ManualApprove should contain global pattern '^gh pr (view|list|status|checks|diff)( .+)?$'")
 	}
-	if !foundDocker {
-		t.Error("cfg.ManualApprove should contain global pattern '^docker compose (up|down|restart|build).*$'")
+	if !foundGhIssue {
+		t.Error("cfg.ManualApprove should contain global pattern '^gh issue (view|list)( .+)?$'")
 	}
 }
