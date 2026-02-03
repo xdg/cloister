@@ -3,9 +3,9 @@ package config
 import (
 	"errors"
 	"fmt"
-	"log"
 	"os"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/pathutil"
 )
 
@@ -15,14 +15,14 @@ import (
 // All paths containing ~ are expanded to the actual home directory.
 func LoadGlobalConfig() (*GlobalConfig, error) {
 	path := GlobalConfigPath()
-	log.Printf("config: loading global config from %s", path)
+	clog.Debug("loading global config from %s", path)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Printf("config: file not found, creating defaults")
+			clog.Debug("config file not found, creating defaults")
 			if writeErr := WriteDefaultConfig(); writeErr != nil {
-				log.Printf("config: warning: failed to create default config: %v", writeErr)
+				clog.Warn("failed to create default config: %v", writeErr)
 			}
 			cfg := DefaultGlobalConfig()
 			expandGlobalPaths(cfg)
@@ -54,12 +54,12 @@ func LoadGlobalConfig() (*GlobalConfig, error) {
 // the expected remote URL from the project registry to detect configuration drift.
 func LoadProjectConfig(name string) (*ProjectConfig, error) {
 	path := ProjectConfigPath(name)
-	log.Printf("config: loading project config from %s", path)
+	clog.Debug("loading project config from %s", path)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			log.Printf("config: file not found, using defaults")
+			clog.Debug("project config file not found, using defaults")
 			cfg := DefaultProjectConfig()
 			expandProjectPaths(cfg)
 			return cfg, nil

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"strconv"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
@@ -24,6 +24,7 @@ import (
 	guardianexec "github.com/xdg/cloister/internal/guardian/executor"
 	"github.com/xdg/cloister/internal/guardian/patterns"
 	"github.com/xdg/cloister/internal/guardian/request"
+	"github.com/xdg/cloister/internal/term"
 	"github.com/xdg/cloister/internal/token"
 )
 
@@ -58,22 +59,22 @@ var guardianStartCmd = &cobra.Command{
 			return fmt.Errorf("failed to check guardian status: %w", err)
 		}
 		if running {
-			fmt.Println("Guardian is already running")
+			term.Println("Guardian is already running")
 			return nil
 		}
 
-		fmt.Println("Starting executor...")
-		fmt.Println("Starting guardian...")
+		term.Println("Starting executor...")
+		term.Println("Starting guardian...")
 
 		if err := guardian.EnsureRunning(); err != nil {
 			if errors.Is(err, guardian.ErrGuardianAlreadyRunning) {
-				fmt.Println("Guardian is already running")
+				term.Println("Guardian is already running")
 				return nil
 			}
 			return fmt.Errorf("failed to start guardian: %w", err)
 		}
 
-		fmt.Println("Guardian started successfully")
+		term.Println("Guardian started successfully")
 		return nil
 	},
 }
@@ -99,7 +100,7 @@ Warns if there are running cloister containers that depend on the guardian.`,
 			return fmt.Errorf("failed to check guardian status: %w", err)
 		}
 		if !running {
-			fmt.Println("Guardian is not running")
+			term.Println("Guardian is not running")
 			return nil
 		}
 
@@ -119,21 +120,21 @@ Warns if there are running cloister containers that depend on the guardian.`,
 		}
 
 		if len(runningCloisters) > 0 {
-			fmt.Fprintf(os.Stderr, "Warning: %d cloister container(s) are still running and will lose network access:\n", len(runningCloisters))
+			term.Warn("%d cloister container(s) are still running and will lose network access:", len(runningCloisters))
 			for _, name := range runningCloisters {
-				fmt.Fprintf(os.Stderr, "  - %s\n", name)
+				term.Printf("  - %s\n", name)
 			}
-			fmt.Fprintln(os.Stderr)
+			term.Println()
 		}
 
-		fmt.Println("Stopping executor...")
-		fmt.Println("Stopping guardian...")
+		term.Println("Stopping executor...")
+		term.Println("Stopping guardian...")
 
 		if err := guardian.Stop(); err != nil {
 			return fmt.Errorf("failed to stop guardian: %w", err)
 		}
 
-		fmt.Println("Guardian stopped successfully")
+		term.Println("Guardian stopped successfully")
 		return nil
 	},
 }
@@ -158,36 +159,36 @@ var guardianStatusCmd = &cobra.Command{
 		}
 
 		if !running {
-			fmt.Println("Status: not running")
+			term.Println("Status: not running")
 			return nil
 		}
 
-		fmt.Println("Status: running")
+		term.Println("Status: running")
 
 		// Get container details for uptime
 		uptime, err := getGuardianUptime()
 		if err == nil && uptime != "" {
-			fmt.Printf("Uptime: %s\n", uptime)
+			term.Printf("Uptime: %s\n", uptime)
 		}
 
 		// Get active token count
 		tokens, err := guardian.ListTokens()
 		if err != nil {
-			fmt.Printf("Active tokens: (unable to retrieve: %v)\n", err)
+			term.Printf("Active tokens: (unable to retrieve: %v)\n", err)
 		} else {
-			fmt.Printf("Active tokens: %d\n", len(tokens))
+			term.Printf("Active tokens: %d\n", len(tokens))
 		}
 
 		// Check executor status
 		state, err := executor.LoadDaemonState()
 		if err != nil {
-			fmt.Printf("Executor: (unable to retrieve: %v)\n", err)
+			term.Printf("Executor: (unable to retrieve: %v)\n", err)
 		} else if state == nil {
-			fmt.Println("Executor: not running")
+			term.Println("Executor: not running")
 		} else if executor.IsDaemonRunning(state) {
-			fmt.Printf("Executor: running (PID %d)\n", state.PID)
+			term.Printf("Executor: running (PID %d)\n", state.PID)
 		} else {
-			fmt.Println("Executor: not running (stale state)")
+			term.Println("Executor: not running (stale state)")
 		}
 
 		return nil
@@ -225,23 +226,26 @@ func init() {
 
 // runGuardianProxy starts the proxy and API servers and blocks until interrupted.
 func runGuardianProxy(cmd *cobra.Command, args []string) error {
+	// Switch to daemon mode: logs go to file only, not stderr
+	clog.SetDaemonMode(true)
+
 	// Create an in-memory token registry
 	registry := token.NewRegistry()
 
 	// Load persisted tokens from disk (mounted from host)
 	store, err := token.NewStore(guardian.ContainerTokenDir)
 	if err != nil {
-		log.Printf("Warning: failed to open token store: %v", err)
+		clog.Warn("failed to open token store: %v", err)
 	} else {
 		tokens, err := store.Load()
 		if err != nil {
-			log.Printf("Warning: failed to load tokens: %v", err)
+			clog.Warn("failed to load tokens: %v", err)
 		} else {
 			for tok, info := range tokens {
 				registry.RegisterFull(tok, info.CloisterName, info.ProjectName, info.WorktreePath)
 			}
 			if len(tokens) > 0 {
-				log.Printf("Recovered %d tokens from disk", len(tokens))
+				clog.Info("recovered %d tokens from disk", len(tokens))
 			}
 		}
 	}
@@ -249,11 +253,11 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	// Load config and create allowlist
 	cfg, err := config.LoadGlobalConfig()
 	if err != nil {
-		log.Printf("Warning: failed to load config, using defaults: %v", err)
+		clog.Warn("failed to load config, using defaults: %v", err)
 		cfg = config.DefaultGlobalConfig()
 	}
 	globalAllowlist := guardian.NewAllowlistFromConfig(cfg.Proxy.Allow)
-	log.Printf("Loaded global allowlist with %d domains", len(globalAllowlist.Domains()))
+	clog.Info("loaded global allowlist with %d domains", len(globalAllowlist.Domains()))
 
 	// Create allowlist cache for per-project allowlists
 	allowlistCache := guardian.NewAllowlistCache(globalAllowlist)
@@ -262,7 +266,6 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)
 	proxy := guardian.NewProxyServerWithConfig(proxyAddr, globalAllowlist)
 	proxy.TokenValidator = registry
-	proxy.Logger = log.New(os.Stderr, "[guardian] ", log.LstdFlags)
 
 	// Set up per-project allowlist support
 	proxy.AllowlistCache = allowlistCache
@@ -275,7 +278,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	loadProjectAllowlist := func(projectName string) *guardian.Allowlist {
 		projectCfg, err := config.LoadProjectConfig(projectName)
 		if err != nil {
-			log.Printf("Warning: failed to load project config for %s: %v", projectName, err)
+			clog.Warn("failed to load project config for %s: %v", projectName, err)
 			return nil
 		}
 		if len(projectCfg.Proxy.Allow) == 0 {
@@ -284,7 +287,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		// Merge global + project allowlists
 		merged := config.MergeAllowlists(cfg.Proxy.Allow, projectCfg.Proxy.Allow)
 		allowlist := guardian.NewAllowlistFromConfig(merged)
-		log.Printf("Loaded allowlist for project %s (%d domains)", projectName, len(allowlist.Domains()))
+		clog.Info("loaded allowlist for project %s (%d domains)", projectName, len(allowlist.Domains()))
 		return allowlist
 	}
 
@@ -334,7 +337,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	autoApprovePatterns := extractPatterns(cfg.Hostexec.AutoApprove)
 	manualApprovePatterns := extractPatterns(cfg.Hostexec.ManualApprove)
 	regexMatcher := patterns.NewRegexMatcher(autoApprovePatterns, manualApprovePatterns)
-	log.Printf("Loaded approval patterns: %d auto-approve, %d manual-approve",
+	clog.Info("loaded approval patterns: %d auto-approve, %d manual-approve",
 		len(autoApprovePatterns), len(manualApprovePatterns))
 
 	// Create the approval queue for pending requests
@@ -347,17 +350,17 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	if sharedSecret != "" && executorPortStr != "" {
 		port, err := strconv.Atoi(executorPortStr)
 		if err != nil {
-			log.Printf("Warning: invalid executor port %q: %v", executorPortStr, err)
+			clog.Warn("invalid executor port %q: %v", executorPortStr, err)
 		} else {
 			execClient = guardianexec.NewTCPClient(port, sharedSecret)
-			log.Printf("Executor client configured (host.docker.internal:%d)", port)
+			clog.Info("executor client configured (host.docker.internal:%d)", port)
 		}
 	} else {
 		if sharedSecret == "" {
-			log.Printf("Warning: %s not set, command execution disabled", guardian.SharedSecretEnvVar)
+			clog.Warn("%s not set, command execution disabled", guardian.SharedSecretEnvVar)
 		}
 		if executorPortStr == "" {
-			log.Printf("Warning: %s not set, command execution disabled", guardian.ExecutorPortEnvVar)
+			clog.Warn("%s not set, command execution disabled", guardian.ExecutorPortEnvVar)
 		}
 	}
 
@@ -372,7 +375,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start proxy server: %w", err)
 	}
 
-	log.Printf("Guardian proxy server listening on %s", proxy.ListenAddr())
+	clog.Info("guardian proxy server listening on %s", proxy.ListenAddr())
 
 	// Start the API server
 	if err := api.Start(); err != nil {
@@ -383,7 +386,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start API server: %w", err)
 	}
 
-	log.Printf("Guardian API server listening on %s", api.ListenAddr())
+	clog.Info("guardian API server listening on %s", api.ListenAddr())
 
 	// Start the request server for hostexec commands
 	if err := reqServer.Start(); err != nil {
@@ -395,7 +398,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start request server: %w", err)
 	}
 
-	log.Printf("Guardian request server listening on %s", reqServer.ListenAddr())
+	clog.Info("guardian request server listening on %s", reqServer.ListenAddr())
 
 	// Start the approval server for web UI (localhost only)
 	if err := approvalServer.Start(); err != nil {
@@ -408,14 +411,14 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to start approval server: %w", err)
 	}
 
-	log.Printf("Guardian approval server listening on %s", approvalServer.ListenAddr())
+	clog.Info("guardian approval server listening on %s", approvalServer.ListenAddr())
 
 	// Wait for interrupt signal
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("Shutting down guardian servers...")
+	clog.Debug("shutting down guardian servers...")
 
 	// Graceful shutdown with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -441,7 +444,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("error during approval server shutdown: %w", approvalErr)
 	}
 
-	log.Println("Guardian servers stopped")
+	clog.Debug("guardian servers stopped")
 	return nil
 }
 

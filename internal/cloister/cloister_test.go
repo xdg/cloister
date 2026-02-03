@@ -9,6 +9,7 @@ import (
 	"github.com/xdg/cloister/internal/agent"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
+	"github.com/xdg/cloister/internal/term"
 )
 
 func TestStartOptions_Fields(t *testing.T) {
@@ -576,8 +577,10 @@ func TestStart_EnvFallback_PrintsDeprecationWarning(t *testing.T) {
 	// Set host env var to trigger the fallback
 	t.Setenv("ANTHROPIC_API_KEY", "host-api-key")
 
-	// Capture stderr
+	// Capture stderr via term package
 	var stderrBuf bytes.Buffer
+	term.SetErrOutput(&stderrBuf)
+	defer term.Reset()
 
 	opts := StartOptions{
 		ProjectPath: "/path/to/project",
@@ -590,7 +593,6 @@ func TestStart_EnvFallback_PrintsDeprecationWarning(t *testing.T) {
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
 		WithAgent(mockAgt),
-		WithStderr(&stderrBuf),
 	)
 	if err != nil {
 		t.Fatalf("Start() returned error: %v", err)
@@ -598,11 +600,8 @@ func TestStart_EnvFallback_PrintsDeprecationWarning(t *testing.T) {
 
 	// Verify deprecation warning was printed
 	stderrOutput := stderrBuf.String()
-	if !strings.Contains(stderrOutput, "Warning: Using ANTHROPIC_API_KEY from environment.") {
+	if !strings.Contains(stderrOutput, "Warning: Using ANTHROPIC_API_KEY from environment. Run 'cloister setup claude' to store credentials in config.") {
 		t.Errorf("stderr should contain deprecation warning about ANTHROPIC_API_KEY, got: %q", stderrOutput)
-	}
-	if !strings.Contains(stderrOutput, "Run 'cloister setup claude' to store credentials in config.") {
-		t.Errorf("stderr should contain setup suggestion, got: %q", stderrOutput)
 	}
 }
 
@@ -628,7 +627,10 @@ func TestStart_EnvFallback_PrintsWarningForOAuthToken(t *testing.T) {
 	// Set OAUTH token only (not API key)
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "host-oauth-token")
 
+	// Capture stderr via term package
 	var stderrBuf bytes.Buffer
+	term.SetErrOutput(&stderrBuf)
+	defer term.Reset()
 
 	opts := StartOptions{
 		ProjectPath: "/path/to/project",
@@ -641,7 +643,6 @@ func TestStart_EnvFallback_PrintsWarningForOAuthToken(t *testing.T) {
 		WithGuardian(mockGuard),
 		WithConfigLoader(mockCfgLoader),
 		WithAgent(mockAgt),
-		WithStderr(&stderrBuf),
 	)
 	if err != nil {
 		t.Fatalf("Start() returned error: %v", err)
@@ -649,7 +650,7 @@ func TestStart_EnvFallback_PrintsWarningForOAuthToken(t *testing.T) {
 
 	// Verify deprecation warning was printed for OAuth token
 	stderrOutput := stderrBuf.String()
-	if !strings.Contains(stderrOutput, "Warning: Using CLAUDE_CODE_OAUTH_TOKEN from environment.") {
+	if !strings.Contains(stderrOutput, "Warning: Using CLAUDE_CODE_OAUTH_TOKEN from environment. Run 'cloister setup claude' to store credentials in config.") {
 		t.Errorf("stderr should contain deprecation warning about CLAUDE_CODE_OAUTH_TOKEN, got: %q", stderrOutput)
 	}
 }

@@ -1,21 +1,14 @@
 # golangci-lint configuration for cloister
 # See https://golangci-lint.run/usage/configuration/
+version: "2"
 
 run:
   timeout: 5m
   modules-download-mode: readonly
 
 linters:
-  # Start with defaults and add useful extras
+  # Use default linters plus useful extras
   enable:
-    - errcheck      # Check for unchecked errors
-    - gosimple      # Simplify code
-    - govet         # Examine Go source code for suspicious constructs
-    - ineffassign   # Detect ineffective assignments
-    - staticcheck   # Static analysis checks
-    - unused        # Find unused code
-    - gofmt         # Check formatting
-    - goimports     # Check import formatting
     - misspell      # Find misspelled words
     - bodyclose     # Check HTTP response body is closed
     - nilerr        # Find nil error returns
@@ -27,9 +20,6 @@ linters-settings:
     exclude-functions:
       - (io.Closer).Close
       - (*os.File).Close
-
-  goimports:
-    local-prefixes: github.com/xdg/cloister
 
   misspell:
     locale: US

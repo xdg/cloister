@@ -9,6 +9,7 @@ import (
 
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/prompt"
+	"github.com/xdg/cloister/internal/term"
 )
 
 // AuthMethod represents the authentication method selected by the user.
@@ -175,7 +176,7 @@ func runSetupClaude(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to get confirmation: %w", err)
 		}
 		if !replace {
-			fmt.Fprintln(cmd.OutOrStdout(), "Setup canceled. Existing credentials unchanged.")
+			term.Println("Setup canceled. Existing credentials unchanged.")
 			return nil
 		}
 	}
@@ -191,8 +192,8 @@ func runSetupClaude(cmd *cobra.Command, args []string) error {
 	authMethod := AuthMethod(selection)
 
 	// Display selected method
-	fmt.Fprintf(cmd.OutOrStdout(), "\nSelected: %s\n", authMethodOptions[selection])
-	fmt.Fprintf(cmd.OutOrStdout(), "Auth method: %s\n", authMethod.String())
+	term.Printf("\nSelected: %s\n", authMethodOptions[selection])
+	term.Printf("Auth method: %s\n", authMethod.String())
 
 	// Handle credential extraction based on auth method
 	var creds credentialResult
@@ -220,7 +221,7 @@ func runSetupClaude(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display the result
-	fmt.Fprintf(cmd.OutOrStdout(), "Skip permissions: %v\n", skipPerms)
+	term.Printf("Skip permissions: %v\n", skipPerms)
 
 	// Save credentials to config
 	if err := saveCredentialsToConfig(cmd, creds, skipPerms); err != nil {
@@ -279,7 +280,7 @@ func saveCredentialsToConfig(cmd *cobra.Command, creds credentialResult, skipPer
 
 	// Print success message
 	configPath := getConfigPath()
-	fmt.Fprintf(cmd.OutOrStdout(), "\nConfiguration saved to: %s\n", configPath)
+	term.Printf("\nConfiguration saved to: %s\n", configPath)
 
 	return nil
 }
@@ -289,7 +290,7 @@ func saveCredentialsToConfig(cmd *cobra.Command, creds credentialResult, skipPer
 func handleTokenInput(cmd *cobra.Command) (string, error) {
 	reader := getSetupClaudeCredentialReader(cmd)
 
-	fmt.Fprintln(cmd.OutOrStdout())
+	term.Println()
 	token, err := reader.ReadCredential("Paste your OAuth token (from `claude setup-token`): ")
 	if err != nil {
 		return "", fmt.Errorf("failed to read OAuth token: %w", err)
@@ -300,7 +301,7 @@ func handleTokenInput(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("OAuth token cannot be empty")
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "OAuth token received.")
+	term.Println("OAuth token received.")
 
 	return token, nil
 }
@@ -310,7 +311,7 @@ func handleTokenInput(cmd *cobra.Command) (string, error) {
 func handleAPIKeyInput(cmd *cobra.Command) (string, error) {
 	reader := getSetupClaudeCredentialReader(cmd)
 
-	fmt.Fprintln(cmd.OutOrStdout())
+	term.Println()
 	apiKey, err := reader.ReadCredential("Paste your API key (from console.anthropic.com): ")
 	if err != nil {
 		return "", fmt.Errorf("failed to read API key: %w", err)
@@ -321,7 +322,7 @@ func handleAPIKeyInput(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("API key cannot be empty")
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "API key received.")
+	term.Println("API key received.")
 
 	return apiKey, nil
 }
@@ -332,7 +333,7 @@ func handleAPIKeyInput(cmd *cobra.Command) (string, error) {
 func handleSkipPermissionsPrompt(cmd *cobra.Command) (bool, error) {
 	yesNo := getSetupClaudeYesNoPrompter(cmd)
 
-	fmt.Fprintln(cmd.OutOrStdout())
+	term.Println()
 	skipPerms, err := yesNo.PromptYesNo("Skip Claude's built-in permission prompts? (recommended inside cloister) [Y/n]: ", true)
 	if err != nil {
 		return false, fmt.Errorf("failed to get skip-permissions setting: %w", err)

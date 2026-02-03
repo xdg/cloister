@@ -5,14 +5,15 @@ package cloister
 import (
 	"fmt"
 	"io"
-	"log"
 	"os"
 
 	"github.com/xdg/cloister/internal/agent"
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
+	"github.com/xdg/cloister/internal/term"
 	"github.com/xdg/cloister/internal/token"
 )
 
@@ -248,7 +249,7 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		var cfgErr error
 		globalCfg, cfgErr = deps.configLoader.LoadGlobalConfig()
 		if cfgErr != nil {
-			log.Printf("cloister: warning: failed to load global config: %v", cfgErr)
+			clog.Warn("failed to load global config: %v", cfgErr)
 		}
 	}
 
@@ -282,8 +283,7 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		// Using deprecated functions intentionally - this is the fallback path.
 		usedEnvVars := token.CredentialEnvVarsUsed() //nolint:staticcheck // intentional fallback
 		if len(usedEnvVars) > 0 {
-			fmt.Fprintf(deps.stderr, "Warning: Using %s from environment.\n", usedEnvVars[0])
-			fmt.Fprintln(deps.stderr, "Run 'cloister setup claude' to store credentials in config.")
+			term.Warn("Using %s from environment. Run 'cloister setup claude' to store credentials in config.", usedEnvVars[0])
 		}
 		envVars = append(envVars, token.CredentialEnvVars()...) //nolint:staticcheck // intentional fallback
 	}

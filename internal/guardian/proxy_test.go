@@ -7,13 +7,14 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/xdg/cloister/internal/clog"
 )
 
 // mockTokenValidator is a simple TokenValidator for testing.
@@ -484,10 +485,6 @@ func TestProxyServer_TunnelConnectionTimeout(t *testing.T) {
 	p := NewProxyServer(":0")
 	p.Allowlist = NewAllowlist([]string{slowHost})
 
-	// Capture log output to verify timeout logging
-	var logBuf bytes.Buffer
-	p.Logger = log.New(&logBuf, "", 0)
-
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
 	}
@@ -760,14 +757,16 @@ func TestProxyServer_Authentication(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// Capture clog output for verifying auth failure logging
+			var logBuf bytes.Buffer
+			testLogger := clog.TestLogger(&logBuf)
+			oldLogger := clog.ReplaceGlobal(testLogger)
+			defer clog.ReplaceGlobal(oldLogger)
+
 			// Create proxy with token validator
 			p := NewProxyServer(":0")
 			p.Allowlist = NewAllowlist([]string{upstreamHost})
 			p.TokenValidator = newMockTokenValidator(tc.validTokens...)
-
-			// Use a buffer to capture log output
-			var logBuf bytes.Buffer
-			p.Logger = log.New(&logBuf, "", 0)
 
 			if err := p.Start(); err != nil {
 				t.Fatalf("failed to start proxy server: %v", err)
@@ -1139,10 +1138,13 @@ func TestProxyServer_ConfigReloader(t *testing.T) {
 	})
 
 	t.Run("handleSighup ignores error", func(t *testing.T) {
+		// Capture clog output
 		var logBuf bytes.Buffer
-		p := NewProxyServer(":0")
-		p.Logger = log.New(&logBuf, "", 0)
+		testLogger := clog.TestLogger(&logBuf)
+		oldLogger := clog.ReplaceGlobal(testLogger)
+		defer clog.ReplaceGlobal(oldLogger)
 
+		p := NewProxyServer(":0")
 		p.Allowlist = NewAllowlist([]string{"original.example.com"})
 
 		// Set reloader that returns error

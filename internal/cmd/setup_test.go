@@ -9,6 +9,7 @@ import (
 
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/prompt"
+	"github.com/xdg/cloister/internal/term"
 )
 
 func TestSetupCmd_ExistsInRoot(t *testing.T) {
@@ -95,6 +96,8 @@ func TestSetupClaudeCmd_DefaultSelectsToken(t *testing.T) {
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -136,6 +139,8 @@ func TestSetupClaudeCmd_SelectsOAuthToken(t *testing.T) {
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -169,6 +174,8 @@ func TestSetupClaudeCmd_SelectsAPIKey(t *testing.T) {
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -458,6 +465,8 @@ func TestSetupClaudeCmd_SkipPermissions_DefaultYes(t *testing.T) {
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -512,6 +521,8 @@ func TestSetupClaudeCmd_SkipPermissions_ExplicitNo(t *testing.T) {
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -549,6 +560,8 @@ func TestSetupClaudeCmd_SkipPermissions_ExplicitYes(t *testing.T) {
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -623,6 +636,8 @@ func TestSetupClaudeCmd_SkipPermissions_WithTokenAuth(t *testing.T) {
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -663,6 +678,8 @@ func TestSetupClaudeCmd_SkipPermissions_WithAPIKeyAuth(t *testing.T) {
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -706,6 +723,8 @@ func TestSetupClaudeCmd_SavesTokenAuthToConfig(t *testing.T) {
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -762,6 +781,8 @@ func TestSetupClaudeCmd_SavesAPIKeyAuthToConfig(t *testing.T) {
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -1023,6 +1044,8 @@ func TestSetupClaudeCmd_ShowsCorrectConfigPath(t *testing.T) {
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -1146,6 +1169,8 @@ func TestSetupClaudeCmd_ExistingCredentials_UserDeclinesReplace(t *testing.T) {
 	defer func() { setupClaudeYesNoPrompter = oldYesNo }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 
@@ -1300,6 +1325,8 @@ func TestSetupClaudeCmd_NoExistingCredentials_NoReplacementPrompt(t *testing.T) 
 	defer func() { setupClaudeCredentialReader = oldReader }()
 
 	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
 	setupClaudeCmd.SetOut(&stdout)
 	setupClaudeCmd.SetErr(&stdout)
 

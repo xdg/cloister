@@ -11,6 +11,7 @@ import (
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
 	"github.com/xdg/cloister/internal/project"
+	"github.com/xdg/cloister/internal/term"
 )
 
 var stopCmd = &cobra.Command{
@@ -61,9 +62,9 @@ func runStop(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print confirmation message
-	fmt.Printf("Stopped cloister: %s\n", cloisterName)
+	term.Printf("Stopped cloister: %s\n", cloisterName)
 	if token != "" {
-		fmt.Println("Token revoked from guardian.")
+		term.Println("Token revoked from guardian.")
 	}
 
 	return nil

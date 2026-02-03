@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"log"
 	"net"
 	"os"
 	"os/signal"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian"
 )
@@ -43,6 +43,9 @@ func init() {
 
 // runExecutor starts the executor socket server and blocks until interrupted.
 func runExecutor(cmd *cobra.Command, args []string) error {
+	// Switch to daemon mode: logs go to file only, not stderr
+	clog.SetDaemonMode(true)
+
 	// Get shared secret from environment
 	secret := os.Getenv(guardian.SharedSecretEnvVar)
 	if secret == "" {
@@ -74,7 +77,7 @@ func runExecutor(cmd *cobra.Command, args []string) error {
 	}
 	port, _ := strconv.Atoi(portStr)
 
-	log.Printf("Executor server listening on %s", listenAddr)
+	clog.Info("executor server listening on %s", listenAddr)
 
 	// Save daemon state with TCP port
 	state := &executor.DaemonState{
@@ -83,7 +86,7 @@ func runExecutor(cmd *cobra.Command, args []string) error {
 		TCPPort: port,
 	}
 	if err := executor.SaveDaemonState(state); err != nil {
-		log.Printf("Warning: failed to save daemon state: %v", err)
+		clog.Warn("failed to save daemon state: %v", err)
 	}
 
 	// Wait for interrupt signal
@@ -91,18 +94,18 @@ func runExecutor(cmd *cobra.Command, args []string) error {
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
 
-	log.Println("Shutting down executor server...")
+	clog.Debug("shutting down executor server...")
 
 	// Clean up
 	if err := server.Stop(); err != nil {
-		log.Printf("Error during shutdown: %v", err)
+		clog.Error("error during shutdown: %v", err)
 	}
 
 	// Remove daemon state
 	if err := executor.RemoveDaemonState(); err != nil {
-		log.Printf("Warning: failed to remove daemon state: %v", err)
+		clog.Warn("failed to remove daemon state: %v", err)
 	}
 
-	log.Println("Executor server stopped")
+	clog.Debug("executor server stopped")
 	return nil
 }

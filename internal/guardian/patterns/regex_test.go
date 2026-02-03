@@ -2,9 +2,10 @@ package patterns
 
 import (
 	"bytes"
-	"log"
 	"strings"
 	"testing"
+
+	"github.com/xdg/cloister/internal/clog"
 )
 
 // TestRegexMatcherImplementsMatcher verifies RegexMatcher implements the Matcher interface.
@@ -62,10 +63,11 @@ func TestRegexMatcherDeny(t *testing.T) {
 
 // TestRegexMatcherInvalidPattern verifies that invalid patterns are logged and skipped.
 func TestRegexMatcherInvalidPattern(t *testing.T) {
-	// Capture log output
+	// Capture clog output
 	var buf bytes.Buffer
-	log.SetOutput(&buf)
-	defer log.SetOutput(nil)
+	testLogger := clog.TestLogger(&buf)
+	oldLogger := clog.ReplaceGlobal(testLogger)
+	defer clog.ReplaceGlobal(oldLogger)
 
 	// Create matcher with an invalid regex pattern
 	m := NewRegexMatcher(
@@ -75,8 +77,8 @@ func TestRegexMatcherInvalidPattern(t *testing.T) {
 
 	// The invalid pattern should be logged
 	logOutput := buf.String()
-	if !strings.Contains(logOutput, "WARNING") {
-		t.Errorf("expected WARNING in log output, got: %q", logOutput)
+	if !strings.Contains(logOutput, "WARN") {
+		t.Errorf("expected WARN in log output, got: %q", logOutput)
 	}
 	if !strings.Contains(logOutput, "[invalid") {
 		t.Errorf("expected pattern '[invalid' in log output, got: %q", logOutput)

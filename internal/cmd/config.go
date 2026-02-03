@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/xdg/cloister/internal/config"
+	"github.com/xdg/cloister/internal/term"
 )
 
 var configCmd = &cobra.Command{
@@ -75,7 +76,7 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to serialize config: %w", err)
 	}
 
-	fmt.Print(string(data))
+	term.Printf("%s", string(data))
 	return nil
 }
 
@@ -87,7 +88,7 @@ func runConfigEdit(cmd *cobra.Command, args []string) error {
 }
 
 func runConfigPath(cmd *cobra.Command, args []string) {
-	fmt.Println(config.GlobalConfigPath())
+	term.Println(config.GlobalConfigPath())
 }
 
 func runConfigInit(cmd *cobra.Command, args []string) error {
@@ -97,6 +98,6 @@ func runConfigInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to create config: %w", err)
 	}
 
-	fmt.Printf("Created default config at: %s\n", path)
+	term.Printf("Created default config at: %s\n", path)
 	return nil
 }

@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -16,6 +15,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/xdg/cloister/internal/clog"
 )
 
 // DefaultProxyPort is the standard port for HTTP CONNECT proxies.
@@ -52,9 +53,6 @@ type ProxyServer struct {
 	// (useful for testing). When set, requests must include a valid Proxy-Authorization
 	// header with Basic auth where the password is the token.
 	TokenValidator TokenValidator
-
-	// Logger is used to log authentication failures. If nil, the default log package is used.
-	Logger *log.Logger
 
 	// AllowlistCache provides per-project allowlist lookups. If nil, the global
 	// Allowlist is used for all requests.
@@ -313,22 +311,12 @@ func (p *ProxyServer) writeAuthRequired(w http.ResponseWriter) {
 // logAuthFailure logs an authentication failure with the source IP.
 func (p *ProxyServer) logAuthFailure(r *http.Request, reason string) {
 	sourceIP := r.RemoteAddr
-	msg := fmt.Sprintf("proxy auth failure from %s: %s", sourceIP, reason)
-	if p.Logger != nil {
-		p.Logger.Println(msg)
-	} else {
-		log.Println(msg)
-	}
+	clog.Warn("proxy auth failure from %s: %s", sourceIP, reason)
 }
 
 // log writes a formatted message to the proxy's logger.
 func (p *ProxyServer) log(format string, args ...interface{}) {
-	msg := fmt.Sprintf(format, args...)
-	if p.Logger != nil {
-		p.Logger.Println(msg)
-	} else {
-		log.Println(msg)
-	}
+	clog.Debug(format, args...)
 }
 
 // isTimeoutError checks if an error is a timeout error.
