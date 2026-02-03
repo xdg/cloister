@@ -12,6 +12,12 @@ VERSION ?=
 VERSION_PKG := github.com/xdg/cloister/internal/version
 LDFLAGS := $(if $(VERSION),-ldflags "-X $(VERSION_PKG).Version=$(VERSION)")
 
+# Docker image settings for worktree isolation
+# Uses commit hash by default for concurrent worktree safety; VERSION overrides
+GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
+DOCKER_TAG := $(if $(VERSION),$(VERSION),$(GIT_COMMIT))
+TEST_IMAGE := cloister:$(DOCKER_TAG)
+
 # Test settings
 #   COUNT=1    - bust cache, COUNT=N for flakiness testing
 #   RUN=regex  - run only tests matching regex (-run flag)
@@ -37,11 +43,8 @@ $(BINARY): $(GO_FILES) $(GO_MOD_FILES)
 
 build: $(BINARY)
 
-# Docker image tag: use VERSION if set, otherwise 'latest'
-DOCKER_TAG := $(if $(VERSION),$(VERSION),latest)
-
 docker:
-	docker build --build-arg GO_VERSION=$(GO_VERSION) $(if $(VERSION),--build-arg VERSION=$(VERSION)) -t cloister:$(DOCKER_TAG) .
+	docker build --build-arg GO_VERSION=$(GO_VERSION) $(if $(VERSION),--build-arg VERSION=$(VERSION)) -t $(TEST_IMAGE) .
 
 install:
 	go install $(LDFLAGS) $(CMD_PATH)
@@ -52,11 +55,11 @@ test:
 test-race:
 	go test -race $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
 
-test-integration: $(BINARY)
-	go test -tags=integration $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 $(PKG)
+test-integration: $(BINARY) docker
+	CLOISTER_IMAGE=$(TEST_IMAGE) go test -tags=integration $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 $(PKG)
 
 test-e2e: $(BINARY) docker
-	go test -tags=e2e $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 ./test/e2e/...
+	CLOISTER_IMAGE=$(TEST_IMAGE) go test -tags=e2e $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 ./test/e2e/...
 
 test-all: test-integration test-e2e
 
