@@ -4,16 +4,35 @@ Common issues and solutions when using Cloister.
 
 ## Installation Issues
 
-### "go install: command not found"
+### "cloister: command not found" after install
 
-Go is not installed or not in your PATH.
+The install directory (`~/.local/bin`) is not in your PATH.
 
 **Solution:**
-1. Install Go from https://go.dev/dl/
-2. Ensure `$GOPATH/bin` is in your PATH:
-   ```bash
-   export PATH=$PATH:$(go env GOPATH)/bin
-   ```
+
+Add to your shell configuration:
+
+```bash
+# bash (~/.bashrc or ~/.bash_profile)
+export PATH="$HOME/.local/bin:$PATH"
+
+# zsh (~/.zshrc)
+export PATH="$HOME/.local/bin:$PATH"
+
+# fish (~/.config/fish/config.fish)
+fish_add_path ~/.local/bin
+```
+
+Then restart your shell or run `source ~/.bashrc` (or equivalent).
+
+### Download failed during install
+
+The install script couldn't reach GitHub.
+
+**Solutions:**
+- Check your internet connection
+- If behind a proxy, ensure `curl` is configured to use it
+- Download manually from [GitHub Releases](https://github.com/xdg/cloister/releases)
 
 ### "docker: command not found"
 

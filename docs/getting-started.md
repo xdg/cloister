@@ -5,18 +5,33 @@ This guide walks you through installing Cloister and running your first sandboxe
 ## Prerequisites
 
 - **Docker** (or OrbStack on macOS) — Cloister runs containers on an isolated network
-- **Go 1.22+** — Required for `go install`
 - **A git repository** — Cloister is designed for project-based workflows
 
 ## Installation
 
-### Using Go Install
+### Recommended: Install Script
 
 ```bash
-go install github.com/xdg/cloister@latest
+curl -fsSL https://raw.githubusercontent.com/xdg/cloister/main/install.sh | sh
 ```
 
-### Building from Source
+This downloads the latest release and installs it to `~/.local/bin`. If this directory isn't already in your PATH, the script will offer to add it to your shell configuration (bash, zsh, or fish).
+
+To install a specific version:
+
+```bash
+VERSION=v1.0.0 curl -fsSL https://raw.githubusercontent.com/xdg/cloister/main/install.sh | sh
+```
+
+### Alternative: Build from Source
+
+Requires Go 1.25+.
+
+```bash
+go install github.com/xdg/cloister/cmd/cloister@latest
+```
+
+Or clone and build manually:
 
 ```bash
 git clone https://github.com/xdg/cloister.git
