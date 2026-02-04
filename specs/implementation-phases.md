@@ -86,7 +86,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 
 ---
 
-## Phase 4: Host Execution (hostexec)
+## Phase 4: Host Execution (hostexec) (COMPLETE)
 
 **Goal:** Agents can request host commands via approval workflow.
 
