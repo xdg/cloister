@@ -234,16 +234,16 @@ Wire all Phase 6 components together in the guardian startup (`internal/cmd/guar
 Add audit log entries for domain approval events, consistent with existing hostexec audit logging.
 
 ### 6.8.1 Domain audit events
-- [ ] Add domain-specific audit methods to `audit.Logger`:
+- [x] Add domain-specific audit methods to `audit.Logger`:
   - `LogDomainRequest(project, cloister, domain string) error`
   - `LogDomainApprove(project, cloister, domain, scope, actor string) error`
   - `LogDomainDeny(project, cloister, domain, reason string) error`
   - `LogDomainTimeout(project, cloister, domain string) error`
-- [ ] Call `LogDomainRequest` when domain request is added to queue
-- [ ] Call `LogDomainApprove` from `handleApproveDomain`
-- [ ] Call `LogDomainDeny` from `handleDenyDomain`
-- [ ] Call `LogDomainTimeout` from `DomainQueue` timeout handler
-- [ ] **Test**: Unit test — verify audit log output format for each event type
+- [x] Call `LogDomainRequest` when domain request is added to queue
+- [x] Call `LogDomainApprove` from `handleApproveDomain`
+- [x] Call `LogDomainDeny` from `handleDenyDomain`
+- [x] Call `LogDomainTimeout` from `DomainQueue` timeout handler
+- [x] **Test**: Unit test — verify audit log output format for each event type
 
 ---
 

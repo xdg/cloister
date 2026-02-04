@@ -542,11 +542,282 @@ func TestEventTypeConstants(t *testing.T) {
 		{EventDeny, "DENY"},
 		{EventComplete, "COMPLETE"},
 		{EventTimeout, "TIMEOUT"},
+		{EventDomainRequest, "DOMAIN_REQUEST"},
+		{EventDomainApprove, "DOMAIN_APPROVE"},
+		{EventDomainDeny, "DOMAIN_DENY"},
+		{EventDomainTimeout, "DOMAIN_TIMEOUT"},
 	}
 
 	for _, tc := range types {
 		if string(tc.eventType) != tc.want {
 			t.Errorf("EventType = %q, want %q", tc.eventType, tc.want)
+		}
+	}
+}
+
+// Domain event format tests
+
+func TestEventFormat_DomainRequest(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainRequest,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "api.example.com",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_REQUEST project=my-api cloister=my-api-main domain="api.example.com"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+func TestEventFormat_DomainApprove(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainApprove,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "api.example.com",
+		Scope:     "project",
+		User:      "user",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_APPROVE project=my-api cloister=my-api-main domain="api.example.com" scope="project" user="user"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+func TestEventFormat_DomainApprove_SessionScope(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainApprove,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "cdn.example.com",
+		Scope:     "session",
+		User:      "user",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_APPROVE project=my-api cloister=my-api-main domain="cdn.example.com" scope="session" user="user"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+func TestEventFormat_DomainApprove_GlobalScope(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainApprove,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "docs.example.com",
+		Scope:     "global",
+		User:      "user",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_APPROVE project=my-api cloister=my-api-main domain="docs.example.com" scope="global" user="user"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+func TestEventFormat_DomainDeny(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainDeny,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "malicious.example.com",
+		Reason:    "Denied by user",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_DENY project=my-api cloister=my-api-main domain="malicious.example.com" reason="Denied by user"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+func TestEventFormat_DomainTimeout(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainTimeout,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "slow.example.com",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_TIMEOUT project=my-api cloister=my-api-main domain="slow.example.com"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+func TestEventFormat_DomainWithSpecialCharacters(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainRequest,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "sub.domain-with_chars123.example.com",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_REQUEST project=my-api cloister=my-api-main domain="sub.domain-with_chars123.example.com"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+// Domain logger method tests
+
+func TestLogger_LogDomainRequest(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf)
+
+	if err := logger.LogDomainRequest("my-api", "my-api-main", "api.example.com"); err != nil {
+		t.Fatalf("LogDomainRequest() error = %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, "DOMAIN DOMAIN_REQUEST") {
+		t.Errorf("LogDomainRequest() should contain 'DOMAIN DOMAIN_REQUEST': %s", got)
+	}
+	if !strings.Contains(got, `domain="api.example.com"`) {
+		t.Errorf("LogDomainRequest() should contain domain: %s", got)
+	}
+	if !strings.Contains(got, "project=my-api") {
+		t.Errorf("LogDomainRequest() should contain project: %s", got)
+	}
+	if !strings.Contains(got, "cloister=my-api-main") {
+		t.Errorf("LogDomainRequest() should contain cloister: %s", got)
+	}
+	// Domain events should NOT include branch
+	if strings.Contains(got, "branch=") {
+		t.Errorf("LogDomainRequest() should not contain branch field: %s", got)
+	}
+}
+
+func TestLogger_LogDomainApprove(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf)
+
+	if err := logger.LogDomainApprove("my-api", "my-api-main", "api.example.com", "project", "user"); err != nil {
+		t.Fatalf("LogDomainApprove() error = %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, "DOMAIN DOMAIN_APPROVE") {
+		t.Errorf("LogDomainApprove() should contain 'DOMAIN DOMAIN_APPROVE': %s", got)
+	}
+	if !strings.Contains(got, `domain="api.example.com"`) {
+		t.Errorf("LogDomainApprove() should contain domain: %s", got)
+	}
+	if !strings.Contains(got, `scope="project"`) {
+		t.Errorf("LogDomainApprove() should contain scope: %s", got)
+	}
+	if !strings.Contains(got, `user="user"`) {
+		t.Errorf("LogDomainApprove() should contain user: %s", got)
+	}
+}
+
+func TestLogger_LogDomainApprove_SessionScope(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf)
+
+	if err := logger.LogDomainApprove("my-api", "my-api-main", "cdn.example.com", "session", "user"); err != nil {
+		t.Fatalf("LogDomainApprove() error = %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, `scope="session"`) {
+		t.Errorf("LogDomainApprove() should contain session scope: %s", got)
+	}
+}
+
+func TestLogger_LogDomainApprove_GlobalScope(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf)
+
+	if err := logger.LogDomainApprove("my-api", "my-api-main", "docs.example.com", "global", "user"); err != nil {
+		t.Fatalf("LogDomainApprove() error = %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, `scope="global"`) {
+		t.Errorf("LogDomainApprove() should contain global scope: %s", got)
+	}
+}
+
+func TestLogger_LogDomainDeny(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf)
+
+	if err := logger.LogDomainDeny("my-api", "my-api-main", "malicious.example.com", "Denied by user"); err != nil {
+		t.Fatalf("LogDomainDeny() error = %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, "DOMAIN DOMAIN_DENY") {
+		t.Errorf("LogDomainDeny() should contain 'DOMAIN DOMAIN_DENY': %s", got)
+	}
+	if !strings.Contains(got, `domain="malicious.example.com"`) {
+		t.Errorf("LogDomainDeny() should contain domain: %s", got)
+	}
+	if !strings.Contains(got, `reason="Denied by user"`) {
+		t.Errorf("LogDomainDeny() should contain reason: %s", got)
+	}
+}
+
+func TestLogger_LogDomainTimeout(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf)
+
+	if err := logger.LogDomainTimeout("my-api", "my-api-main", "slow.example.com"); err != nil {
+		t.Fatalf("LogDomainTimeout() error = %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, "DOMAIN DOMAIN_TIMEOUT") {
+		t.Errorf("LogDomainTimeout() should contain 'DOMAIN DOMAIN_TIMEOUT': %s", got)
+	}
+	if !strings.Contains(got, `domain="slow.example.com"`) {
+		t.Errorf("LogDomainTimeout() should contain domain: %s", got)
+	}
+}
+
+func TestLogger_LogMultipleDomainEvents(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf)
+
+	// Simulate a typical domain approval workflow
+	_ = logger.LogDomainRequest("my-api", "my-api-main", "api.example.com")
+	_ = logger.LogDomainApprove("my-api", "my-api-main", "api.example.com", "project", "user")
+
+	lines := strings.Split(strings.TrimSuffix(buf.String(), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Errorf("expected 2 log lines, got %d", len(lines))
+	}
+
+	// Verify each line has the correct event type
+	expectedTypes := []string{"DOMAIN_REQUEST", "DOMAIN_APPROVE"}
+	for i, line := range lines {
+		if !strings.Contains(line, "DOMAIN "+expectedTypes[i]) {
+			t.Errorf("line %d should contain 'DOMAIN %s': %s", i, expectedTypes[i], line)
 		}
 	}
 }

@@ -314,8 +314,8 @@ func TestServer_HandleDeny_Success(t *testing.T) {
 		if denyResp.Status != "denied" {
 			t.Errorf("expected denial response status 'denied', got %q", denyResp.Status)
 		}
-		if denyResp.Reason != "Denied by user" {
-			t.Errorf("expected default reason 'Denied by user', got %q", denyResp.Reason)
+		if !strings.Contains(denyResp.Reason, "Denied by") {
+			t.Errorf("expected default reason to start with 'Denied by', got %q", denyResp.Reason)
 		}
 	default:
 		t.Error("expected denial response on channel")
@@ -845,8 +845,8 @@ func TestServer_HandleApprove_AuditLogging(t *testing.T) {
 	if !strings.Contains(auditOutput, "branch=main") {
 		t.Errorf("expected audit log to contain branch=main, got: %s", auditOutput)
 	}
-	if !strings.Contains(auditOutput, `user="user"`) {
-		t.Errorf("expected audit log to contain user=user, got: %s", auditOutput)
+	if !strings.Contains(auditOutput, `user=`) {
+		t.Errorf("expected audit log to contain user field, got: %s", auditOutput)
 	}
 
 	// Drain the response channel
@@ -954,9 +954,9 @@ func TestServer_HandleDeny_AuditLogging_DefaultReason(t *testing.T) {
 		t.Errorf("expected audit log to contain DENY event, got: %s", auditOutput)
 	}
 
-	// Default reason should be "Denied by user"
-	if !strings.Contains(auditOutput, "Denied by user") {
-		t.Errorf("expected audit log to contain default reason 'Denied by user', got: %s", auditOutput)
+	// Default reason should start with "Denied by"
+	if !strings.Contains(auditOutput, "Denied by") {
+		t.Errorf("expected audit log to contain default reason starting with 'Denied by', got: %s", auditOutput)
 	}
 
 	// Drain the response channel
@@ -1416,8 +1416,8 @@ func TestServer_HandleDenyDomain_Success(t *testing.T) {
 		if denyResp.Status != "denied" {
 			t.Errorf("expected denial response status 'denied', got %q", denyResp.Status)
 		}
-		if denyResp.Reason != "Denied by user" {
-			t.Errorf("expected default reason 'Denied by user', got %q", denyResp.Reason)
+		if !strings.Contains(denyResp.Reason, "Denied by") {
+			t.Errorf("expected default reason to start with 'Denied by', got %q", denyResp.Reason)
 		}
 	default:
 		t.Error("expected denial response on channel")
@@ -1687,5 +1687,368 @@ func TestServer_SetDomainQueue_Nil(t *testing.T) {
 
 	if server.DomainQueue != nil {
 		t.Error("expected server.DomainQueue to be nil")
+	}
+}
+
+// Domain audit logging tests
+
+func TestServer_HandleApproveDomain_AuditLogging(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	req := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "api.example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	server := NewServer(queue, auditLogger)
+	server.SetDomainQueue(domainQueue)
+
+	// Approve the domain request with project scope
+	body := `{"scope": "project"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	// Mock config persister
+	server.ConfigPersister = &mockConfigPersister{}
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have DOMAIN_APPROVE event
+	if !strings.Contains(auditOutput, "DOMAIN DOMAIN_APPROVE") {
+		t.Errorf("expected audit log to contain DOMAIN_APPROVE event, got: %s", auditOutput)
+	}
+
+	// Should contain project and cloister
+	if !strings.Contains(auditOutput, "project=test-project") {
+		t.Errorf("expected audit log to contain project=test-project, got: %s", auditOutput)
+	}
+
+	if !strings.Contains(auditOutput, "cloister=test-cloister") {
+		t.Errorf("expected audit log to contain cloister=test-cloister, got: %s", auditOutput)
+	}
+
+	// Should contain domain
+	if !strings.Contains(auditOutput, `domain="api.example.com"`) {
+		t.Errorf("expected audit log to contain domain, got: %s", auditOutput)
+	}
+
+	// Should contain scope
+	if !strings.Contains(auditOutput, `scope="project"`) {
+		t.Errorf("expected audit log to contain scope=project, got: %s", auditOutput)
+	}
+
+	// Should contain user
+	if !strings.Contains(auditOutput, `user=`) {
+		t.Errorf("expected audit log to contain user field, got: %s", auditOutput)
+	}
+}
+
+func TestServer_HandleApproveDomain_AuditLogging_SessionScope(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	req := &DomainRequest{
+		Cloister:  "my-api-main",
+		Project:   "my-api",
+		Domain:    "cdn.example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	server := NewServer(queue, auditLogger)
+	server.SetDomainQueue(domainQueue)
+
+	// Approve with session scope (no config persister needed)
+	body := `{"scope": "session"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have DOMAIN_APPROVE event
+	if !strings.Contains(auditOutput, "DOMAIN DOMAIN_APPROVE") {
+		t.Errorf("expected audit log to contain DOMAIN_APPROVE event, got: %s", auditOutput)
+	}
+
+	// Should contain session scope
+	if !strings.Contains(auditOutput, `scope="session"`) {
+		t.Errorf("expected audit log to contain scope=session, got: %s", auditOutput)
+	}
+}
+
+func TestServer_HandleDenyDomain_AuditLogging(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	req := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "malicious.example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	server := NewServer(queue, auditLogger)
+	server.SetDomainQueue(domainQueue)
+
+	// Deny with reason
+	body := `{"reason": "Domain looks suspicious"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDenyDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have DOMAIN_DENY event
+	if !strings.Contains(auditOutput, "DOMAIN DOMAIN_DENY") {
+		t.Errorf("expected audit log to contain DOMAIN_DENY event, got: %s", auditOutput)
+	}
+
+	// Should contain project and cloister
+	if !strings.Contains(auditOutput, "project=test-project") {
+		t.Errorf("expected audit log to contain project=test-project, got: %s", auditOutput)
+	}
+
+	if !strings.Contains(auditOutput, "cloister=test-cloister") {
+		t.Errorf("expected audit log to contain cloister=test-cloister, got: %s", auditOutput)
+	}
+
+	// Should contain domain
+	if !strings.Contains(auditOutput, `domain="malicious.example.com"`) {
+		t.Errorf("expected audit log to contain domain, got: %s", auditOutput)
+	}
+
+	// Should contain reason
+	if !strings.Contains(auditOutput, `reason="Domain looks suspicious"`) {
+		t.Errorf("expected audit log to contain reason, got: %s", auditOutput)
+	}
+}
+
+func TestServer_HandleDenyDomain_AuditLogging_DefaultReason(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	req := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "blocked.example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	server := NewServer(queue, auditLogger)
+	server.SetDomainQueue(domainQueue)
+
+	// Deny without providing a reason
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, nil)
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDenyDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify audit logs include default reason
+	auditOutput := auditBuf.String()
+
+	if !strings.Contains(auditOutput, "DOMAIN DOMAIN_DENY") {
+		t.Errorf("expected audit log to contain DOMAIN_DENY event, got: %s", auditOutput)
+	}
+
+	if !strings.Contains(auditOutput, `reason="Denied by`) {
+		t.Errorf("expected audit log to contain default reason starting with 'Denied by', got: %s", auditOutput)
+	}
+}
+
+func TestDomainQueue_AuditLogging_Request(t *testing.T) {
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	domainQueue := NewDomainQueue()
+	domainQueue.SetAuditLogger(auditLogger)
+
+	// Add a domain request
+	respChan := make(chan DomainResponse, 1)
+	req := &DomainRequest{
+		Cloister:  "my-api-main",
+		Project:   "my-api",
+		Domain:    "api.example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	_, err := domainQueue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have DOMAIN_REQUEST event
+	if !strings.Contains(auditOutput, "DOMAIN DOMAIN_REQUEST") {
+		t.Errorf("expected audit log to contain DOMAIN_REQUEST event, got: %s", auditOutput)
+	}
+
+	// Should contain project and cloister
+	if !strings.Contains(auditOutput, "project=my-api") {
+		t.Errorf("expected audit log to contain project=my-api, got: %s", auditOutput)
+	}
+
+	if !strings.Contains(auditOutput, "cloister=my-api-main") {
+		t.Errorf("expected audit log to contain cloister=my-api-main, got: %s", auditOutput)
+	}
+
+	// Should contain domain
+	if !strings.Contains(auditOutput, `domain="api.example.com"`) {
+		t.Errorf("expected audit log to contain domain, got: %s", auditOutput)
+	}
+}
+
+func TestDomainQueue_AuditLogging_Timeout(t *testing.T) {
+	// Create a buffer to capture audit logs
+	var auditBuf bytes.Buffer
+	auditLogger := audit.NewLogger(&auditBuf)
+
+	// Create queue with very short timeout
+	domainQueue := NewDomainQueueWithTimeout(10 * time.Millisecond)
+	domainQueue.SetAuditLogger(auditLogger)
+
+	// Add a domain request
+	respChan := make(chan DomainResponse, 1)
+	req := &DomainRequest{
+		Cloister:  "my-api-main",
+		Project:   "my-api",
+		Domain:    "slow.example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	_, err := domainQueue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Wait for timeout
+	time.Sleep(50 * time.Millisecond)
+
+	// Verify audit logs
+	auditOutput := auditBuf.String()
+
+	// Should have both DOMAIN_REQUEST and DOMAIN_TIMEOUT events
+	if !strings.Contains(auditOutput, "DOMAIN DOMAIN_REQUEST") {
+		t.Errorf("expected audit log to contain DOMAIN_REQUEST event, got: %s", auditOutput)
+	}
+
+	if !strings.Contains(auditOutput, "DOMAIN DOMAIN_TIMEOUT") {
+		t.Errorf("expected audit log to contain DOMAIN_TIMEOUT event, got: %s", auditOutput)
+	}
+
+	// DOMAIN_TIMEOUT should contain the same domain
+	if strings.Count(auditOutput, `domain="slow.example.com"`) != 2 {
+		t.Errorf("expected domain to appear in both REQUEST and TIMEOUT events, got: %s", auditOutput)
+	}
+}
+
+func TestServer_HandleApproveDomain_NilAuditLogger(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request
+	respChan := make(chan DomainResponse, 1)
+	req := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "api.example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(req)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Create server with nil audit logger
+	server := NewServer(queue, nil)
+	server.SetDomainQueue(domainQueue)
+
+	// Approve the domain request (should not panic with nil logger)
+	body := `{"scope": "session"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
 	}
 }

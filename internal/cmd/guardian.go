@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/audit"
 	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
@@ -320,6 +322,26 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	apiAddr := fmt.Sprintf(":%d", guardian.DefaultAPIPort)
 	api := guardian.NewAPIServer(apiAddr, &registryAdapter{registry})
 
+	// Create audit logger if configured
+	var auditLogger *audit.Logger
+	if cfg.Log.File != "" {
+		// Expand ~ to home directory if present
+		auditLogPath := cfg.Log.File
+		if strings.HasPrefix(auditLogPath, "~/") {
+			home, err := os.UserHomeDir()
+			if err == nil {
+				auditLogPath = filepath.Join(home, auditLogPath[2:])
+			}
+		}
+		auditFile, err := clog.OpenLogFile(auditLogPath)
+		if err != nil {
+			clog.Warn("failed to open audit log file %s: %v", auditLogPath, err)
+		} else {
+			auditLogger = audit.NewLogger(auditFile)
+			clog.Info("audit logging enabled: %s", auditLogPath)
+		}
+	}
+
 	// Create the request server for hostexec commands
 	// Token lookup adapter for the request server
 	requestTokenLookup := func(tok string) (request.TokenInfo, bool) {
@@ -421,16 +443,21 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	reqServer := request.NewServer(requestTokenLookup, regexMatcher, execClient, nil)
+	reqServer := request.NewServer(requestTokenLookup, regexMatcher, execClient, auditLogger)
 	reqServer.Queue = approvalQueue
 
 	// Create the approval server for the web UI (localhost only)
-	approvalServer := approval.NewServer(approvalQueue, nil)
+	approvalServer := approval.NewServer(approvalQueue, auditLogger)
 
 	// Wire domain queue and config persister to approval server
 	// SetDomainQueue will wire the EventHub if both are non-nil
 	approvalServer.SetDomainQueue(domainQueue)
 	approvalServer.ConfigPersister = configPersister
+
+	// Wire audit logger to domain queue if both are non-nil
+	if domainQueue != nil && auditLogger != nil {
+		domainQueue.SetAuditLogger(auditLogger)
+	}
 
 	// Start the proxy server
 	if err := proxy.Start(); err != nil {

@@ -12,6 +12,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"os/user"
 	"sync"
 	"time"
 
@@ -87,6 +88,19 @@ func NewServer(queue *Queue, auditLogger *audit.Logger) *Server {
 		Events:      events,
 		AuditLogger: auditLogger,
 	}
+}
+
+// getUserIdentity returns the current user identity for audit logging.
+// It attempts to get the OS username, falling back to "host-operator" if unavailable.
+// This runs inside the guardian container, so it returns the container user unless
+// we can detect the host user through other means.
+func getUserIdentity() string {
+	currentUser, err := user.Current()
+	if err == nil && currentUser.Username != "" {
+		return currentUser.Username
+	}
+	// Fallback to a descriptive placeholder if we can't determine the user
+	return "host-operator"
 }
 
 // SetDomainQueue sets the domain queue and wires its event hub connection.
@@ -384,7 +398,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 
 	// Log APPROVE event
 	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogApprove(project, branch, cloister, cmd, "user")
+		_ = s.AuditLogger.LogApprove(project, branch, cloister, cmd, getUserIdentity())
 	}
 
 	// Send approved response on the request's channel.
@@ -452,7 +466,7 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 
 	reason := denyReq.Reason
 	if reason == "" {
-		reason = "Denied by user"
+		reason = fmt.Sprintf("Denied by %s", getUserIdentity())
 	}
 
 	// Log DENY event
@@ -621,6 +635,11 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capture request info before removing from queue
+	domain := req.Domain
+	project := req.Project
+	cloister := req.Cloister
+
 	// Persist to config if needed
 	if scope == "project" {
 		if err := s.ConfigPersister.AddDomainToProject(req.Project, req.Domain); err != nil {
@@ -654,6 +673,11 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to persist domain to global: %v", err))
 			return
 		}
+	}
+
+	// Log DOMAIN_APPROVE event
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.LogDomainApprove(project, cloister, domain, scope, getUserIdentity())
 	}
 
 	// Send approved response on the request's channel BEFORE removing from queue
@@ -714,6 +738,11 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Capture request info before removing from queue
+	domain := req.Domain
+	project := req.Project
+	cloister := req.Cloister
+
 	// Parse optional reason from request body
 	var denyReq denyDomainRequest
 	// Ignore decode errors - reason is optional
@@ -721,7 +750,12 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 
 	reason := denyReq.Reason
 	if reason == "" {
-		reason = "Denied by user"
+		reason = fmt.Sprintf("Denied by %s", getUserIdentity())
+	}
+
+	// Log DOMAIN_DENY event
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.LogDomainDeny(project, cloister, domain, reason)
 	}
 
 	// Send denied response on the request's channel

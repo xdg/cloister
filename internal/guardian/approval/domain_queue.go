@@ -8,6 +8,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/xdg/cloister/internal/audit"
 )
 
 // DomainResponse represents the result of a domain approval decision.
@@ -34,11 +36,12 @@ type DomainRequest struct {
 
 // DomainQueue manages pending domain approval requests with thread-safe operations.
 type DomainQueue struct {
-	mu       sync.RWMutex
-	requests map[string]*DomainRequest
-	cancels  map[string]context.CancelFunc // Cancel functions for timeout goroutines
-	timeout  time.Duration
-	events   *EventHub // Optional event hub for SSE broadcasts
+	mu          sync.RWMutex
+	requests    map[string]*DomainRequest
+	cancels     map[string]context.CancelFunc // Cancel functions for timeout goroutines
+	timeout     time.Duration
+	events      *EventHub     // Optional event hub for SSE broadcasts
+	auditLogger *audit.Logger // Optional audit logger for domain events
 }
 
 // NewDomainQueue creates a new empty domain approval queue with the default timeout.
@@ -66,6 +69,17 @@ func (dq *DomainQueue) SetEventHub(hub *EventHub) {
 	dq.events = hub
 }
 
+// SetAuditLogger sets the audit logger for domain events.
+// When set, the queue will log domain request and timeout events.
+//
+// IMPORTANT: This should be called before any requests are added to the queue.
+// Audit events for requests added before SetAuditLogger is called will not be logged.
+func (dq *DomainQueue) SetAuditLogger(logger *audit.Logger) {
+	dq.mu.Lock()
+	defer dq.mu.Unlock()
+	dq.auditLogger = logger
+}
+
 // Add adds a new pending domain request to the queue and returns its generated ID.
 // The ID is generated using crypto/rand (8 bytes = 16 hex characters).
 // A timeout goroutine is started that will send a timeout response on the
@@ -84,8 +98,14 @@ func (dq *DomainQueue) Add(req *DomainRequest) (string, error) {
 	req.ExpiresAt = time.Now().Add(dq.timeout)
 	dq.requests[id] = req
 	dq.cancels[id] = cancel
-	events := dq.events // Capture reference while holding lock
+	events := dq.events           // Capture reference while holding lock
+	auditLogger := dq.auditLogger // Capture reference while holding lock
 	dq.mu.Unlock()
+
+	// Log domain request event
+	if auditLogger != nil {
+		_ = auditLogger.LogDomainRequest(req.Project, req.Cloister, req.Domain)
+	}
 
 	// Broadcast domain-request-added event to SSE clients
 	if events != nil {
@@ -109,16 +129,22 @@ func (dq *DomainQueue) handleTimeout(ctx context.Context, id string, respChan ch
 	case <-time.After(dq.timeout):
 		// Timeout reached, send timeout response
 		dq.mu.Lock()
-		_, exists := dq.requests[id]
+		req, exists := dq.requests[id]
 		if exists {
 			delete(dq.requests, id)
 			delete(dq.cancels, id)
 		}
-		events := dq.events // Capture reference while holding lock
+		events := dq.events           // Capture reference while holding lock
+		auditLogger := dq.auditLogger // Capture reference while holding lock
 		dq.mu.Unlock()
 
 		// Only send timeout response if the request was still pending
 		if exists {
+			// Log domain timeout event
+			if auditLogger != nil {
+				_ = auditLogger.LogDomainTimeout(req.Project, req.Cloister, req.Domain)
+			}
+
 			// Broadcast domain-request-removed event to SSE clients
 			if events != nil {
 				events.BroadcastDomainRequestRemoved(id)

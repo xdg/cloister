@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// EventType represents the type of hostexec event.
+// EventType represents the type of hostexec or domain event.
 type EventType string
 
 // Event types for hostexec operations.
@@ -24,7 +24,15 @@ const (
 	EventTimeout     EventType = "TIMEOUT"
 )
 
-// Event represents a hostexec audit log entry.
+// Event types for domain approval operations.
+const (
+	EventDomainRequest EventType = "DOMAIN_REQUEST"
+	EventDomainApprove EventType = "DOMAIN_APPROVE"
+	EventDomainDeny    EventType = "DOMAIN_DENY"
+	EventDomainTimeout EventType = "DOMAIN_TIMEOUT"
+)
+
+// Event represents a hostexec or domain approval audit log entry.
 type Event struct {
 	// Timestamp is when the event occurred.
 	Timestamp time.Time
@@ -44,6 +52,12 @@ type Event struct {
 	// Cmd is the command being executed.
 	Cmd string
 
+	// Domain is the domain being accessed (for domain approval events).
+	Domain string
+
+	// Scope is the approval scope (for domain approval events).
+	Scope string
+
 	// Pattern is the matched pattern (for AUTO_APPROVE events).
 	Pattern string
 
@@ -62,25 +76,45 @@ type Event struct {
 
 // Format returns the log entry as a formatted string.
 // Format: 2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api branch=main cloister=my-api cmd="..."
+// Format: 2024-01-15T14:32:05Z DOMAIN DOMAIN_REQUEST project=my-api cloister=my-api domain="example.com"
 func (e *Event) Format() string {
 	var b strings.Builder
 
 	// Timestamp in RFC3339 format
 	b.WriteString(e.Timestamp.UTC().Format(time.RFC3339))
-	b.WriteString(" HOSTEXEC ")
+
+	// Determine category (HOSTEXEC or DOMAIN)
+	isDomainEvent := e.Type == EventDomainRequest || e.Type == EventDomainApprove ||
+		e.Type == EventDomainDeny || e.Type == EventDomainTimeout
+
+	if isDomainEvent {
+		b.WriteString(" DOMAIN ")
+	} else {
+		b.WriteString(" HOSTEXEC ")
+	}
 	b.WriteString(string(e.Type))
 
-	// Always include project, branch, cloister
+	// Always include project and cloister
 	b.WriteString(" project=")
 	b.WriteString(e.Project)
-	b.WriteString(" branch=")
-	b.WriteString(e.Branch)
+
+	// Branch is only included for HOSTEXEC events
+	if !isDomainEvent {
+		b.WriteString(" branch=")
+		b.WriteString(e.Branch)
+	}
+
 	b.WriteString(" cloister=")
 	b.WriteString(e.Cloister)
 
-	// Include cmd for all event types
-	b.WriteString(" cmd=")
-	b.WriteString(quoteValue(e.Cmd))
+	// Include domain for domain events, cmd for hostexec events
+	if isDomainEvent {
+		b.WriteString(" domain=")
+		b.WriteString(quoteValue(e.Domain))
+	} else {
+		b.WriteString(" cmd=")
+		b.WriteString(quoteValue(e.Cmd))
+	}
 
 	// Type-specific fields
 	switch e.Type {
@@ -104,6 +138,20 @@ func (e *Event) Format() string {
 		b.WriteString(strconv.Itoa(e.ExitCode))
 		b.WriteString(" duration=")
 		b.WriteString(formatDuration(e.Duration))
+	case EventDomainApprove:
+		if e.Scope != "" {
+			b.WriteString(" scope=")
+			b.WriteString(quoteValue(e.Scope))
+		}
+		if e.User != "" {
+			b.WriteString(" user=")
+			b.WriteString(quoteValue(e.User))
+		}
+	case EventDomainDeny:
+		if e.Reason != "" {
+			b.WriteString(" reason=")
+			b.WriteString(quoteValue(e.Reason))
+		}
 	}
 
 	return b.String()
@@ -225,5 +273,52 @@ func (l *Logger) LogTimeout(project, branch, cloister, cmd string) error {
 		Branch:    branch,
 		Cloister:  cloister,
 		Cmd:       cmd,
+	})
+}
+
+// LogDomainRequest logs a DOMAIN DOMAIN_REQUEST event.
+func (l *Logger) LogDomainRequest(project, cloister, domain string) error {
+	return l.Log(&Event{
+		Timestamp: time.Now(),
+		Type:      EventDomainRequest,
+		Project:   project,
+		Cloister:  cloister,
+		Domain:    domain,
+	})
+}
+
+// LogDomainApprove logs a DOMAIN DOMAIN_APPROVE event.
+func (l *Logger) LogDomainApprove(project, cloister, domain, scope, actor string) error {
+	return l.Log(&Event{
+		Timestamp: time.Now(),
+		Type:      EventDomainApprove,
+		Project:   project,
+		Cloister:  cloister,
+		Domain:    domain,
+		Scope:     scope,
+		User:      actor,
+	})
+}
+
+// LogDomainDeny logs a DOMAIN DOMAIN_DENY event.
+func (l *Logger) LogDomainDeny(project, cloister, domain, reason string) error {
+	return l.Log(&Event{
+		Timestamp: time.Now(),
+		Type:      EventDomainDeny,
+		Project:   project,
+		Cloister:  cloister,
+		Domain:    domain,
+		Reason:    reason,
+	})
+}
+
+// LogDomainTimeout logs a DOMAIN DOMAIN_TIMEOUT event.
+func (l *Logger) LogDomainTimeout(project, cloister, domain string) error {
+	return l.Log(&Event{
+		Timestamp: time.Now(),
+		Type:      EventDomainTimeout,
+		Project:   project,
+		Cloister:  cloister,
+		Domain:    domain,
 	})
 }
