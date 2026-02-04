@@ -161,11 +161,11 @@ func TestCodexAgent_Name(t *testing.T) {
 	}
 }
 
-func TestCodexAgent_GetCredentialEnvVars_NoConfig(t *testing.T) {
+func TestCodexAgent_GetContainerEnvVars_NoConfig(t *testing.T) {
 	agent := NewCodexAgent()
 
 	// nil config should return nil
-	envVars, err := agent.GetCredentialEnvVars(nil)
+	envVars, err := agent.GetContainerEnvVars(nil)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -174,11 +174,11 @@ func TestCodexAgent_GetCredentialEnvVars_NoConfig(t *testing.T) {
 	}
 }
 
-func TestCodexAgent_GetCredentialEnvVars_NoAuthMethod(t *testing.T) {
+func TestCodexAgent_GetContainerEnvVars_NoAuthMethod(t *testing.T) {
 	agent := NewCodexAgent()
 
 	cfg := &config.AgentConfig{}
-	envVars, err := agent.GetCredentialEnvVars(cfg)
+	envVars, err := agent.GetContainerEnvVars(cfg)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
@@ -191,5 +191,42 @@ func TestClaudeAgent_Name(t *testing.T) {
 	agent := NewClaudeAgent()
 	if agent.Name() != "claude" {
 		t.Errorf("expected name 'claude', got %q", agent.Name())
+	}
+}
+
+func TestClaudeAgent_GetContainerEnvVars_NoConfig(t *testing.T) {
+	agent := NewClaudeAgent()
+
+	envVars, err := agent.GetContainerEnvVars(nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if envVars == nil {
+		t.Fatal("expected non-nil env vars even with nil config")
+	}
+	if envVars["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] != "1" {
+		t.Errorf("expected CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1, got %q",
+			envVars["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"])
+	}
+	// Should only have the one env var (no credentials)
+	if len(envVars) != 1 {
+		t.Errorf("expected 1 env var, got %d: %v", len(envVars), envVars)
+	}
+}
+
+func TestClaudeAgent_GetContainerEnvVars_NoAuthMethod(t *testing.T) {
+	agent := NewClaudeAgent()
+
+	cfg := &config.AgentConfig{}
+	envVars, err := agent.GetContainerEnvVars(cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if envVars["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] != "1" {
+		t.Errorf("expected CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1, got %q",
+			envVars["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"])
+	}
+	if len(envVars) != 1 {
+		t.Errorf("expected 1 env var, got %d: %v", len(envVars), envVars)
 	}
 }

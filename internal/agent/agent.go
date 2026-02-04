@@ -56,23 +56,24 @@ type Agent interface {
 	Setup(containerName string, agentCfg *config.AgentConfig) (*SetupResult, error)
 }
 
-// CredentialEnvProvider is an optional interface that agents can implement
-// to provide credential environment variables before the container is created.
+// ContainerEnvProvider is an optional interface that agents can implement
+// to provide environment variables before the container is created.
 // This is necessary because env vars must be set at container creation time,
 // but Setup() runs after the container starts.
-type CredentialEnvProvider interface {
-	// GetCredentialEnvVars returns environment variables needed for agent authentication.
+type ContainerEnvProvider interface {
+	// GetContainerEnvVars returns environment variables needed for the container.
+	// This includes both credential env vars and agent-specific operational env vars.
 	// This is called before container creation and must not require a running container.
-	// Returns nil map and nil error if no credentials are configured.
-	GetCredentialEnvVars(agentCfg *config.AgentConfig) (map[string]string, error)
+	// Returns nil map and nil error if no env vars are needed.
+	GetContainerEnvVars(agentCfg *config.AgentConfig) (map[string]string, error)
 }
 
-// GetCredentialEnvVars returns credential env vars for an agent if it implements
-// CredentialEnvProvider. Returns nil if the agent doesn't implement the interface
-// or if no credentials are configured.
-func GetCredentialEnvVars(a Agent, agentCfg *config.AgentConfig) (map[string]string, error) {
-	if provider, ok := a.(CredentialEnvProvider); ok {
-		return provider.GetCredentialEnvVars(agentCfg)
+// GetContainerEnvVars returns container env vars for an agent if it implements
+// ContainerEnvProvider. Returns nil if the agent doesn't implement the interface
+// or if no env vars are needed.
+func GetContainerEnvVars(a Agent, agentCfg *config.AgentConfig) (map[string]string, error) {
+	if provider, ok := a.(ContainerEnvProvider); ok {
+		return provider.GetContainerEnvVars(agentCfg)
 	}
 	return nil, nil
 }
@@ -113,13 +114,16 @@ var UserHomeDirFunc = os.UserHomeDir
 //   - containerName: the Docker container name
 //   - dirName: the directory name under $HOME (e.g., ".claude")
 //   - excludePatterns: patterns to exclude (passed to rsync --exclude)
+//   - transforms: optional functions applied to the staging directory after rsync
+//     but before copying to the container. Each transform receives the path to the
+//     staged directory (e.g., /tmp/cloister-settings-xxx/.claude).
 //
 // Symlinks are dereferenced during copy so that settings stored in dotfiles
 // repositories work correctly inside the container.
 //
 // Returns nil if the directory doesn't exist on the host (not an error).
 // Returns an error only if the directory exists but cannot be copied.
-func CopyDirToContainer(containerName, dirName string, excludePatterns []string) error {
+func CopyDirToContainer(containerName, dirName string, excludePatterns []string, transforms ...func(tmpDir string) error) error {
 	homeDir, err := UserHomeDirFunc()
 	if err != nil {
 		return err
@@ -154,6 +158,15 @@ func CopyDirToContainer(containerName, dirName string, excludePatterns []string)
 		clog.Warn("rsync failed, falling back to cp (exclusions will not apply): %v", err)
 		if err := copyWithCp(srcDir, tmpDestDir); err != nil {
 			return err
+		}
+	}
+
+	// Apply transforms to the staging directory.
+	// Transforms may handle errors internally (log and continue) or propagate them.
+	// A returned error aborts the copy; a nil return allows it to proceed.
+	for _, transform := range transforms {
+		if err := transform(tmpDestDir); err != nil {
+			return fmt.Errorf("transform failed: %w", err)
 		}
 	}
 

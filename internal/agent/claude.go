@@ -123,24 +123,32 @@ func (a *ClaudeAgent) Name() string {
 	return claudeAgentName
 }
 
-// GetCredentialEnvVars implements CredentialEnvProvider.
-// It returns credential env vars without requiring a running container.
-func (a *ClaudeAgent) GetCredentialEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
-	if agentCfg == nil || agentCfg.AuthMethod == "" {
-		return nil, nil
+// GetContainerEnvVars implements ContainerEnvProvider.
+// It always returns CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 to prevent the
+// plugin auto-updater from breaking in network-isolated containers.
+// If AuthMethod is configured, credential env vars are included as well.
+func (a *ClaudeAgent) GetContainerEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
+	envVars := map[string]string{
+		"CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
 	}
 
-	injector := a.Injector
-	if injector == nil {
-		injector = claude.NewInjector()
+	if agentCfg != nil && agentCfg.AuthMethod != "" {
+		injector := a.Injector
+		if injector == nil {
+			injector = claude.NewInjector()
+		}
+
+		injectionConfig, err := injector.InjectCredentials(agentCfg)
+		if err != nil {
+			return nil, fmt.Errorf("credential injection failed: %w", err)
+		}
+
+		for k, v := range injectionConfig.EnvVars {
+			envVars[k] = v
+		}
 	}
 
-	injectionConfig, err := injector.InjectCredentials(agentCfg)
-	if err != nil {
-		return nil, fmt.Errorf("credential injection failed: %w", err)
-	}
-
-	return injectionConfig.EnvVars, nil
+	return envVars, nil
 }
 
 // settingsExcludePatterns lists directories/files to exclude when copying ~/.claude/
@@ -164,6 +172,8 @@ var settingsExcludePatterns = []string{
 	"tasks/",
 	"telemetry",
 	"todos/",
+	"plugins/install-counts-cache.json",
+	"plugins/repos/",
 }
 
 // configJSONPath is the path to the Claude config file in the container.
@@ -192,9 +202,16 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 		EnvVars: make(map[string]string),
 	}
 
+	// Get home dir for plugin path rewriting
+	homeDir, err := UserHomeDirFunc()
+	if err != nil {
+		homeDir = "" // non-fatal; transforms will be no-ops
+	}
+
 	// Step 1: Copy settings directory (~/.claude/)
 	// This is a one-way snapshot - writes inside container are isolated
-	if err := CopyDirToContainer(containerName, claudeSettingsDir, settingsExcludePatterns); err != nil {
+	if err := CopyDirToContainer(containerName, claudeSettingsDir, settingsExcludePatterns,
+		claudePluginTransform(homeDir)); err != nil {
 		// Log but don't fail - missing settings is not fatal
 		_ = err
 	}

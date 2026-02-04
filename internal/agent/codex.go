@@ -141,9 +141,9 @@ func (a *CodexAgent) Name() string {
 	return codexAgentName
 }
 
-// GetCredentialEnvVars implements CredentialEnvProvider.
+// GetContainerEnvVars implements ContainerEnvProvider.
 // It returns credential env vars without requiring a running container.
-func (a *CodexAgent) GetCredentialEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
+func (a *CodexAgent) GetContainerEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
 	if agentCfg == nil || agentCfg.AuthMethod == "" {
 		return nil, nil
 	}

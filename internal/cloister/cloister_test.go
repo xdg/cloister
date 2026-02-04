@@ -224,7 +224,7 @@ func (m *mockConfigLoader) LoadGlobalConfig() (*config.GlobalConfig, error) {
 	return m.config, m.err
 }
 
-// mockAgent is a test double for agent.Agent and agent.CredentialEnvProvider.
+// mockAgent is a test double for agent.Agent and agent.ContainerEnvProvider.
 type mockAgent struct {
 	name          string
 	setupCalled   bool
@@ -233,10 +233,10 @@ type mockAgent struct {
 	setupErr      error
 	containerName string
 
-	// credentialEnvVars is returned by GetCredentialEnvVars if set.
-	// If nil, GetCredentialEnvVars returns nil, nil.
-	credentialEnvVars map[string]string
-	credentialErr     error
+	// containerEnvVars is returned by GetContainerEnvVars if set.
+	// If nil, GetContainerEnvVars returns nil, nil.
+	containerEnvVars map[string]string
+	containerErr     error
 }
 
 func (m *mockAgent) Name() string {
@@ -250,9 +250,9 @@ func (m *mockAgent) Setup(containerName string, agentCfg *config.AgentConfig) (*
 	return m.setupResult, m.setupErr
 }
 
-// GetCredentialEnvVars implements agent.CredentialEnvProvider.
-func (m *mockAgent) GetCredentialEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
-	return m.credentialEnvVars, m.credentialErr
+// GetContainerEnvVars implements agent.ContainerEnvProvider.
+func (m *mockAgent) GetContainerEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
+	return m.containerEnvVars, m.containerErr
 }
 
 // TestStart_WithTokenAuth verifies that token-based credentials trigger agent setup
@@ -272,8 +272,8 @@ func TestStart_WithTokenAuth(t *testing.T) {
 	}
 	mockAgt := &mockAgent{
 		name: "claude",
-		// Credential env vars returned by GetCredentialEnvVars (before container creation)
-		credentialEnvVars: map[string]string{
+		// Container env vars returned by GetContainerEnvVars (before container creation)
+		containerEnvVars: map[string]string{
 			"CLAUDE_CODE_OAUTH_TOKEN": "sk-ant-oat01-test-token",
 		},
 		// Setup result (after container creation) - env vars here are redundant
@@ -354,7 +354,7 @@ func TestStart_WithAPIKeyAuth(t *testing.T) {
 	}
 	mockAgt := &mockAgent{
 		name: "claude",
-		credentialEnvVars: map[string]string{
+		containerEnvVars: map[string]string{
 			"ANTHROPIC_API_KEY": "sk-ant-api01-test-key",
 		},
 		setupResult: &agent.SetupResult{

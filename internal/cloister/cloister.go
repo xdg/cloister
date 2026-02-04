@@ -277,18 +277,24 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		agentImpl = agent.Get(agentName)
 	}
 
-	// Get credential env vars before container creation.
+	// Get container env vars before container creation.
 	// Env vars must be set at container creation time, so we need to
 	// compute them now rather than waiting for agent.Setup().
-	if agentCfg != nil && agentCfg.AuthMethod != "" && agentImpl != nil {
-		credEnvVars, credErr := agent.GetCredentialEnvVars(agentImpl, agentCfg)
-		if credErr != nil {
-			return "", "", fmt.Errorf("failed to get credential env vars: %w", credErr)
+	//
+	// This runs independently from the credential fallback below: the agent
+	// always provides operational env vars (e.g. CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC),
+	// while credentials come from either the agent (when AuthMethod is configured)
+	// or from the host environment (fallback path).
+	if agentImpl != nil {
+		containerEnvVars, envErr := agent.GetContainerEnvVars(agentImpl, agentCfg)
+		if envErr != nil {
+			return "", "", fmt.Errorf("failed to get container env vars: %w", envErr)
 		}
-		for key, value := range credEnvVars {
+		for key, value := range containerEnvVars {
 			envVars = append(envVars, key+"="+value)
 		}
-	} else {
+	}
+	if agentCfg == nil || agentCfg.AuthMethod == "" {
 		// Fall back to env vars if no agent config with auth method.
 		// Using deprecated functions intentionally - this is the fallback path.
 		usedEnvVars := token.CredentialEnvVarsUsed() //nolint:staticcheck // intentional fallback
