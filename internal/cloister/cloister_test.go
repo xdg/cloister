@@ -122,6 +122,7 @@ func TestAttach_WithMockManager_ReturnsError(t *testing.T) {
 }
 
 func TestStop_WithMockManager(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
 	// Test that Stop calls the injected manager
 	mock := &mockManager{}
 
@@ -138,6 +139,7 @@ func TestStop_WithMockManager(t *testing.T) {
 }
 
 func TestStop_WithMockManager_ReturnsError(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
 	// Test that errors from the manager are propagated
 	expectedErr := errors.New("stop failed")
 	mock := &mockManager{

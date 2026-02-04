@@ -54,6 +54,10 @@ func requireCloisterBinary(t *testing.T) {
 func requireCleanGuardianState(t *testing.T) {
 	t.Helper()
 	requireDocker(t)
+	// Isolate XDG dirs to avoid writing to real ~/.config/cloister.
+	// Can't use testutil.IsolateXDGDirs due to import cycle.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// Generate unique instance ID for test isolation
 	t.Setenv(InstanceIDEnvVar, GenerateInstanceID())
 	// Capture container name now while instance ID is set

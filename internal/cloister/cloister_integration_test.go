@@ -318,6 +318,7 @@ func TestCloisterLifecycle(t *testing.T) {
 
 func TestStop_NonExistentContainer(t *testing.T) {
 	testutil.RequireDocker(t)
+	testutil.IsolateXDGDirs(t)
 
 	// Stop a non-existent container - should return error
 	err := Stop("cloister-nonexistent-12345", "sometoken")
