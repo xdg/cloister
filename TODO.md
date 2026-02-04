@@ -180,8 +180,8 @@ Add HTML templates for domain approval requests in the web UI. Domain requests a
 Implement `ConfigPersister` that adds approved domains to project or global config files and triggers proxy allowlist reload.
 
 ### 6.6.1 ConfigPersister implementation
-- [ ] Create `internal/guardian/config_persister.go`
-- [ ] Implement `ConfigPersister` interface:
+- [x] Create `internal/guardian/config_persister.go`
+- [x] Implement `ConfigPersister` interface:
   - `AddDomainToProject(project, domain string) error`:
     1. Load project config via `config.LoadProjectConfig(project)`
     2. Append `AllowEntry{Domain: domain}` if not already present
@@ -190,10 +190,10 @@ Implement `ConfigPersister` that adds approved domains to project or global conf
     1. Load global config via `config.LoadGlobalConfig()`
     2. Append `AllowEntry{Domain: domain}` if not already present
     3. Write via `config.WriteGlobalConfig(cfg)`
-- [ ] Add `ReloadNotifier func()` field — called after config write to signal proxy reload (will be wired to SIGHUP or cache clear)
-- [ ] **Test**: `AddDomainToProject` — writes domain, reload round-trips correctly
-- [ ] **Test**: `AddDomainToProject` with existing domain — no duplicate added
-- [ ] **Test**: `AddDomainToGlobal` — writes domain, round-trips correctly
+- [x] Add `ReloadNotifier func()` field — called after config write to signal proxy reload (will be wired to SIGHUP or cache clear)
+- [x] **Test**: `AddDomainToProject` — writes domain, reload round-trips correctly
+- [x] **Test**: `AddDomainToProject` with existing domain — no duplicate added
+- [x] **Test**: `AddDomainToGlobal` — writes domain, round-trips correctly
 
 ---
 
