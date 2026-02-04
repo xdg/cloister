@@ -343,6 +343,63 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	// Create the approval queue for pending requests
 	approvalQueue := approval.NewQueue()
 
+	// Validate unlisted_domain_behavior config value
+	if cfg.Proxy.UnlistedDomainBehavior != "" &&
+		cfg.Proxy.UnlistedDomainBehavior != "reject" &&
+		cfg.Proxy.UnlistedDomainBehavior != "request_approval" {
+		clog.Warn("invalid unlisted_domain_behavior %q, using default 'request_approval'", cfg.Proxy.UnlistedDomainBehavior)
+		cfg.Proxy.UnlistedDomainBehavior = "request_approval"
+	}
+
+	// Create domain approver if unlisted_domain_behavior is "request_approval"
+	var domainApprover guardian.DomainApprover
+	var sessionAllowlist guardian.SessionAllowlist
+	var domainQueue *approval.DomainQueue
+	if cfg.Proxy.UnlistedDomainBehavior == "request_approval" {
+		// Parse domain approval timeout from config (default 60s)
+		approvalTimeout := 60 * time.Second
+		if cfg.Proxy.ApprovalTimeout != "" {
+			parsed, err := time.ParseDuration(cfg.Proxy.ApprovalTimeout)
+			if err != nil {
+				clog.Warn("invalid approval_timeout %q, using default 60s: %v", cfg.Proxy.ApprovalTimeout, err)
+			} else {
+				approvalTimeout = parsed
+			}
+		}
+
+		// Create the domain approval queue with configured timeout
+		domainQueue = approval.NewDomainQueueWithTimeout(approvalTimeout)
+
+		// Create session allowlist for ephemeral domain approvals
+		sessionAllowlist = guardian.NewSessionAllowlist()
+
+		// Create domain approver with all dependencies
+		domainApprover = guardian.NewDomainApprover(domainQueue, sessionAllowlist, allowlistCache)
+		clog.Info("domain approval enabled (timeout: %v)", approvalTimeout)
+	} else {
+		clog.Info("domain approval disabled (unlisted domains will be rejected)")
+	}
+
+	// Create config persister with reload notifier
+	configPersister := &guardian.ConfigPersisterImpl{
+		ReloadNotifier: func() {
+			// Clear and reload allowlist cache when config is updated
+			clog.Debug("config updated, reloading allowlist cache")
+			allowlistCache.Clear()
+			// Reload all project allowlists
+			for _, info := range registry.List() {
+				if info.ProjectName != "" {
+					allowlist := loadProjectAllowlist(info.ProjectName)
+					allowlistCache.SetProject(info.ProjectName, allowlist)
+				}
+			}
+		},
+	}
+
+	// Set domain approver and session allowlist on proxy (both may be nil if disabled)
+	proxy.DomainApprover = domainApprover
+	proxy.SessionAllowlist = sessionAllowlist
+
 	// Create executor client if shared secret and port are available
 	var execClient request.CommandExecutor
 	sharedSecret := os.Getenv(guardian.SharedSecretEnvVar)
@@ -369,6 +426,11 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	// Create the approval server for the web UI (localhost only)
 	approvalServer := approval.NewServer(approvalQueue, nil)
+
+	// Wire domain queue and config persister to approval server
+	// SetDomainQueue will wire the EventHub if both are non-nil
+	approvalServer.SetDomainQueue(domainQueue)
+	approvalServer.ConfigPersister = configPersister
 
 	// Start the proxy server
 	if err := proxy.Start(); err != nil {

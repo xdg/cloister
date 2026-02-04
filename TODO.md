@@ -202,7 +202,7 @@ Implement `ConfigPersister` that adds approved domains to project or global conf
 Wire all Phase 6 components together in the guardian startup (`internal/cmd/guardian.go`). This is the integration point where domain queue, session allowlist, config persister, and proxy all connect.
 
 ### 6.7.1 Wire domain approval into guardian startup
-- [ ] In `runGuardianProxy()`:
+- [x] In `runGuardianProxy()`:
   1. Create `DomainQueue` with timeout from config (`approval_timeout`, default 60s)
   2. Create `SessionAllowlist`
   3. Create `ConfigPersister` with `ReloadNotifier` that clears `AllowlistCache` and reloads
@@ -210,22 +210,22 @@ Wire all Phase 6 components together in the guardian startup (`internal/cmd/guar
   5. Set `proxy.DomainApprover` and `proxy.SessionAllowlist`
   6. Set `approvalServer.DomainQueue` and `approvalServer.ConfigPersister`
   7. Wire `DomainQueue.SetEventHub` to share the existing `EventHub`
-- [ ] Parse `unlisted_domain_behavior` from config: if `"reject"`, leave `DomainApprover` nil (backward-compatible)
-- [ ] Parse `approval_timeout` from config (default 60s) for `DomainQueue` timeout
-- [ ] On session allowlist approval, also add domain to the project's cached `Allowlist` so subsequent requests from the same project don't re-prompt
-- [ ] **Test**: Integration test (unit-level, no Docker) — create all components, submit domain request through proxy mock, approve via server endpoint, verify domain is allowed on next request
+- [x] Parse `unlisted_domain_behavior` from config: if `"reject"`, leave `DomainApprover` nil (backward-compatible)
+- [x] Parse `approval_timeout` from config (default 60s) for `DomainQueue` timeout
+- [x] On session allowlist approval, also add domain to the project's cached `Allowlist` so subsequent requests from the same project don't re-prompt
+- [x] **Test**: Integration test (unit-level, no Docker) — create all components, submit domain request through proxy mock, approve via server endpoint, verify domain is allowed on next request
 
 ### 6.7.2 DomainApproverImpl
-- [ ] Create `internal/guardian/domain_approver.go`
-- [ ] Implement `DomainApprover` interface using `DomainQueue`:
+- [x] Create `internal/guardian/domain_approver.go`
+- [x] Implement `DomainApprover` interface using `DomainQueue`:
   - Create `DomainRequest` with response channel
   - Call `DomainQueue.Add(req)`
   - Block on response channel
   - Return `DomainApprovalResult` based on response
-- [ ] On "session" scope approval, call `SessionAllowlist.Add(project, domain)` and add to `AllowlistCache` project entry
-- [ ] On "project"/"global" scope approval, `ConfigPersister` handles persistence (already called from server handler), then clear+reload relevant `AllowlistCache` entry
-- [ ] **Test**: Unit test — submit request, approve on channel, verify result
-- [ ] **Test**: Unit test — submit request, timeout, verify timeout result
+- [x] On "session" scope approval, call `SessionAllowlist.Add(project, domain)` and add to `AllowlistCache` project entry
+- [x] On "project"/"global" scope approval, `ConfigPersister` handles persistence (already called from server handler), then clear+reload relevant `AllowlistCache` entry
+- [x] **Test**: Unit test — submit request, approve on channel, verify result
+- [x] **Test**: Unit test — submit request, timeout, verify timeout result
 
 ---
 
