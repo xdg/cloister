@@ -79,14 +79,14 @@ Create a separate queue for domain approval requests, distinct from the existing
 Track domains approved with "session" scope in memory. These are per-project, ephemeral (lost on guardian restart), and checked by the proxy before consulting the persistent allowlist.
 
 ### 6.2.1 SessionAllowlist type
-- [ ] Create `internal/guardian/session_allowlist.go`
-- [ ] Define `SessionAllowlist` struct: thread-safe map of `projectName -> set of domains`
-- [ ] `Add(project, domain string)` — add domain to project's session set
-- [ ] `IsAllowed(project, domain string) bool` — check if domain is in project's session set
-- [ ] `Clear(project string)` — remove all session domains for a project (for cloister stop)
-- [ ] `ClearAll()` — remove all session domains (for guardian restart)
-- [ ] **Test**: Unit test for Add/IsAllowed with multiple projects isolated from each other
-- [ ] **Test**: Unit test for Clear per-project without affecting other projects
+- [x] Create `internal/guardian/session_allowlist.go`
+- [x] Define `SessionAllowlist` struct: thread-safe map of `projectName -> set of domains`
+- [x] `Add(project, domain string)` — add domain to project's session set
+- [x] `IsAllowed(project, domain string) bool` — check if domain is in project's session set
+- [x] `Clear(project string)` — remove all session domains for a project (for cloister stop)
+- [x] `ClearAll()` — remove all session domains (for guardian restart)
+- [x] **Test**: Unit test for Add/IsAllowed with multiple projects isolated from each other
+- [x] **Test**: Unit test for Clear per-project without affecting other projects
 
 ---
 
