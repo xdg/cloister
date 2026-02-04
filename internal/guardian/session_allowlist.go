@@ -5,7 +5,7 @@ import (
 	"sync"
 )
 
-// SessionAllowlist tracks domains approved with "session" scope.
+// MemorySessionAllowlist tracks domains approved with "session" scope.
 // These are per-project, ephemeral (lost on guardian restart), and checked
 // by the proxy before consulting the persistent allowlist.
 // All methods are thread-safe.
@@ -20,14 +20,14 @@ import (
 //   - Each project maintains a set of approved domains in memory
 //   - Call Size() periodically to monitor memory usage
 //   - Clear(project) MUST be called when cloisters stop to prevent unbounded growth
-type SessionAllowlist struct {
+type MemorySessionAllowlist struct {
 	mu       sync.RWMutex
 	projects map[string]map[string]struct{} // project -> domain set
 }
 
-// NewSessionAllowlist creates an empty SessionAllowlist.
-func NewSessionAllowlist() *SessionAllowlist {
-	return &SessionAllowlist{
+// NewSessionAllowlist creates an empty MemorySessionAllowlist.
+func NewSessionAllowlist() *MemorySessionAllowlist {
+	return &MemorySessionAllowlist{
 		projects: make(map[string]map[string]struct{}),
 	}
 }
@@ -42,7 +42,7 @@ var (
 // Add adds a domain to the project's session set.
 // If the project doesn't exist yet, it is created.
 // Returns an error if project or domain is empty.
-func (s *SessionAllowlist) Add(project, domain string) error {
+func (s *MemorySessionAllowlist) Add(project, domain string) error {
 	if project == "" {
 		return ErrEmptyProject
 	}
@@ -62,7 +62,7 @@ func (s *SessionAllowlist) Add(project, domain string) error {
 
 // IsAllowed checks if a domain is in the project's session set.
 // Returns false if the project doesn't exist or the domain is not in the set.
-func (s *SessionAllowlist) IsAllowed(project, domain string) bool {
+func (s *MemorySessionAllowlist) IsAllowed(project, domain string) bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -77,7 +77,7 @@ func (s *SessionAllowlist) IsAllowed(project, domain string) bool {
 // Clear removes all session domains for a project.
 // This is typically called when a cloister stops.
 // If the project doesn't exist, this is a no-op.
-func (s *SessionAllowlist) Clear(project string) {
+func (s *MemorySessionAllowlist) Clear(project string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.projects, project)
@@ -85,7 +85,7 @@ func (s *SessionAllowlist) Clear(project string) {
 
 // ClearAll removes all session domains for all projects.
 // This is typically called when the guardian restarts.
-func (s *SessionAllowlist) ClearAll() {
+func (s *MemorySessionAllowlist) ClearAll() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.projects = make(map[string]map[string]struct{})
@@ -93,7 +93,7 @@ func (s *SessionAllowlist) ClearAll() {
 
 // Size returns the number of tracked projects and total number of domains
 // across all projects for memory monitoring.
-func (s *SessionAllowlist) Size() (projects int, domains int) {
+func (s *MemorySessionAllowlist) Size() (projects int, domains int) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

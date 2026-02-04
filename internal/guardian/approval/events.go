@@ -18,6 +18,10 @@ const (
 	EventRequestRemoved EventType = "request-removed"
 	// EventHeartbeat is sent periodically to keep the connection alive.
 	EventHeartbeat EventType = "heartbeat"
+	// EventDomainRequestAdded is sent when a new domain approval request is added.
+	EventDomainRequestAdded EventType = "domain-request-added"
+	// EventDomainRequestRemoved is sent when a domain request is removed (approved/denied/timed out).
+	EventDomainRequestRemoved EventType = "domain-request-removed"
 )
 
 // Event represents an SSE event to be broadcast to clients.
@@ -144,6 +148,39 @@ func (h *EventHub) BroadcastRequestRemoved(id string) {
 	data, _ := json.Marshal(RemovedEventData{ID: id})
 	h.Broadcast(Event{
 		Type: EventRequestRemoved,
+		Data: string(data),
+	})
+}
+
+// BroadcastDomainRequestAdded broadcasts a domain-request-added event.
+// This is a placeholder for Phase 6.5 - currently just broadcasts a simple event.
+func (h *EventHub) BroadcastDomainRequestAdded(req *DomainRequest) {
+	// For now, just broadcast a simple JSON event
+	// Phase 6.5 will add proper template rendering
+	data := struct {
+		ID       string `json:"id"`
+		Domain   string `json:"domain"`
+		Project  string `json:"project"`
+		Cloister string `json:"cloister"`
+	}{
+		ID:       req.ID,
+		Domain:   req.Domain,
+		Project:  req.Project,
+		Cloister: req.Cloister,
+	}
+	jsonData, _ := json.Marshal(data)
+	h.Broadcast(Event{
+		Type: "domain-request-added",
+		Data: string(jsonData),
+	})
+}
+
+// BroadcastDomainRequestRemoved broadcasts a domain-request-removed event.
+// This is a placeholder for Phase 6.5 - currently just broadcasts the ID.
+func (h *EventHub) BroadcastDomainRequestRemoved(id string) {
+	data, _ := json.Marshal(RemovedEventData{ID: id})
+	h.Broadcast(Event{
+		Type: "domain-request-removed",
 		Data: string(data),
 	})
 }

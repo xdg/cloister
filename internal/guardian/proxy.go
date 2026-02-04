@@ -40,6 +40,24 @@ type TokenValidator interface {
 // ConfigReloader is a function that returns a new Allowlist based on reloaded configuration.
 type ConfigReloader func() (*Allowlist, error)
 
+// DomainApprovalResult represents the result of a domain approval request.
+type DomainApprovalResult struct {
+	Approved bool
+	Scope    string // "session", "project", or "global"
+}
+
+// DomainApprover requests human approval for unlisted domains.
+// Implementations should block until approval/denial/timeout (typically 60s).
+type DomainApprover interface {
+	RequestApproval(project, cloister, domain string) (DomainApprovalResult, error)
+}
+
+// SessionAllowlist tracks ephemeral session-approved domains per project.
+type SessionAllowlist interface {
+	IsAllowed(project, domain string) bool
+	Add(project, domain string) error
+}
+
 // ProxyServer is an HTTP CONNECT proxy that enforces domain allowlists
 // for cloister containers.
 type ProxyServer struct {
@@ -61,6 +79,14 @@ type ProxyServer struct {
 	// TokenLookup provides token-to-project mapping for per-project allowlists.
 	// If nil, the global Allowlist is used for all requests.
 	TokenLookup TokenLookupFunc
+
+	// DomainApprover requests human approval for unlisted domains. If nil, unlisted
+	// domains are immediately rejected with 403 (preserving current behavior).
+	DomainApprover DomainApprover
+
+	// SessionAllowlist tracks domains approved with "session" scope (ephemeral).
+	// If nil, session allowlist checks are skipped.
+	SessionAllowlist SessionAllowlist
 
 	server         *http.Server
 	listener       net.Listener
@@ -342,10 +368,35 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// Get the allowlist to use for this request
 	allowlist := p.getAllowlistForRequest(r)
 
-	// Check allowlist
-	if allowlist == nil || !allowlist.IsAllowed(host) {
-		http.Error(w, "Forbidden - domain not in allowlist", http.StatusForbidden)
-		return
+	// Extract project name once for reuse
+	projectName := p.extractProjectName(r)
+
+	// Check allowlist - if allowed, proceed immediately
+	allowed := allowlist != nil && allowlist.IsAllowed(host)
+
+	if !allowed {
+		// Not in persistent allowlist - check session allowlist
+		if p.SessionAllowlist != nil && projectName != "" {
+			if p.SessionAllowlist.IsAllowed(projectName, host) {
+				allowed = true
+			}
+		}
+
+		// If still not allowed, try domain approver
+		if !allowed {
+			if p.DomainApprover == nil {
+				// No approver - reject immediately (backward compatible)
+				http.Error(w, "Forbidden - domain not in allowlist", http.StatusForbidden)
+				return
+			}
+
+			// Request approval (blocks until response)
+			result, err := p.DomainApprover.RequestApproval(projectName, "", host)
+			if err != nil || !result.Approved {
+				http.Error(w, "Forbidden - domain not approved", http.StatusForbidden)
+				return
+			}
+		}
 	}
 
 	// Establish connection to upstream server.
@@ -416,6 +467,24 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	wg.Wait()
+}
+
+// extractProjectName extracts the project name from the request token.
+// Returns empty string if project cannot be determined.
+func (p *ProxyServer) extractProjectName(r *http.Request) string {
+	if p.TokenLookup == nil {
+		return ""
+	}
+
+	// Extract token from Proxy-Authorization header
+	token, ok := p.parseBasicAuth(r.Header.Get("Proxy-Authorization"))
+	if !ok || token == "" {
+		return ""
+	}
+
+	// Look up project for token
+	project, _ := p.TokenLookup(token)
+	return project
 }
 
 // copyWithIdleTimeout copies from src to dst, resetting the deadline on each read.

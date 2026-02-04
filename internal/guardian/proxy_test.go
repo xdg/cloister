@@ -1300,3 +1300,398 @@ func TestProxyServer_PerProjectAllowlist(t *testing.T) {
 		t.Errorf("project-a to global domain: expected 403, got %d", status)
 	}
 }
+
+// mockDomainApprover is a test implementation of DomainApprover.
+type mockDomainApprover struct {
+	approveFunc func(project, cloister, domain string) (DomainApprovalResult, error)
+	callCount   int
+	mu          sync.Mutex
+}
+
+func (m *mockDomainApprover) RequestApproval(project, cloister, domain string) (DomainApprovalResult, error) {
+	m.mu.Lock()
+	m.callCount++
+	m.mu.Unlock()
+	if m.approveFunc != nil {
+		return m.approveFunc(project, cloister, domain)
+	}
+	return DomainApprovalResult{Approved: false}, nil
+}
+
+func (m *mockDomainApprover) CallCount() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.callCount
+}
+
+func TestProxyServer_DomainApproval_NilApproverRejects(t *testing.T) {
+	// Test backward compatibility: nil DomainApprover returns 403 for unlisted domains
+	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{"allowed.com"})
+	// DomainApprover is nil by default
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// Try to connect to unlisted domain
+	connectReq := "CONNECT unlisted.com:443 HTTP/1.1\r\nHost: unlisted.com:443\r\n\r\n"
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+
+	if !strings.Contains(statusLine, "403") {
+		t.Errorf("expected 403 Forbidden for unlisted domain with nil approver, got: %s", statusLine)
+	}
+}
+
+func TestProxyServer_DomainApproval_ApprovalAllowsConnection(t *testing.T) {
+	// Test that when DomainApprover approves, connection proceeds
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanup := startMockUpstream(t, echoHandler)
+	defer cleanup()
+
+	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
+	p.DomainApprover = &mockDomainApprover{
+		approveFunc: func(project, cloister, domain string) (DomainApprovalResult, error) {
+			return DomainApprovalResult{Approved: true, Scope: "session"}, nil
+		},
+	}
+	// Configure per-project support so extractProjectName works
+	globalAllowlist := NewAllowlist([]string{})
+	cache := NewAllowlistCache(globalAllowlist)
+	cache.SetProject("test-project", NewAllowlist([]string{}))
+	p.AllowlistCache = cache
+	p.TokenLookup = func(token string) (string, bool) {
+		if token == "test-token" {
+			return "test-project", true
+		}
+		return "", false
+	}
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// Send CONNECT request with auth
+	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: %s\r\n\r\n",
+		upstreamAddr, upstreamAddr, authHeader)
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+
+	if !strings.Contains(statusLine, "200") {
+		t.Errorf("expected 200 Connection Established after approval, got: %s", statusLine)
+	}
+}
+
+func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
+	// Test that when DomainApprover denies, returns 403
+	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
+	p.DomainApprover = &mockDomainApprover{
+		approveFunc: func(project, cloister, domain string) (DomainApprovalResult, error) {
+			return DomainApprovalResult{Approved: false}, nil
+		},
+	}
+	// Configure per-project support
+	globalAllowlist := NewAllowlist([]string{})
+	cache := NewAllowlistCache(globalAllowlist)
+	cache.SetProject("test-project", NewAllowlist([]string{}))
+	p.AllowlistCache = cache
+	p.TokenLookup = func(token string) (string, bool) {
+		if token == "test-token" {
+			return "test-project", true
+		}
+		return "", false
+	}
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// Send CONNECT request with auth
+	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
+	connectReq := "CONNECT denied.com:443 HTTP/1.1\r\nHost: denied.com:443\r\nProxy-Authorization: " + authHeader + "\r\n\r\n"
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+
+	if !strings.Contains(statusLine, "403") {
+		t.Errorf("expected 403 Forbidden after denial, got: %s", statusLine)
+	}
+}
+
+func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
+	// Test that session allowlist hit bypasses DomainApprover entirely
+	approver := &mockDomainApprover{
+		approveFunc: func(project, cloister, domain string) (DomainApprovalResult, error) {
+			t.Error("DomainApprover should not be called when session allowlist matches")
+			return DomainApprovalResult{Approved: false}, nil
+		},
+	}
+
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanup := startMockUpstream(t, echoHandler)
+	defer cleanup()
+
+	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
+	p.DomainApprover = approver
+	p.SessionAllowlist = NewSessionAllowlist()
+	// Add the upstream to session allowlist
+	_ = p.SessionAllowlist.Add("test-project", upstreamAddr)
+
+	// Configure per-project support
+	globalAllowlist := NewAllowlist([]string{})
+	cache := NewAllowlistCache(globalAllowlist)
+	cache.SetProject("test-project", NewAllowlist([]string{}))
+	p.AllowlistCache = cache
+	p.TokenLookup = func(token string) (string, bool) {
+		if token == "test-token" {
+			return "test-project", true
+		}
+		return "", false
+	}
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// Send CONNECT request with auth
+	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
+	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: %s\r\n\r\n",
+		upstreamAddr, upstreamAddr, authHeader)
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+
+	if !strings.Contains(statusLine, "200") {
+		t.Errorf("expected 200 Connection Established via session allowlist, got: %s", statusLine)
+	}
+
+	// Verify approver was not called
+	if approver.CallCount() != 0 {
+		t.Errorf("expected DomainApprover to not be called, but it was called %d times", approver.CallCount())
+	}
+}
+
+func TestProxyServer_DomainApproval_TokenParsedOnce(t *testing.T) {
+	// Test that token is only parsed once during approval flow
+	parseCount := 0
+	var mu sync.Mutex
+
+	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
+	p.DomainApprover = &mockDomainApprover{
+		approveFunc: func(project, cloister, domain string) (DomainApprovalResult, error) {
+			// Verify project name was extracted correctly
+			if project != "test-project" {
+				t.Errorf("expected project 'test-project', got '%s'", project)
+			}
+			return DomainApprovalResult{Approved: false}, nil
+		},
+	}
+
+	// Configure per-project support with counting TokenLookup
+	globalAllowlist := NewAllowlist([]string{})
+	cache := NewAllowlistCache(globalAllowlist)
+	cache.SetProject("test-project", NewAllowlist([]string{}))
+	p.AllowlistCache = cache
+	p.TokenLookup = func(token string) (string, bool) {
+		mu.Lock()
+		parseCount++
+		mu.Unlock()
+		if token == "test-token" {
+			return "test-project", true
+		}
+		return "", false
+	}
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// Send CONNECT request with auth
+	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
+	connectReq := "CONNECT unlisted.com:443 HTTP/1.1\r\nHost: unlisted.com:443\r\nProxy-Authorization: " + authHeader + "\r\n\r\n"
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	// Read response (should be 403)
+	reader := bufio.NewReader(conn)
+	_, err = reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+
+	// Verify token was parsed exactly twice:
+	// 1. In authenticate() for TokenValidator.Validate
+	// 2. In extractProjectName() for project lookup
+	mu.Lock()
+	count := parseCount
+	mu.Unlock()
+
+	if count != 2 {
+		t.Errorf("expected token to be parsed exactly 2 times, but was parsed %d times", count)
+	}
+}
+
+func TestProxyServer_DomainApproval_EmptyHostRejected(t *testing.T) {
+	// Test that empty host is rejected early
+	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{})
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer conn.Close()
+
+	// Send CONNECT request with empty host
+	connectReq := "CONNECT HTTP/1.1\r\n\r\n"
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+
+	if !strings.Contains(statusLine, "400") {
+		t.Errorf("expected 400 Bad Request for empty host, got: %s", statusLine)
+	}
+}

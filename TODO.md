@@ -95,7 +95,7 @@ Track domains approved with "session" scope in memory. These are per-project, ep
 Modify `handleConnect` in the proxy to hold blocked requests instead of returning 403 immediately. The proxy checks session allowlist first, then submits to the domain queue and waits for a response.
 
 ### 6.3.1 Add DomainApprover interface and proxy integration
-- [ ] Define `DomainApprover` interface in `internal/guardian/proxy.go`:
+- [x] Define `DomainApprover` interface in `internal/guardian/proxy.go`:
   ```go
   type DomainApprover interface {
       RequestApproval(project, cloister, domain string) (DomainApprovalResult, error)
@@ -105,19 +105,19 @@ Modify `handleConnect` in the proxy to hold blocked requests instead of returnin
       Scope    string // "session", "project", "global"
   }
   ```
-- [ ] Add `DomainApprover` field to `ProxyServer` struct (nil = reject immediately, preserving current behavior)
-- [ ] Add `SessionAllowlist` field to `ProxyServer` struct (nil = skip session check)
-- [ ] Modify `handleConnect`: when domain is not in persistent allowlist:
+- [x] Add `DomainApprover` field to `ProxyServer` struct (nil = reject immediately, preserving current behavior)
+- [x] Add `SessionAllowlist` field to `ProxyServer` struct (nil = skip session check)
+- [x] Modify `handleConnect`: when domain is not in persistent allowlist:
   1. Check `SessionAllowlist.IsAllowed(project, domain)` — if allowed, proceed
   2. If `DomainApprover` is nil, return 403 (backward-compatible)
   3. Call `DomainApprover.RequestApproval(...)` (blocks up to timeout)
   4. If approved, proceed to dial upstream
   5. If denied/timeout, return 403
-- [ ] Extract token and project from request for session allowlist and approval context
-- [ ] **Test**: Unit test — nil DomainApprover returns 403 (backward-compatible)
-- [ ] **Test**: Unit test — DomainApprover approves, connection proceeds
-- [ ] **Test**: Unit test — DomainApprover denies, returns 403
-- [ ] **Test**: Unit test — session allowlist hit bypasses DomainApprover entirely
+- [x] Extract token and project from request for session allowlist and approval context
+- [x] **Test**: Unit test — nil DomainApprover returns 403 (backward-compatible)
+- [x] **Test**: Unit test — DomainApprover approves, connection proceeds
+- [x] **Test**: Unit test — DomainApprover denies, returns 403
+- [x] **Test**: Unit test — session allowlist hit bypasses DomainApprover entirely
 
 ---
 
