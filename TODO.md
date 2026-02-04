@@ -58,19 +58,19 @@ relevant newly-created and modified files.
 Create a separate queue for domain approval requests, distinct from the existing hostexec command queue. Domain requests have different fields (domain instead of cmd) and different response semantics (scope-based approval).
 
 ### 6.1.1 DomainRequest and DomainQueue types
-- [ ] Create `internal/guardian/approval/domain_queue.go`
-- [ ] Define `DomainRequest` struct: `ID`, `Cloister`, `Project`, `Domain`, `Timestamp`, `ExpiresAt`, `Response chan<- DomainResponse`
-- [ ] Define `DomainResponse` struct: `Status` (approved/denied/timeout), `Scope` (session/project/global), `Reason`
-- [ ] Implement `DomainQueue` with same pattern as existing `Queue`: thread-safe map, timeout goroutines, cancel functions
-- [ ] `Add(req *DomainRequest) (string, error)` — generate ID, start timeout, broadcast SSE event
-- [ ] `Get(id string) (*DomainRequest, bool)`
-- [ ] `Remove(id string)`
-- [ ] `List() []DomainRequest` (omit Response channel in copies)
-- [ ] `Len() int`
-- [ ] Wire `EventHub` for domain-specific SSE events via `SetEventHub`
-- [ ] **Test**: Unit test for Add/Get/Remove/List lifecycle
-- [ ] **Test**: Unit test for timeout — request times out, response channel receives timeout status
-- [ ] **Test**: Unit test for cancel — approve before timeout, timeout goroutine is a no-op
+- [x] Create `internal/guardian/approval/domain_queue.go`
+- [x] Define `DomainRequest` struct: `ID`, `Cloister`, `Project`, `Domain`, `Timestamp`, `ExpiresAt`, `Response chan<- DomainResponse`
+- [x] Define `DomainResponse` struct: `Status` (approved/denied/timeout), `Scope` (session/project/global), `Reason`
+- [x] Implement `DomainQueue` with same pattern as existing `Queue`: thread-safe map, timeout goroutines, cancel functions
+- [x] `Add(req *DomainRequest) (string, error)` — generate ID, start timeout, broadcast SSE event
+- [x] `Get(id string) (*DomainRequest, bool)`
+- [x] `Remove(id string)`
+- [x] `List() []DomainRequest` (omit Response channel in copies)
+- [x] `Len() int`
+- [x] Wire `EventHub` for domain-specific SSE events via `SetEventHub`
+- [x] **Test**: Unit test for Add/Get/Remove/List lifecycle
+- [x] **Test**: Unit test for timeout — request times out, response channel receives timeout status
+- [x] **Test**: Unit test for cancel — approve before timeout, timeout goroutine is a no-op
 
 ---
 
