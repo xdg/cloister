@@ -7,10 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/version"
@@ -88,16 +88,15 @@ const (
 // ErrGuardianNotRunning indicates the guardian container is not running.
 var ErrGuardianNotRunning = errors.New("guardian container is not running")
 
-// hostCloisterPath returns a path under ~/.config/cloister/<subdir>.
+// hostCloisterPath returns a path under config.ConfigDir()/<subdir>.
+// Uses config.ConfigDir() which respects XDG_CONFIG_HOME.
 func hostCloisterPath(subdir string) (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
+	base := config.ConfigDir()
 	if subdir == "" {
-		return filepath.Join(home, ".config", "cloister"), nil
+		// ConfigDir() has trailing slash, remove it for consistency
+		return strings.TrimSuffix(base, "/"), nil
 	}
-	return filepath.Join(home, ".config", "cloister", subdir), nil
+	return base + subdir, nil
 }
 
 // HostTokenDir returns the token directory path on the host.

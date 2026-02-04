@@ -20,10 +20,10 @@ import (
 )
 
 var (
-	mu        sync.Mutex
-	stdout    io.Writer = os.Stdout
-	stderr    io.Writer = os.Stderr
-	silent    bool
+	mu     sync.Mutex
+	stdout io.Writer = os.Stdout
+	stderr io.Writer = os.Stderr
+	silent bool
 )
 
 // SetSilent enables or disables silent mode.

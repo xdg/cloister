@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/xdg/cloister/internal/config"
 )
 
 // tokenFile is the JSON structure for persisted tokens.
@@ -17,13 +19,9 @@ type tokenFile struct {
 }
 
 // DefaultTokenDir returns the default directory for token storage.
-// This is ~/.config/cloister/tokens on the host.
+// This is config.ConfigDir() + "tokens", which respects XDG_CONFIG_HOME.
 func DefaultTokenDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
-	}
-	return filepath.Join(home, ".config", "cloister", "tokens"), nil
+	return config.ConfigDir() + "tokens", nil
 }
 
 // Store handles persistent token storage using one file per cloister.

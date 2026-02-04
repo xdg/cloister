@@ -39,7 +39,7 @@ func TestParseLevel(t *testing.T) {
 		{"error", LevelError},
 		{"err", LevelError},
 		{"ERROR", LevelError},
-		{"", LevelInfo},      // default
+		{"", LevelInfo},        // default
 		{"invalid", LevelInfo}, // default
 	}
 

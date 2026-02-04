@@ -34,11 +34,15 @@ func RequireCloisterBinary(t *testing.T) {
 // RequireGuardian ensures the guardian is running and registers cleanup.
 // This is for integration tests that manage their own guardian lifecycle.
 // Generates a unique instance ID so tests don't conflict with production or other tests.
+// Sets XDG_CONFIG_HOME to a temp dir so tests don't touch ~/.config/cloister.
 // Skips the test if the guardian cannot be started.
 func RequireGuardian(t *testing.T) {
 	t.Helper()
 	RequireDocker(t)
 	RequireCloisterBinary(t)
+
+	// Isolate config directory so tests don't touch ~/.config/cloister
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	// Generate unique instance ID for test isolation
 	t.Setenv(guardian.InstanceIDEnvVar, guardian.GenerateInstanceID())
@@ -57,10 +61,14 @@ func RequireGuardian(t *testing.T) {
 
 // RequireCleanGuardianState ensures no guardian is running and registers cleanup.
 // Generates a unique instance ID so tests operate on an isolated guardian.
+// Sets XDG_CONFIG_HOME to a temp dir so tests don't touch ~/.config/cloister.
 // Use this for tests that need exclusive control over guardian lifecycle.
 func RequireCleanGuardianState(t *testing.T) {
 	t.Helper()
 	RequireDocker(t)
+
+	// Isolate config directory so tests don't touch ~/.config/cloister
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	// Generate unique instance ID for test isolation.
 	// This means IsRunning() will check for our isolated instance, not production.
@@ -82,4 +90,3 @@ func RequireCleanGuardianState(t *testing.T) {
 		_, _ = docker.Run("rm", containerName)
 	})
 }
-

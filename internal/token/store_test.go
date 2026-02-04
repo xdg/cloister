@@ -142,6 +142,9 @@ func TestStore_DirectoryPermissions(t *testing.T) {
 }
 
 func TestDefaultTokenDir(t *testing.T) {
+	// Clear XDG_CONFIG_HOME to test default behavior
+	t.Setenv("XDG_CONFIG_HOME", "")
+
 	dir, err := DefaultTokenDir()
 	if err != nil {
 		t.Fatalf("DefaultTokenDir() error = %v", err)
@@ -164,6 +167,20 @@ func TestDefaultTokenDir(t *testing.T) {
 
 	// Should be exactly home + .config/cloister/tokens
 	expected := filepath.Join(home, ".config", "cloister", "tokens")
+	if dir != expected {
+		t.Errorf("DefaultTokenDir() = %v, want %v", dir, expected)
+	}
+}
+
+func TestDefaultTokenDir_XDGOverride(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/custom/config")
+
+	dir, err := DefaultTokenDir()
+	if err != nil {
+		t.Fatalf("DefaultTokenDir() error = %v", err)
+	}
+
+	expected := "/custom/config/cloister/tokens"
 	if dir != expected {
 		t.Errorf("DefaultTokenDir() = %v, want %v", dir, expected)
 	}
