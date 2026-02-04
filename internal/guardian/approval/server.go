@@ -39,6 +39,12 @@ func init() {
 // This server is bound to localhost only for security (host-accessible only).
 const DefaultApprovalPort = 9999
 
+// ConfigPersister is the interface for persisting approved domains to config files.
+type ConfigPersister interface {
+	AddDomainToProject(project, domain string) error
+	AddDomainToGlobal(domain string) error
+}
+
 // Server handles approval requests from the host via a web UI.
 // It provides endpoints for viewing pending requests and approving/denying them.
 type Server struct {
@@ -47,6 +53,12 @@ type Server struct {
 
 	// Queue holds pending requests awaiting human approval.
 	Queue *Queue
+
+	// DomainQueue holds pending domain approval requests awaiting human decision.
+	DomainQueue *DomainQueue
+
+	// ConfigPersister persists approved domains to config files.
+	ConfigPersister ConfigPersister
 
 	// Events is the event hub for SSE connections.
 	Events *EventHub
@@ -99,6 +111,9 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /events", s.handleEvents)
 	mux.HandleFunc("POST /approve/{id}", s.handleApprove)
 	mux.HandleFunc("POST /deny/{id}", s.handleDeny)
+	mux.HandleFunc("GET /pending-domains", s.handlePendingDomains)
+	mux.HandleFunc("POST /approve-domain/{id}", s.handleApproveDomain)
+	mux.HandleFunc("POST /deny-domain/{id}", s.handleDenyDomain)
 	staticSubFS, _ := fs.Sub(staticFS, "static")
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
 
@@ -326,7 +341,9 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 	cloister := req.Cloister
 
 	// Log APPROVE event
-	_ = s.AuditLogger.LogApprove(project, branch, cloister, cmd, "user")
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.LogApprove(project, branch, cloister, cmd, "user")
+	}
 
 	// Send approved response on the request's channel.
 	// The request handler is blocked waiting on this channel and will
@@ -397,7 +414,9 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Log DENY event
-	_ = s.AuditLogger.LogDeny(project, branch, cloister, cmd, reason)
+	if s.AuditLogger != nil {
+		_ = s.AuditLogger.LogDeny(project, branch, cloister, cmd, reason)
+	}
 
 	// Send denied response on the request's channel
 	if req.Response != nil {
@@ -453,4 +472,211 @@ func (s *Server) writeResultHTML(w http.ResponseWriter, id, status, cmd string) 
 	if err := templates.ExecuteTemplate(w, "result", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
+}
+
+// pendingDomainRequestJSON represents a pending domain request in JSON format for the API.
+type pendingDomainRequestJSON struct {
+	ID        string `json:"id"`
+	Cloister  string `json:"cloister"`
+	Project   string `json:"project"`
+	Domain    string `json:"domain"`
+	Timestamp string `json:"timestamp"`
+}
+
+// pendingDomainsResponse is the response body for GET /pending-domains.
+type pendingDomainsResponse struct {
+	Requests []pendingDomainRequestJSON `json:"requests"`
+}
+
+// handlePendingDomains returns a JSON array of pending domain requests.
+func (s *Server) handlePendingDomains(w http.ResponseWriter, r *http.Request) {
+	if s.DomainQueue == nil {
+		s.writeError(w, http.StatusInternalServerError, "domain queue not initialized")
+		return
+	}
+
+	pending := s.DomainQueue.List()
+
+	response := pendingDomainsResponse{
+		Requests: make([]pendingDomainRequestJSON, len(pending)),
+	}
+
+	for i, req := range pending {
+		response.Requests[i] = pendingDomainRequestJSON{
+			ID:        req.ID,
+			Cloister:  req.Cloister,
+			Project:   req.Project,
+			Domain:    req.Domain,
+			Timestamp: req.Timestamp.Format(time.RFC3339),
+		}
+	}
+
+	s.writeJSON(w, http.StatusOK, response)
+}
+
+// approveDomainRequest is the request body for POST /approve-domain/{id}.
+type approveDomainRequest struct {
+	Scope string `json:"scope"` // "session", "project", or "global"
+}
+
+// approveDomainResponse is the response body for POST /approve-domain/{id}.
+type approveDomainResponse struct {
+	Status string `json:"status"`
+	ID     string `json:"id"`
+	Scope  string `json:"scope"`
+}
+
+// handleApproveDomain approves a pending domain request by ID.
+func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
+	if s.DomainQueue == nil {
+		s.writeError(w, http.StatusInternalServerError, "domain queue not initialized")
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		s.writeError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+
+	// Parse scope from request body
+	var approveReq approveDomainRequest
+	if err := json.NewDecoder(r.Body).Decode(&approveReq); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	scope := approveReq.Scope
+	if scope != "session" && scope != "project" && scope != "global" {
+		s.writeError(w, http.StatusBadRequest, "scope must be session, project, or global")
+		return
+	}
+
+	// Check if ConfigPersister is available for project/global scopes
+	if (scope == "project" || scope == "global") && s.ConfigPersister == nil {
+		s.writeError(w, http.StatusInternalServerError, "config persistence not available")
+		return
+	}
+
+	req, ok := s.DomainQueue.Get(id)
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "request not found")
+		return
+	}
+
+	// Persist to config if needed
+	if scope == "project" {
+		if err := s.ConfigPersister.AddDomainToProject(req.Project, req.Domain); err != nil {
+			// Send denied response so client doesn't wait for timeout
+			if req.Response != nil {
+				req.Response <- DomainResponse{
+					Status: "denied",
+					Reason: fmt.Sprintf("failed to persist domain to project: %v", err),
+				}
+			}
+			// Remove from queue (also cancels timeout)
+			s.DomainQueue.Remove(id)
+			// Broadcast removal event to SSE clients
+			s.Events.BroadcastDomainRequestRemoved(id)
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to persist domain to project: %v", err))
+			return
+		}
+	} else if scope == "global" {
+		if err := s.ConfigPersister.AddDomainToGlobal(req.Domain); err != nil {
+			// Send denied response so client doesn't wait for timeout
+			if req.Response != nil {
+				req.Response <- DomainResponse{
+					Status: "denied",
+					Reason: fmt.Sprintf("failed to persist domain to global: %v", err),
+				}
+			}
+			// Remove from queue (also cancels timeout)
+			s.DomainQueue.Remove(id)
+			// Broadcast removal event to SSE clients
+			s.Events.BroadcastDomainRequestRemoved(id)
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to persist domain to global: %v", err))
+			return
+		}
+	}
+
+	// Send approved response on the request's channel BEFORE removing from queue
+	// to prevent race conditions
+	if req.Response != nil {
+		req.Response <- DomainResponse{
+			Status: "approved",
+			Scope:  scope,
+		}
+	}
+
+	// Remove from queue (also cancels timeout)
+	s.DomainQueue.Remove(id)
+
+	// Broadcast removal event to SSE clients
+	s.Events.BroadcastDomainRequestRemoved(id)
+
+	s.writeJSON(w, http.StatusOK, approveDomainResponse{
+		Status: "approved",
+		ID:     id,
+		Scope:  scope,
+	})
+}
+
+// denyDomainRequest is the optional request body for POST /deny-domain/{id}.
+type denyDomainRequest struct {
+	Reason string `json:"reason,omitempty"`
+}
+
+// denyDomainResponse is the response body for POST /deny-domain/{id}.
+type denyDomainResponse struct {
+	Status string `json:"status"`
+	ID     string `json:"id"`
+}
+
+// handleDenyDomain denies a pending domain request by ID.
+func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
+	if s.DomainQueue == nil {
+		s.writeError(w, http.StatusInternalServerError, "domain queue not initialized")
+		return
+	}
+
+	id := r.PathValue("id")
+	if id == "" {
+		s.writeError(w, http.StatusBadRequest, "id is required")
+		return
+	}
+
+	req, ok := s.DomainQueue.Get(id)
+	if !ok {
+		s.writeError(w, http.StatusNotFound, "request not found")
+		return
+	}
+
+	// Parse optional reason from request body
+	var denyReq denyDomainRequest
+	// Ignore decode errors - reason is optional
+	_ = json.NewDecoder(r.Body).Decode(&denyReq)
+
+	reason := denyReq.Reason
+	if reason == "" {
+		reason = "Denied by user"
+	}
+
+	// Send denied response on the request's channel
+	if req.Response != nil {
+		req.Response <- DomainResponse{
+			Status: "denied",
+			Reason: reason,
+		}
+	}
+
+	// Remove from queue (also cancels timeout)
+	s.DomainQueue.Remove(id)
+
+	// Broadcast removal event to SSE clients
+	s.Events.BroadcastDomainRequestRemoved(id)
+
+	s.writeJSON(w, http.StatusOK, denyDomainResponse{
+		Status: "denied",
+		ID:     id,
+	})
 }

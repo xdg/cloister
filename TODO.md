@@ -126,26 +126,26 @@ Modify `handleConnect` in the proxy to hold blocked requests instead of returnin
 Add endpoints to the approval server for listing, approving, and denying domain requests. These endpoints mirror the existing hostexec pattern but add a `scope` parameter.
 
 ### 6.4.1 Domain queue field and new HTTP handlers
-- [ ] Add `DomainQueue *DomainQueue` field to approval `Server` struct
-- [ ] Add `ConfigPersister` interface field (for saving approved domains to config files):
+- [x] Add `DomainQueue *DomainQueue` field to approval `Server` struct
+- [x] Add `ConfigPersister` interface field (for saving approved domains to config files):
   ```go
   type ConfigPersister interface {
       AddDomainToProject(project, domain string) error
       AddDomainToGlobal(domain string) error
   }
   ```
-- [ ] Register new routes in `Start()`:
+- [x] Register new routes in `Start()`:
   - `GET /pending-domains` — list pending domain requests as JSON
   - `POST /approve-domain/{id}` — approve with `{"scope": "session|project|global"}`
   - `POST /deny-domain/{id}` — deny with optional reason
-- [ ] `handlePendingDomains`: serialize `DomainQueue.List()` to JSON
-- [ ] `handleApproveDomain`: parse scope from body, send `DomainResponse` on channel, persist if scope is project/global via `ConfigPersister`, broadcast SSE removal
-- [ ] `handleDenyDomain`: send denied `DomainResponse`, broadcast SSE removal
-- [ ] **Test**: Handler test for `GET /pending-domains` — returns JSON array
-- [ ] **Test**: Handler test for `POST /approve-domain/{id}` with scope "session" — no config persistence, response sent
-- [ ] **Test**: Handler test for `POST /approve-domain/{id}` with scope "project" — calls `ConfigPersister.AddDomainToProject`
-- [ ] **Test**: Handler test for `POST /deny-domain/{id}` — response sent, removed from queue
-- [ ] **Test**: Handler test for approve/deny with unknown ID — returns 404
+- [x] `handlePendingDomains`: serialize `DomainQueue.List()` to JSON
+- [x] `handleApproveDomain`: parse scope from body, send `DomainResponse` on channel, persist if scope is project/global via `ConfigPersister`, broadcast SSE removal
+- [x] `handleDenyDomain`: send denied `DomainResponse`, broadcast SSE removal
+- [x] **Test**: Handler test for `GET /pending-domains` — returns JSON array
+- [x] **Test**: Handler test for `POST /approve-domain/{id}` with scope "session" — no config persistence, response sent
+- [x] **Test**: Handler test for `POST /approve-domain/{id}` with scope "project" — calls `ConfigPersister.AddDomainToProject`
+- [x] **Test**: Handler test for `POST /deny-domain/{id}` — response sent, removed from queue
+- [x] **Test**: Handler test for approve/deny with unknown ID — returns 404
 
 ---
 

@@ -886,3 +886,612 @@ func TestServer_HandleApprove_NilAuditLogger(t *testing.T) {
 	// Drain the response channel
 	<-respChan
 }
+
+// Tests for domain approval handlers
+
+func TestServer_HandlePendingDomains_Empty(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	req := httptest.NewRequest(http.MethodGet, "/pending-domains", nil)
+	rr := httptest.NewRecorder()
+
+	server.handlePendingDomains(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	contentType := rr.Header().Get("Content-Type")
+	if contentType != "application/json" {
+		t.Errorf("expected Content-Type application/json, got %s", contentType)
+	}
+
+	var resp pendingDomainsResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(resp.Requests) != 0 {
+		t.Errorf("expected 0 requests, got %d", len(resp.Requests))
+	}
+}
+
+func TestServer_HandlePendingDomains_WithRequests(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Date(2024, 1, 15, 14, 32, 5, 0, time.UTC),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	httpReq := httptest.NewRequest(http.MethodGet, "/pending-domains", nil)
+	rr := httptest.NewRecorder()
+
+	server.handlePendingDomains(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp pendingDomainsResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if len(resp.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(resp.Requests))
+	}
+
+	r := resp.Requests[0]
+	if r.ID != id {
+		t.Errorf("expected ID %s, got %s", id, r.ID)
+	}
+	if r.Cloister != "test-cloister" {
+		t.Errorf("expected cloister 'test-cloister', got %q", r.Cloister)
+	}
+	if r.Project != "test-project" {
+		t.Errorf("expected project 'test-project', got %q", r.Project)
+	}
+	if r.Domain != "example.com" {
+		t.Errorf("expected domain 'example.com', got %q", r.Domain)
+	}
+	if r.Timestamp != "2024-01-15T14:32:05Z" {
+		t.Errorf("expected timestamp '2024-01-15T14:32:05Z', got %q", r.Timestamp)
+	}
+}
+
+func TestServer_HandlePendingDomains_NilDomainQueue(t *testing.T) {
+	queue := NewQueue()
+	server := NewServer(queue, nil)
+	// DomainQueue is nil by default
+
+	req := httptest.NewRequest(http.MethodGet, "/pending-domains", nil)
+	rr := httptest.NewRecorder()
+
+	server.handlePendingDomains(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+
+	var resp errorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "domain queue not initialized" {
+		t.Errorf("expected error 'domain queue not initialized', got %q", resp.Error)
+	}
+}
+
+// mockConfigPersister is a test double for ConfigPersister.
+type mockConfigPersister struct {
+	addDomainToProjectCalls []struct {
+		project string
+		domain  string
+	}
+	addDomainToGlobalCalls []struct {
+		domain string
+	}
+	addDomainToProjectErr error
+	addDomainToGlobalErr  error
+}
+
+func (m *mockConfigPersister) AddDomainToProject(project, domain string) error {
+	m.addDomainToProjectCalls = append(m.addDomainToProjectCalls, struct {
+		project string
+		domain  string
+	}{project, domain})
+	return m.addDomainToProjectErr
+}
+
+func (m *mockConfigPersister) AddDomainToGlobal(domain string) error {
+	m.addDomainToGlobalCalls = append(m.addDomainToGlobalCalls, struct {
+		domain string
+	}{domain})
+	return m.addDomainToGlobalErr
+}
+
+func TestServer_HandleApproveDomain_SessionScope(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	// ConfigPersister is nil (not needed for session scope)
+
+	body := `{"scope": "session"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+	if resp.ID != id {
+		t.Errorf("expected ID %s, got %s", id, resp.ID)
+	}
+	if resp.Scope != "session" {
+		t.Errorf("expected scope 'session', got %q", resp.Scope)
+	}
+
+	// Verify the response was sent on the channel
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "session" {
+			t.Errorf("expected approval response scope 'session', got %q", approvalResp.Scope)
+		}
+	default:
+		t.Error("expected approval response on channel")
+	}
+
+	// Verify request was removed from queue
+	if domainQueue.Len() != 0 {
+		t.Errorf("expected domain queue to be empty, got %d", domainQueue.Len())
+	}
+}
+
+func TestServer_HandleApproveDomain_ProjectScope(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	mockPersister := &mockConfigPersister{}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	server.ConfigPersister = mockPersister
+
+	body := `{"scope": "project"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+	if resp.Scope != "project" {
+		t.Errorf("expected scope 'project', got %q", resp.Scope)
+	}
+
+	// Verify ConfigPersister.AddDomainToProject was called
+	if len(mockPersister.addDomainToProjectCalls) != 1 {
+		t.Fatalf("expected AddDomainToProject to be called once, got %d calls", len(mockPersister.addDomainToProjectCalls))
+	}
+	call := mockPersister.addDomainToProjectCalls[0]
+	if call.project != "test-project" {
+		t.Errorf("expected project 'test-project', got %q", call.project)
+	}
+	if call.domain != "example.com" {
+		t.Errorf("expected domain 'example.com', got %q", call.domain)
+	}
+
+	// Verify the response was sent on the channel
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "project" {
+			t.Errorf("expected approval response scope 'project', got %q", approvalResp.Scope)
+		}
+	default:
+		t.Error("expected approval response on channel")
+	}
+
+	// Verify request was removed from queue
+	if domainQueue.Len() != 0 {
+		t.Errorf("expected domain queue to be empty, got %d", domainQueue.Len())
+	}
+}
+
+func TestServer_HandleApproveDomain_GlobalScope(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	mockPersister := &mockConfigPersister{}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	server.ConfigPersister = mockPersister
+
+	body := `{"scope": "global"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+	if resp.Scope != "global" {
+		t.Errorf("expected scope 'global', got %q", resp.Scope)
+	}
+
+	// Verify ConfigPersister.AddDomainToGlobal was called
+	if len(mockPersister.addDomainToGlobalCalls) != 1 {
+		t.Fatalf("expected AddDomainToGlobal to be called once, got %d calls", len(mockPersister.addDomainToGlobalCalls))
+	}
+	call := mockPersister.addDomainToGlobalCalls[0]
+	if call.domain != "example.com" {
+		t.Errorf("expected domain 'example.com', got %q", call.domain)
+	}
+
+	// Verify the response was sent on the channel
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "global" {
+			t.Errorf("expected approval response scope 'global', got %q", approvalResp.Scope)
+		}
+	default:
+		t.Error("expected approval response on channel")
+	}
+
+	// Verify request was removed from queue
+	if domainQueue.Len() != 0 {
+		t.Errorf("expected domain queue to be empty, got %d", domainQueue.Len())
+	}
+}
+
+func TestServer_HandleDenyDomain_Success(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "suspicious.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, nil)
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDenyDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp denyDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q", resp.Status)
+	}
+	if resp.ID != id {
+		t.Errorf("expected ID %s, got %s", id, resp.ID)
+	}
+
+	// Verify the response was sent on the channel with default reason
+	select {
+	case denyResp := <-respChan:
+		if denyResp.Status != "denied" {
+			t.Errorf("expected denial response status 'denied', got %q", denyResp.Status)
+		}
+		if denyResp.Reason != "Denied by user" {
+			t.Errorf("expected default reason 'Denied by user', got %q", denyResp.Reason)
+		}
+	default:
+		t.Error("expected denial response on channel")
+	}
+
+	// Verify request was removed from queue
+	if domainQueue.Len() != 0 {
+		t.Errorf("expected domain queue to be empty, got %d", domainQueue.Len())
+	}
+}
+
+func TestServer_HandleDenyDomain_WithReason(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "suspicious.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	body := `{"reason": "Domain is known malware"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDenyDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	// Verify the response was sent with custom reason
+	select {
+	case denyResp := <-respChan:
+		if denyResp.Status != "denied" {
+			t.Errorf("expected denial response status 'denied', got %q", denyResp.Status)
+		}
+		if denyResp.Reason != "Domain is known malware" {
+			t.Errorf("expected reason 'Domain is known malware', got %q", denyResp.Reason)
+		}
+	default:
+		t.Error("expected denial response on channel")
+	}
+}
+
+func TestServer_HandleApproveDomain_NotFound(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	body := `{"scope": "session"}`
+	req := httptest.NewRequest(http.MethodPost, "/approve-domain/nonexistent", bytes.NewBufferString(body))
+	req.SetPathValue("id", "nonexistent")
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, rr.Code)
+	}
+
+	var resp errorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "request not found" {
+		t.Errorf("expected error 'request not found', got %q", resp.Error)
+	}
+}
+
+func TestServer_HandleDenyDomain_NotFound(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	req := httptest.NewRequest(http.MethodPost, "/deny-domain/nonexistent", nil)
+	req.SetPathValue("id", "nonexistent")
+	rr := httptest.NewRecorder()
+
+	server.handleDenyDomain(rr, req)
+
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected status %d, got %d", http.StatusNotFound, rr.Code)
+	}
+
+	var resp errorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "request not found" {
+		t.Errorf("expected error 'request not found', got %q", resp.Error)
+	}
+}
+
+func TestServer_HandleApproveDomain_InvalidScope(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	body := `{"scope": "invalid"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+
+	var resp errorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "scope must be session, project, or global" {
+		t.Errorf("expected error 'scope must be session, project, or global', got %q", resp.Error)
+	}
+}
+
+func TestServer_HandleApproveDomain_MissingConfigPersister(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	// ConfigPersister is nil
+
+	body := `{"scope": "project"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+
+	var resp errorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Error != "config persistence not available" {
+		t.Errorf("expected error 'config persistence not available', got %q", resp.Error)
+	}
+}

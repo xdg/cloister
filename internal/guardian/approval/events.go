@@ -70,6 +70,10 @@ func (h *EventHub) Subscribe() chan Event {
 
 // Unsubscribe removes a client from receiving events and closes its channel.
 func (h *EventHub) Unsubscribe(ch chan Event) {
+	if ch == nil {
+		return
+	}
+
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
