@@ -168,6 +168,7 @@ func TestMergeCommandPatterns_Empty(t *testing.T) {
 func TestResolveConfig_GlobalOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// No project name, should return global-only config
 	cfg, err := ResolveConfig("")
@@ -203,6 +204,7 @@ func TestResolveConfig_GlobalOnly(t *testing.T) {
 func TestResolveConfig_WithProject(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create project config directory
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
@@ -301,6 +303,7 @@ commands:
 func TestResolveConfig_ProjectNotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Project doesn't exist, should use default (empty) project config
 	cfg, err := ResolveConfig("nonexistent-project")
@@ -344,6 +347,7 @@ func TestResolveConfig_ProjectNotFound(t *testing.T) {
 func TestResolveConfig_MergeDedup(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create project config directory
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
@@ -399,6 +403,7 @@ commands:
 func TestResolveConfig_ManualApprovePatterns(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create project config directory
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
@@ -456,6 +461,7 @@ commands:
 func TestResolveConfig_ManualApproveDedup(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create project config directory
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
@@ -507,6 +513,7 @@ commands:
 func TestResolveConfig_GlobalOnlyManualApprove(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// No project name, should return global-only config
 	cfg, err := ResolveConfig("")

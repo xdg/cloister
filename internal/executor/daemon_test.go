@@ -1,42 +1,35 @@
-package executor
+package executor_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/xdg/cloister/internal/executor"
+	"github.com/xdg/cloister/internal/testutil"
 )
 
 func TestDaemonState_SaveLoadRemove(t *testing.T) {
-	// Create temp directory for state file
-	tmpDir, err := os.MkdirTemp("", "daemon-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	// Override the state directory for testing
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", originalHome)
+	testutil.IsolateXDGDirs(t)
 
 	// Test saving state
-	state := &DaemonState{
+	state := &executor.DaemonState{
 		PID:        12345,
 		Secret:     "test-secret-abc",
 		SocketPath: "/tmp/test.sock",
 	}
 
-	if err := SaveDaemonState(state); err != nil {
-		t.Fatalf("SaveDaemonState() error: %v", err)
+	if err := executor.SaveDaemonState(state); err != nil {
+		t.Fatalf("executor.SaveDaemonState() error: %v", err)
 	}
 
 	// Test loading state
-	loaded, err := LoadDaemonState()
+	loaded, err := executor.LoadDaemonState()
 	if err != nil {
-		t.Fatalf("LoadDaemonState() error: %v", err)
+		t.Fatalf("executor.LoadDaemonState() error: %v", err)
 	}
 	if loaded == nil {
-		t.Fatal("LoadDaemonState() returned nil")
+		t.Fatal("executor.LoadDaemonState() returned nil")
 	}
 	if loaded.PID != state.PID {
 		t.Errorf("PID: got %d, want %d", loaded.PID, state.PID)
@@ -49,14 +42,14 @@ func TestDaemonState_SaveLoadRemove(t *testing.T) {
 	}
 
 	// Test removing state
-	if err := RemoveDaemonState(); err != nil {
-		t.Fatalf("RemoveDaemonState() error: %v", err)
+	if err := executor.RemoveDaemonState(); err != nil {
+		t.Fatalf("executor.RemoveDaemonState() error: %v", err)
 	}
 
 	// Verify state is gone
-	loaded, err = LoadDaemonState()
+	loaded, err = executor.LoadDaemonState()
 	if err != nil {
-		t.Fatalf("LoadDaemonState() after remove error: %v", err)
+		t.Fatalf("executor.LoadDaemonState() after remove error: %v", err)
 	}
 	if loaded != nil {
 		t.Error("Expected nil state after removal")
@@ -64,21 +57,12 @@ func TestDaemonState_SaveLoadRemove(t *testing.T) {
 }
 
 func TestDaemonState_LoadNonExistent(t *testing.T) {
-	// Create temp directory with no state file
-	tmpDir, err := os.MkdirTemp("", "daemon-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", originalHome)
+	testutil.IsolateXDGDirs(t)
 
 	// Loading non-existent state should return nil, no error
-	state, err := LoadDaemonState()
+	state, err := executor.LoadDaemonState()
 	if err != nil {
-		t.Fatalf("LoadDaemonState() error: %v", err)
+		t.Fatalf("executor.LoadDaemonState() error: %v", err)
 	}
 	if state != nil {
 		t.Error("Expected nil state for non-existent file")
@@ -86,62 +70,55 @@ func TestDaemonState_LoadNonExistent(t *testing.T) {
 }
 
 func TestIsDaemonRunning_NilState(t *testing.T) {
-	if IsDaemonRunning(nil) {
+	if executor.IsDaemonRunning(nil) {
 		t.Error("Expected false for nil state")
 	}
 }
 
 func TestIsDaemonRunning_ZeroPID(t *testing.T) {
-	state := &DaemonState{PID: 0}
-	if IsDaemonRunning(state) {
+	state := &executor.DaemonState{PID: 0}
+	if executor.IsDaemonRunning(state) {
 		t.Error("Expected false for zero PID")
 	}
 }
 
 func TestIsDaemonRunning_CurrentProcess(t *testing.T) {
 	// Our own process should be running
-	state := &DaemonState{PID: os.Getpid()}
-	if !IsDaemonRunning(state) {
+	state := &executor.DaemonState{PID: os.Getpid()}
+	if !executor.IsDaemonRunning(state) {
 		t.Error("Expected true for current process PID")
 	}
 }
 
 func TestIsDaemonRunning_NonExistentProcess(t *testing.T) {
 	// Use a very high PID that likely doesn't exist
-	state := &DaemonState{PID: 999999999}
-	if IsDaemonRunning(state) {
+	state := &executor.DaemonState{PID: 999999999}
+	if executor.IsDaemonRunning(state) {
 		t.Error("Expected false for non-existent PID")
 	}
 }
 
 func TestStopDaemon_NilState(t *testing.T) {
 	// Should not error on nil state
-	if err := StopDaemon(nil); err != nil {
-		t.Errorf("StopDaemon(nil) error: %v", err)
+	if err := executor.StopDaemon(nil); err != nil {
+		t.Errorf("executor.StopDaemon(nil) error: %v", err)
 	}
 }
 
 func TestStopDaemon_ZeroPID(t *testing.T) {
-	state := &DaemonState{PID: 0}
-	if err := StopDaemon(state); err != nil {
-		t.Errorf("StopDaemon(zero PID) error: %v", err)
+	state := &executor.DaemonState{PID: 0}
+	if err := executor.StopDaemon(state); err != nil {
+		t.Errorf("executor.StopDaemon(zero PID) error: %v", err)
 	}
 }
 
 func TestCleanupStaleState(t *testing.T) {
-	// Create temp directory
-	tmpDir, err := os.MkdirTemp("", "daemon-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	originalHome := os.Getenv("HOME")
-	os.Setenv("HOME", tmpDir)
-	defer os.Setenv("HOME", originalHome)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", tmpDir)
 
 	// Create a stale state file with a non-existent PID
-	state := &DaemonState{
+	state := &executor.DaemonState{
 		PID:        999999999, // Very unlikely to exist
 		Secret:     "stale-secret",
 		SocketPath: filepath.Join(tmpDir, "stale.sock"),
@@ -155,17 +132,17 @@ func TestCleanupStaleState(t *testing.T) {
 	f.Close()
 
 	// Save the stale state
-	if err := SaveDaemonState(state); err != nil {
-		t.Fatalf("SaveDaemonState() error: %v", err)
+	if err := executor.SaveDaemonState(state); err != nil {
+		t.Fatalf("executor.SaveDaemonState() error: %v", err)
 	}
 
 	// Cleanup should remove both state and socket
-	if err := CleanupStaleState(); err != nil {
-		t.Fatalf("CleanupStaleState() error: %v", err)
+	if err := executor.CleanupStaleState(); err != nil {
+		t.Fatalf("executor.CleanupStaleState() error: %v", err)
 	}
 
 	// Verify state is gone
-	loaded, _ := LoadDaemonState()
+	loaded, _ := executor.LoadDaemonState()
 	if loaded != nil {
 		t.Error("Expected state to be cleaned up")
 	}
@@ -177,35 +154,69 @@ func TestCleanupStaleState(t *testing.T) {
 }
 
 func TestGetPIDString(t *testing.T) {
-	pidStr := GetPIDString()
+	pidStr := executor.GetPIDString()
 	if pidStr == "" {
-		t.Error("GetPIDString() returned empty string")
+		t.Error("executor.GetPIDString() returned empty string")
 	}
 	if pidStr == "0" {
-		t.Error("GetPIDString() returned 0")
+		t.Error("executor.GetPIDString() returned 0")
 	}
 }
 
 func TestDaemonStatePath_Production(t *testing.T) {
-	t.Setenv(InstanceIDEnvVar, "")
+	t.Setenv(executor.InstanceIDEnvVar, "")
 
-	path, err := DaemonStatePath()
+	path, err := executor.DaemonStatePath()
 	if err != nil {
-		t.Fatalf("DaemonStatePath() error: %v", err)
+		t.Fatalf("executor.DaemonStatePath() error: %v", err)
 	}
 	if filepath.Base(path) != "executor.json" {
-		t.Errorf("DaemonStatePath() = %q, want basename executor.json", path)
+		t.Errorf("executor.DaemonStatePath() = %q, want basename executor.json", path)
 	}
 }
 
 func TestDaemonStatePath_TestInstance(t *testing.T) {
-	t.Setenv(InstanceIDEnvVar, "abc123")
+	t.Setenv(executor.InstanceIDEnvVar, "abc123")
 
-	path, err := DaemonStatePath()
+	path, err := executor.DaemonStatePath()
 	if err != nil {
-		t.Fatalf("DaemonStatePath() error: %v", err)
+		t.Fatalf("executor.DaemonStatePath() error: %v", err)
 	}
 	if filepath.Base(path) != "executor-abc123.json" {
-		t.Errorf("DaemonStatePath() = %q, want basename executor-abc123.json", path)
+		t.Errorf("executor.DaemonStatePath() = %q, want basename executor-abc123.json", path)
+	}
+}
+
+func TestDaemonStateDir_Default(t *testing.T) {
+	// Clear XDG_STATE_HOME to test default behavior
+	t.Setenv("XDG_STATE_HOME", "")
+
+	dir, err := executor.DaemonStateDir()
+	if err != nil {
+		t.Fatalf("executor.DaemonStateDir() error: %v", err)
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("os.UserHomeDir() error: %v", err)
+	}
+
+	expected := filepath.Join(home, ".local", "state", "cloister")
+	if dir != expected {
+		t.Errorf("executor.DaemonStateDir() = %q, want %q", dir, expected)
+	}
+}
+
+func TestDaemonStateDir_XDGOverride(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", "/custom/state")
+
+	dir, err := executor.DaemonStateDir()
+	if err != nil {
+		t.Fatalf("executor.DaemonStateDir() error: %v", err)
+	}
+
+	expected := "/custom/state/cloister"
+	if dir != expected {
+		t.Errorf("executor.DaemonStateDir() = %q, want %q", dir, expected)
 	}
 }

@@ -26,13 +26,17 @@ type DaemonState struct {
 }
 
 // DaemonStateDir returns the directory for daemon state files.
-// This is ~/.local/share/cloister.
+// Respects XDG_STATE_HOME, defaulting to ~/.local/state/cloister.
 func DaemonStateDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get home directory: %w", err)
+	stateDir := os.Getenv("XDG_STATE_HOME")
+	if stateDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("failed to get home directory: %w", err)
+		}
+		stateDir = filepath.Join(home, ".local", "state")
 	}
-	return filepath.Join(home, ".local", "share", "cloister"), nil
+	return filepath.Join(stateDir, "cloister"), nil
 }
 
 // DaemonStatePath returns the path to the daemon state file.

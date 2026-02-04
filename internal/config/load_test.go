@@ -11,6 +11,7 @@ func TestLoadGlobalConfig_Missing(t *testing.T) {
 	// Use a temp directory with no config file
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cfg, err := LoadGlobalConfig()
 	if err != nil {
@@ -40,6 +41,7 @@ func TestLoadGlobalConfig_Missing(t *testing.T) {
 func TestLoadGlobalConfig_Valid(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config directory and file
 	configDir := filepath.Join(tmpDir, "cloister")
@@ -87,6 +89,7 @@ log:
 func TestLoadGlobalConfig_Invalid(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	configDir := filepath.Join(tmpDir, "cloister")
 	if err := os.MkdirAll(configDir, 0700); err != nil {
@@ -116,6 +119,7 @@ log:
 func TestLoadGlobalConfig_Corrupt(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	configDir := filepath.Join(tmpDir, "cloister")
 	if err := os.MkdirAll(configDir, 0700); err != nil {
@@ -142,6 +146,7 @@ proxy:
 func TestLoadGlobalConfig_ExpandsPaths(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	configDir := filepath.Join(tmpDir, "cloister")
 	if err := os.MkdirAll(configDir, 0700); err != nil {
@@ -201,6 +206,7 @@ func TestLoadGlobalConfig_ExpandsDefaultPaths(t *testing.T) {
 	// Test that default config paths are also expanded
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// No config file, so defaults are used
 	cfg, err := LoadGlobalConfig()
@@ -217,6 +223,7 @@ func TestLoadGlobalConfig_ExpandsDefaultPaths(t *testing.T) {
 func TestLoadProjectConfig_Missing(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cfg, err := LoadProjectConfig("nonexistent-project")
 	if err != nil {
@@ -237,6 +244,7 @@ func TestLoadProjectConfig_Missing(t *testing.T) {
 func TestLoadProjectConfig_Valid(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create projects directory and file
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
@@ -315,6 +323,7 @@ commands:
 func TestLoadProjectConfig_InvalidRegex(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
 	if err := os.MkdirAll(projectsDir, 0700); err != nil {
@@ -345,6 +354,7 @@ commands:
 func TestLoadProjectConfig_UnknownField(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
 	if err := os.MkdirAll(projectsDir, 0700); err != nil {

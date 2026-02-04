@@ -10,6 +10,7 @@ import (
 func TestWriteDefaultConfig_Creates(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// File should not exist yet
 	path := GlobalConfigPath()
@@ -88,6 +89,7 @@ func TestWriteDefaultConfig_Creates(t *testing.T) {
 func TestWriteDefaultConfig_DoesNotOverwrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config directory and write a custom config
 	configDir := filepath.Join(tmpDir, "cloister")
@@ -119,6 +121,7 @@ func TestWriteDefaultConfig_DoesNotOverwrite(t *testing.T) {
 func TestWriteDefaultConfig_CreatesDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Verify config directory does not exist
 	configDir := ConfigDir()
@@ -150,6 +153,7 @@ func TestWriteDefaultConfig_CreatesDir(t *testing.T) {
 func TestWriteProjectConfig_Creates(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cfg := &ProjectConfig{
 		Remote: "git@github.com:example/repo.git",
@@ -202,6 +206,7 @@ func TestWriteProjectConfig_Creates(t *testing.T) {
 func TestWriteProjectConfig_DoesNotOverwrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create projects directory and write a custom config
 	projectsDir := ProjectsDir()
@@ -234,6 +239,7 @@ func TestWriteProjectConfig_DoesNotOverwrite(t *testing.T) {
 func TestWriteProjectConfig_Overwrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create projects directory and write a custom config
 	projectsDir := ProjectsDir()
@@ -272,6 +278,7 @@ func TestWriteProjectConfig_Overwrite(t *testing.T) {
 func TestWriteProjectConfig_CreatesDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Verify projects directory does not exist
 	projectsDir := ProjectsDir()
@@ -303,6 +310,7 @@ func TestWriteProjectConfig_CreatesDir(t *testing.T) {
 func TestEnsureProjectsDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	projectsDir := ProjectsDir()
 
@@ -340,6 +348,7 @@ func TestEnsureProjectsDir(t *testing.T) {
 func TestInitProjectConfig_Creates(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// File should not exist yet
 	path := ProjectConfigPath("test-project")
@@ -388,6 +397,7 @@ func TestInitProjectConfig_Creates(t *testing.T) {
 func TestInitProjectConfig_DoesNotOverwrite(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create projects directory and write a custom config
 	projectsDir := ProjectsDir()
@@ -419,6 +429,7 @@ func TestInitProjectConfig_DoesNotOverwrite(t *testing.T) {
 func TestInitProjectConfig_CreatesDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Verify projects directory does not exist
 	projectsDir := ProjectsDir()
@@ -450,6 +461,7 @@ func TestInitProjectConfig_CreatesDir(t *testing.T) {
 func TestWriteGlobalConfig_Creates(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	skipPerms := true
 	cfg := &GlobalConfig{
@@ -517,6 +529,7 @@ func TestWriteGlobalConfig_Creates(t *testing.T) {
 func TestWriteGlobalConfig_Overwrites(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config directory and write initial config
 	configDir := filepath.Join(tmpDir, "cloister")
@@ -559,6 +572,7 @@ func TestWriteGlobalConfig_Overwrites(t *testing.T) {
 func TestWriteGlobalConfig_CreatesDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Verify config directory does not exist
 	configDir := ConfigDir()

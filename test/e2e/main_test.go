@@ -20,13 +20,20 @@ import (
 // This allows tests to share a single guardian instance, which is more efficient
 // and matches the production model where guardian runs persistently.
 func TestMain(m *testing.M) {
-	// Isolate config directory so tests don't touch ~/.config/cloister
+	// Isolate XDG directories so tests don't touch ~/.config/cloister or ~/.local/state/cloister
 	tempConfigDir, err := os.MkdirTemp("", "cloister-e2e-config-*")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "SKIP: Could not create temp config dir: %v\n", err)
 		os.Exit(0)
 	}
+	tempStateDir, err := os.MkdirTemp("", "cloister-e2e-state-*")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "SKIP: Could not create temp state dir: %v\n", err)
+		os.RemoveAll(tempConfigDir)
+		os.Exit(0)
+	}
 	os.Setenv("XDG_CONFIG_HOME", tempConfigDir)
+	os.Setenv("XDG_STATE_HOME", tempStateDir)
 
 	// Generate unique instance ID for test isolation.
 	// This allows tests to run without conflicting with a production guardian
@@ -37,6 +44,7 @@ func TestMain(m *testing.M) {
 	if err := docker.CheckDaemon(); err != nil {
 		fmt.Fprintf(os.Stderr, "SKIP: Docker not available: %v\n", err)
 		os.RemoveAll(tempConfigDir)
+		os.RemoveAll(tempStateDir)
 		os.Exit(0)
 	}
 
@@ -45,6 +53,7 @@ func TestMain(m *testing.M) {
 	if !ok {
 		fmt.Fprintf(os.Stderr, "SKIP: Could not determine test file location\n")
 		os.RemoveAll(tempConfigDir)
+		os.RemoveAll(tempStateDir)
 		os.Exit(0)
 	}
 	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
@@ -52,6 +61,7 @@ func TestMain(m *testing.M) {
 	if _, err := os.Stat(binaryPath); err != nil {
 		fmt.Fprintf(os.Stderr, "SKIP: cloister binary not found at %s (run 'make build' first)\n", binaryPath)
 		os.RemoveAll(tempConfigDir)
+		os.RemoveAll(tempStateDir)
 		os.Exit(0)
 	}
 	os.Setenv(guardian.ExecutableEnvVar, binaryPath)
@@ -61,17 +71,19 @@ func TestMain(m *testing.M) {
 	if err := guardian.EnsureRunning(); err != nil {
 		fmt.Fprintf(os.Stderr, "SKIP: Could not start guardian: %v\n", err)
 		os.RemoveAll(tempConfigDir)
+		os.RemoveAll(tempStateDir)
 		os.Exit(0)
 	}
 
 	// Run tests
 	code := m.Run()
 
-	// Cleanup: stop the guardian and remove temp config dir
+	// Cleanup: stop the guardian and remove temp dirs
 	if err := guardian.Stop(); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to stop guardian: %v\n", err)
 	}
 	os.RemoveAll(tempConfigDir)
+	os.RemoveAll(tempStateDir)
 
 	os.Exit(code)
 }

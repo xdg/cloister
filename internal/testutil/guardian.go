@@ -40,9 +40,7 @@ func RequireGuardian(t *testing.T) {
 	t.Helper()
 	RequireDocker(t)
 	RequireCloisterBinary(t)
-
-	// Isolate config directory so tests don't touch ~/.config/cloister
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	IsolateXDGDirs(t)
 
 	// Generate unique instance ID for test isolation
 	t.Setenv(guardian.InstanceIDEnvVar, guardian.GenerateInstanceID())
@@ -66,9 +64,7 @@ func RequireGuardian(t *testing.T) {
 func RequireCleanGuardianState(t *testing.T) {
 	t.Helper()
 	RequireDocker(t)
-
-	// Isolate config directory so tests don't touch ~/.config/cloister
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	IsolateXDGDirs(t)
 
 	// Generate unique instance ID for test isolation.
 	// This means IsRunning() will check for our isolated instance, not production.

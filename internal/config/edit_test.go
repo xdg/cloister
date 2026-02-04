@@ -12,6 +12,7 @@ import (
 func TestEditProjectConfig_CreatesFileIfNotExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Use 'true' as editor which exits immediately without modifying the file
 	t.Setenv("EDITOR", "true")
@@ -37,6 +38,7 @@ func TestEditProjectConfig_CreatesFileIfNotExists(t *testing.T) {
 func TestEditProjectConfig_ExistingFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Use 'true' as editor which exits immediately without modifying the file
 	t.Setenv("EDITOR", "true")
@@ -71,6 +73,7 @@ func TestEditProjectConfig_ExistingFile(t *testing.T) {
 func TestEditGlobalConfig_CreatesFileIfNotExists(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Use 'true' as editor which exits immediately without modifying the file
 	t.Setenv("EDITOR", "true")
@@ -96,6 +99,7 @@ func TestEditGlobalConfig_CreatesFileIfNotExists(t *testing.T) {
 func TestEditGlobalConfig_ExistingFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Use 'true' as editor which exits immediately without modifying the file
 	t.Setenv("EDITOR", "true")
@@ -130,6 +134,7 @@ func TestEditGlobalConfig_ExistingFile(t *testing.T) {
 func TestEditProjectConfig_EditorFailure(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Use 'false' as editor which exits with error
 	t.Setenv("EDITOR", "false")

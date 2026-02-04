@@ -42,6 +42,7 @@ func TestProjectCmd_HasSubcommands(t *testing.T) {
 func TestProjectList_Empty(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cmd := &cobra.Command{}
 	err := runProjectList(cmd, nil)
@@ -54,6 +55,7 @@ func TestProjectList_Empty(t *testing.T) {
 func TestProjectList_WithProjects(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create registry with test data
 	reg := &project.Registry{
@@ -80,6 +82,7 @@ func TestProjectList_WithProjects(t *testing.T) {
 func TestProjectShow_NotFound_SuggestsProjectList(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cmd := &cobra.Command{}
 	err := runProjectShow(cmd, []string{"non-existent"})
@@ -100,6 +103,7 @@ func TestProjectShow_NotFound_SuggestsProjectList(t *testing.T) {
 func TestProjectShow_Found(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create registry with test data
 	reg := &project.Registry{
@@ -126,6 +130,7 @@ func TestProjectShow_Found(t *testing.T) {
 func TestProjectRemove_NotFound_SuggestsProjectList(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cmd := &cobra.Command{}
 	err := runProjectRemove(cmd, []string{"non-existent"})
@@ -146,6 +151,7 @@ func TestProjectRemove_NotFound_SuggestsProjectList(t *testing.T) {
 func TestProjectRemove_Success(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create registry with test data
 	reg := &project.Registry{
@@ -185,6 +191,7 @@ func TestProjectRemove_Success(t *testing.T) {
 func TestProjectRemove_WithConfigFlag(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create registry with test data
 	reg := &project.Registry{

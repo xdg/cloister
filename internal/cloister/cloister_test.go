@@ -10,6 +10,7 @@ import (
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/term"
+	"github.com/xdg/cloister/internal/testutil"
 )
 
 func TestStartOptions_Fields(t *testing.T) {
@@ -285,7 +286,7 @@ func TestStart_WithTokenAuth(t *testing.T) {
 
 	// Use t.TempDir() to avoid touching real token store
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	opts := StartOptions{
 		ProjectPath: "/path/to/project",
@@ -364,7 +365,7 @@ func TestStart_WithAPIKeyAuth(t *testing.T) {
 	}
 
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	opts := StartOptions{
 		ProjectPath: "/path/to/project",
@@ -424,7 +425,7 @@ func TestStart_WithTokenAuthCallsSetup(t *testing.T) {
 	}
 
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	opts := StartOptions{
 		ProjectPath: "/path/to/project",
@@ -473,6 +474,7 @@ func TestStart_NoConfigFallsBackToEnvVars(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// Set a host env var that should be passed through
 	t.Setenv("ANTHROPIC_API_KEY", "host-api-key")
 
@@ -531,7 +533,7 @@ func TestStart_AgentSetupError(t *testing.T) {
 	}
 
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	opts := StartOptions{
 		ProjectPath: "/path/to/project",
@@ -574,6 +576,7 @@ func TestStart_EnvFallback_PrintsDeprecationWarning(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// Set host env var to trigger the fallback
 	t.Setenv("ANTHROPIC_API_KEY", "host-api-key")
 
@@ -624,6 +627,7 @@ func TestStart_EnvFallback_PrintsWarningForOAuthToken(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// Set OAUTH token only (not API key)
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "host-oauth-token")
 
@@ -674,6 +678,7 @@ func TestStart_EnvFallback_NoWarningWhenNoEnvVars(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// Clear any credential env vars that might be set
 	// (t.Setenv will restore after test)
 
@@ -729,6 +734,7 @@ func TestStart_ConfigCredentials_NoDeprecationWarning(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
 	t.Setenv("XDG_CONFIG_HOME", tempDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	// Set host env var - but it should be ignored since config has credentials
 	t.Setenv("ANTHROPIC_API_KEY", "host-api-key")
 
@@ -778,7 +784,7 @@ func TestStart_AgentReceivesContainerName(t *testing.T) {
 	}
 
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	opts := StartOptions{
 		ProjectPath: "/path/to/project",

@@ -38,6 +38,7 @@ func TestConfigCmd_HasSubcommands(t *testing.T) {
 func TestConfigPath_PrintsPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cmd := &cobra.Command{}
 
@@ -54,6 +55,7 @@ func TestConfigPath_PrintsPath(t *testing.T) {
 func TestConfigInit_CreatesFile(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cmd := &cobra.Command{}
 	err := runConfigInit(cmd, nil)
@@ -76,6 +78,7 @@ func TestConfigInit_CreatesFile(t *testing.T) {
 func TestConfigShow_LoadsConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cmd := &cobra.Command{}
 	// Should succeed even if no config exists (uses defaults)

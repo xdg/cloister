@@ -39,3 +39,12 @@ func TestProjectName() string {
 func TestContainerName(suffix string) string {
 	return "cloister-test-" + suffix + "-" + time.Now().Format("150405")
 }
+
+// IsolateXDGDirs sets XDG_CONFIG_HOME and XDG_STATE_HOME to temp directories.
+// This prevents tests from reading or writing to the real ~/.config/cloister
+// or ~/.local/state/cloister directories.
+func IsolateXDGDirs(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+}

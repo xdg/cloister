@@ -10,6 +10,7 @@ import (
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/prompt"
 	"github.com/xdg/cloister/internal/term"
+	"github.com/xdg/cloister/internal/testutil"
 )
 
 func TestSetupCmd_ExistsInRoot(t *testing.T) {
@@ -48,7 +49,7 @@ func TestSetupCmd_HasClaudeSubcommand(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_Runs(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Use mock prompter to select token option (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -81,7 +82,7 @@ func TestSetupClaudeCmd_Runs(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_DefaultSelectsToken(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns default (simulates user pressing Enter)
 	mockPrompter := &prompt.MockPrompter{} // No responses = return default
@@ -124,7 +125,7 @@ func TestSetupClaudeCmd_DefaultSelectsToken(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_SelectsOAuthToken(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns option 1 (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -159,7 +160,7 @@ func TestSetupClaudeCmd_SelectsOAuthToken(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_SelectsAPIKey(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns option 2 (index 1)
 	mockPrompter := prompt.NewMockPrompter(1)
@@ -194,7 +195,7 @@ func TestSetupClaudeCmd_SelectsAPIKey(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_PrompterError(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns an error
 	mockPrompter := &prompt.MockPrompter{
@@ -267,7 +268,7 @@ func TestAuthMethod_String(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_OAuthToken_CorrectPrompt(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	mockPrompter := prompt.NewMockPrompter(0) // Select "OAuth token"
 	oldPrompter := setupClaudePrompter
@@ -299,7 +300,7 @@ func TestSetupClaudeCmd_OAuthToken_CorrectPrompt(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_APIKey_CorrectPrompt(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	mockPrompter := prompt.NewMockPrompter(1) // Select "API key"
 	oldPrompter := setupClaudePrompter
@@ -331,7 +332,7 @@ func TestSetupClaudeCmd_APIKey_CorrectPrompt(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_OAuthToken_EmptyInput_Error(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	mockPrompter := prompt.NewMockPrompter(0) // Select "OAuth token"
 	oldPrompter := setupClaudePrompter
@@ -358,7 +359,7 @@ func TestSetupClaudeCmd_OAuthToken_EmptyInput_Error(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_APIKey_EmptyInput_Error(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	mockPrompter := prompt.NewMockPrompter(1) // Select "API key"
 	oldPrompter := setupClaudePrompter
@@ -385,7 +386,7 @@ func TestSetupClaudeCmd_APIKey_EmptyInput_Error(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_OAuthToken_WhitespaceOnly_Error(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	mockPrompter := prompt.NewMockPrompter(0) // Select "OAuth token"
 	oldPrompter := setupClaudePrompter
@@ -412,7 +413,7 @@ func TestSetupClaudeCmd_OAuthToken_WhitespaceOnly_Error(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_CredentialReader_Error(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	mockPrompter := prompt.NewMockPrompter(0) // Select "OAuth token"
 	oldPrompter := setupClaudePrompter
@@ -444,7 +445,7 @@ func TestSetupClaudeCmd_CredentialReader_Error(t *testing.T) {
 // Skip-permissions prompt tests
 
 func TestSetupClaudeCmd_SkipPermissions_DefaultYes(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -500,7 +501,7 @@ func TestSetupClaudeCmd_SkipPermissions_DefaultYes(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_SkipPermissions_ExplicitNo(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -539,7 +540,7 @@ func TestSetupClaudeCmd_SkipPermissions_ExplicitNo(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_SkipPermissions_ExplicitYes(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -578,7 +579,7 @@ func TestSetupClaudeCmd_SkipPermissions_ExplicitYes(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_SkipPermissions_Error(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -615,7 +616,7 @@ func TestSetupClaudeCmd_SkipPermissions_Error(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_SkipPermissions_WithTokenAuth(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns OAuth token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -657,7 +658,7 @@ func TestSetupClaudeCmd_SkipPermissions_WithTokenAuth(t *testing.T) {
 }
 
 func TestSetupClaudeCmd_SkipPermissions_WithAPIKeyAuth(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
 
 	// Mock prompter that returns API key (index 1)
 	mockPrompter := prompt.NewMockPrompter(1)
@@ -703,6 +704,7 @@ func TestSetupClaudeCmd_SkipPermissions_WithAPIKeyAuth(t *testing.T) {
 func TestSetupClaudeCmd_SavesTokenAuthToConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Mock prompter that returns OAuth token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -761,6 +763,7 @@ func TestSetupClaudeCmd_SavesTokenAuthToConfig(t *testing.T) {
 func TestSetupClaudeCmd_SavesAPIKeyAuthToConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Mock prompter that returns API key (index 1)
 	mockPrompter := prompt.NewMockPrompter(1)
@@ -819,6 +822,7 @@ func TestSetupClaudeCmd_SavesAPIKeyAuthToConfig(t *testing.T) {
 func TestSetupClaudeCmd_ClearsOldCredentialsOnMethodChange(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create a config with existing token auth
 	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
@@ -886,6 +890,7 @@ func TestSetupClaudeCmd_ClearsOldCredentialsOnMethodChange(t *testing.T) {
 func TestSetupClaudeCmd_PreservesOtherConfigSettings(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create a config with custom proxy settings
 	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
@@ -981,6 +986,7 @@ func TestSetupClaudeCmd_ConfigLoadError(t *testing.T) {
 func TestSetupClaudeCmd_ConfigWriteError(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -1024,6 +1030,7 @@ func TestSetupClaudeCmd_ConfigWriteError(t *testing.T) {
 func TestSetupClaudeCmd_ShowsCorrectConfigPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Mock prompter that returns token (index 0)
 	mockPrompter := prompt.NewMockPrompter(0)
@@ -1147,6 +1154,7 @@ func TestHasExistingCredentials_OnlySkipPerms(t *testing.T) {
 func TestSetupClaudeCmd_ExistingCredentials_UserDeclinesReplace(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config with existing credentials
 	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
@@ -1215,6 +1223,7 @@ func TestSetupClaudeCmd_ExistingCredentials_UserDeclinesReplace(t *testing.T) {
 func TestSetupClaudeCmd_ExistingCredentials_UserAcceptsReplace(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config with existing credentials
 	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
@@ -1294,6 +1303,7 @@ func TestSetupClaudeCmd_ExistingCredentials_UserAcceptsReplace(t *testing.T) {
 func TestSetupClaudeCmd_NoExistingCredentials_NoReplacementPrompt(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config WITHOUT existing credentials (only other settings)
 	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
@@ -1380,6 +1390,7 @@ func TestSetupClaudeCmd_ExistingCredentials_ConfigLoadError(t *testing.T) {
 func TestSetupClaudeCmd_ExistingCredentials_PromptError(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config with existing credentials
 	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {

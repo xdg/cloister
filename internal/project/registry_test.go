@@ -42,6 +42,7 @@ func TestLoadRegistry_Missing(t *testing.T) {
 	// Use a temp directory where no registry file exists
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	reg, err := LoadRegistry()
 	if err != nil {
@@ -60,6 +61,7 @@ func TestLoadRegistry_Missing(t *testing.T) {
 func TestLoadRegistry_Valid(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create the cloister config directory
 	configDir := filepath.Join(tmpDir, "cloister")
@@ -118,6 +120,7 @@ func TestLoadRegistry_Valid(t *testing.T) {
 func TestLoadRegistry_ExpandsTilde(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create the cloister config directory
 	configDir := filepath.Join(tmpDir, "cloister")
@@ -160,6 +163,7 @@ func TestLoadRegistry_ExpandsTilde(t *testing.T) {
 func TestSaveRegistry(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	testTime := time.Date(2024, 7, 20, 14, 0, 0, 0, time.UTC)
 	reg := &Registry{
@@ -214,6 +218,7 @@ func TestSaveRegistry(t *testing.T) {
 func TestRegistryRoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	testTime := time.Date(2024, 8, 10, 9, 45, 30, 0, time.UTC)
 	original := &Registry{
@@ -269,6 +274,7 @@ func TestRegistryRoundTrip(t *testing.T) {
 func TestSaveRegistry_CreatesDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Verify cloister directory doesn't exist yet
 	configDir := filepath.Join(tmpDir, "cloister")
@@ -310,6 +316,7 @@ func TestSaveRegistry_CreatesDirectory(t *testing.T) {
 func TestLoadRegistry_InvalidYAML(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create the cloister config directory
 	configDir := filepath.Join(tmpDir, "cloister")
@@ -807,6 +814,7 @@ func TestRegistry_List_Empty(t *testing.T) {
 func TestLookup(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create registry with test data
 	reg := &Registry{
@@ -842,6 +850,7 @@ func TestLookup(t *testing.T) {
 func TestLookup_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create empty registry
 	reg := &Registry{}
@@ -1077,6 +1086,7 @@ func TestRegistry_UpdateLastUsed_WithClock(t *testing.T) {
 func TestLookupByPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create registry with test data
 	reg := &Registry{
