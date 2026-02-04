@@ -1,532 +1,267 @@
-# Phase 4: Host Execution (hostexec)
+# Phase 6: Domain Approval Flow
 
-Goal: Agents can request host commands via approval workflow. A request server receives commands from containers, auto-approves or queues for human review, and executes via a host process communicating over a Unix socket.
+When a cloister container requests an unlisted domain, instead of immediately returning 403, the proxy holds the connection and creates an approval request visible in the web UI. The user can approve (session/project/global scope) or deny. Timeout defaults to 60s.
 
 ## Testing Philosophy
 
-Tests are split into three tiers based on what they require:
-
-| Tier | Command | Docker | Guardian | What It Tests |
-|------|---------|--------|----------|---------------|
-| Unit | `make test` | Mocked/self-skip | In-process/mocked | Logic, handlers, protocol |
-| Integration | `make test-integration` | Real | Self-managed | Lifecycle, container ops |
-| E2E | `make test-e2e` | Real | TestMain-managed | Workflows assuming stable guardian |
-
-**Build tags:**
-- Tests in `*_integration_test.go` files use `//go:build integration` — lifecycle tests that manage their own guardian
-- Tests in `test/e2e/` use `//go:build e2e` — workflow tests that share a guardian via TestMain
-- All other tests are sandbox-safe (use httptest, t.TempDir(), mock interfaces)
-
-**Shared test helpers:** `internal/testutil/` provides `RequireDocker`, `RequireGuardian`, `CleanupContainer`, and unique name generators.
-
-**Design for testability:**
-- Request server uses `http.Handler` interface for `httptest`-based testing
-- Executor interface abstracts command execution (mock for tests, real `exec.Command` for production)
-- Pattern matching is pure logic, fully testable without I/O
-- Approval state machine testable in isolation
+- **Automated tests for proxy/queue logic**: Unit tests for domain queue, session allowlist, proxy hold-and-wait behavior
+- **Automated tests for approval server handlers**: Use `httptest` for new domain approval endpoints (`/pending-domains`, `/approve-domain/{id}`, `/deny-domain/{id}`)
+- **Automated tests for config persistence**: Write/read round-trip tests for adding domains to project and global configs
+- **Manual tests for UI interactions**: Browser testing for the domain approval section in the web UI (SSE updates, htmx swaps, scope selector)
+- **Factor code for testability**: Use interfaces for config writers and allowlist mutators so proxy tests don't touch the filesystem
+- **Go tests**: Use `testing` with `httptest` for handlers, `t.TempDir()` for config persistence, channel-based tests for hold-and-wait
 
 ## Verification Checklist
 
-Before marking Phase 4 complete:
+Before marking a phase complete and committing it:
 
-**Automated (`make test`):**
-1. All unit tests pass
-2. `make build` produces working binary
-3. `make lint` passes
-4. `make test-race` passes
+1. `make test` passes (unit tests, no Docker required)
+2. `make lint` passes
+3. `make fmt` has been run
+4. Playwright MCP for approval UI verification (SSE updates, htmx swaps, scope buttons)
+5. Code reviewed for obvious issues
 
-**Automated (`make test-integration`):**
-5. Request server integration tests pass
-6. Guardian↔executor socket communication tests pass
-7. hostexec wrapper tests pass
-
-**Manual — test approval flow:**
-8. `hostexec docker compose ps` → auto-approves (if configured), output returned
-9. `hostexec docker compose up -d` → appears in approval UI
-10. Click Approve → command executes, output returned to container
-11. Click Deny → container receives denial message
-12. Wait 5 minutes without action → request times out
-
-**Manual — test security:**
-13. Request with invalid token → rejected
-14. Request with mismatched workdir → rejected
-15. Verify socket permissions (not world-writable)
-
-DO NOT PROCEED TO THE NEXT ITEM IF MANUAL TESTS ARE NOT COMPLETE.
-
-After each subphase is complete and all of its tests pass, commit relevant new
-and changed files as a single, atomic commit.
+When verification of a phase or subphase is complete, commit all
+relevant newly-created and modified files.
 
 ## Dependencies Between Phases
 
 ```
-Phase 1 (MVP + Guardian) ✓
+6.1 (Domain Queue) ─── foundation for all other subphases
        │
-       ▼
-Phase 2 (Config) ✓
+       ├──► 6.2 (Session Allowlist)
+       │          │
+       │          ▼
+       │    6.3 (Proxy Hold-and-Wait) ─── connects proxy to queue + session allowlist
        │
-       ├─► Phase 3 (Claude Integration) ✓
+       ├──► 6.4 (Approval Server Endpoints)
        │
-       └─► Phase 4 (hostexec) ◄── CURRENT
-               │
-               ▼
-         Phase 5 (Worktrees)
-               │
-               ▼
-         Phase 6 (Domain Approval)
-               │
-               ▼
-         Phase 7 (Polish)
+       ├──► 6.5 (Domain Approval Templates)
+       │
+       └──► 6.6 (Config Persistence)
+                  │
+                  ▼
+            6.7 (Guardian Wiring) ─── integrates all components
+                  │
+                  ▼
+            6.8 (Audit Logging)
 ```
 
+6.2, 6.4, 6.5, and 6.6 can proceed in parallel after 6.1.
+6.3 requires 6.1 + 6.2.
+6.7 requires all prior subphases.
+
 ---
 
-## Phase 4.1: Request Server Foundation
+## Phase 6.1: Domain Approval Queue
 
-Add the request server (:9998) to the guardian container for receiving hostexec commands.
+Create a separate queue for domain approval requests, distinct from the existing hostexec command queue. Domain requests have different fields (domain instead of cmd) and different response semantics (scope-based approval).
 
-### 4.1.1 Define request/response types
-- [x] Create `internal/guardian/request/types.go` with request and response structs:
+### 6.1.1 DomainRequest and DomainQueue types
+- [ ] Create `internal/guardian/approval/domain_queue.go`
+- [ ] Define `DomainRequest` struct: `ID`, `Cloister`, `Project`, `Domain`, `Timestamp`, `ExpiresAt`, `Response chan<- DomainResponse`
+- [ ] Define `DomainResponse` struct: `Status` (approved/denied/timeout), `Scope` (session/project/global), `Reason`
+- [ ] Implement `DomainQueue` with same pattern as existing `Queue`: thread-safe map, timeout goroutines, cancel functions
+- [ ] `Add(req *DomainRequest) (string, error)` — generate ID, start timeout, broadcast SSE event
+- [ ] `Get(id string) (*DomainRequest, bool)`
+- [ ] `Remove(id string)`
+- [ ] `List() []DomainRequest` (omit Response channel in copies)
+- [ ] `Len() int`
+- [ ] Wire `EventHub` for domain-specific SSE events via `SetEventHub`
+- [ ] **Test**: Unit test for Add/Get/Remove/List lifecycle
+- [ ] **Test**: Unit test for timeout — request times out, response channel receives timeout status
+- [ ] **Test**: Unit test for cancel — approve before timeout, timeout goroutine is a no-op
+
+---
+
+## Phase 6.2: Session Allowlist
+
+Track domains approved with "session" scope in memory. These are per-project, ephemeral (lost on guardian restart), and checked by the proxy before consulting the persistent allowlist.
+
+### 6.2.1 SessionAllowlist type
+- [ ] Create `internal/guardian/session_allowlist.go`
+- [ ] Define `SessionAllowlist` struct: thread-safe map of `projectName -> set of domains`
+- [ ] `Add(project, domain string)` — add domain to project's session set
+- [ ] `IsAllowed(project, domain string) bool` — check if domain is in project's session set
+- [ ] `Clear(project string)` — remove all session domains for a project (for cloister stop)
+- [ ] `ClearAll()` — remove all session domains (for guardian restart)
+- [ ] **Test**: Unit test for Add/IsAllowed with multiple projects isolated from each other
+- [ ] **Test**: Unit test for Clear per-project without affecting other projects
+
+---
+
+## Phase 6.3: Proxy Hold-and-Wait
+
+Modify `handleConnect` in the proxy to hold blocked requests instead of returning 403 immediately. The proxy checks session allowlist first, then submits to the domain queue and waits for a response.
+
+### 6.3.1 Add DomainApprover interface and proxy integration
+- [ ] Define `DomainApprover` interface in `internal/guardian/proxy.go`:
   ```go
-  type CommandRequest struct {
-      Cmd string `json:"cmd"`
+  type DomainApprover interface {
+      RequestApproval(project, cloister, domain string) (DomainApprovalResult, error)
   }
-  type CommandResponse struct {
-      Status   string `json:"status"`              // "approved", "auto_approved", "denied", "timeout", "error"
-      Pattern  string `json:"pattern,omitempty"`   // Matched pattern (for auto_approved)
-      Reason   string `json:"reason,omitempty"`    // Denial/timeout reason
-      ExitCode int    `json:"exit_code,omitempty"` // Command exit code
-      Stdout   string `json:"stdout,omitempty"`
-      Stderr   string `json:"stderr,omitempty"`
+  type DomainApprovalResult struct {
+      Approved bool
+      Scope    string // "session", "project", "global"
   }
   ```
-- [x] **Test (unit)**: JSON marshal/unmarshal round-trip for all response variants
-
-### 4.1.2 Implement token-based authentication middleware
-- [x] Create `internal/guardian/request/auth.go` with middleware that:
-  - Extracts `X-Cloister-Token` header
-  - Looks up token in guardian's token registry
-  - Returns 401 if missing/invalid
-  - Attaches cloister metadata to request context
-- [x] **Test (unit)**: Missing header → 401; invalid token → 401; valid token → context populated
-
-### 4.1.3 Create request server skeleton
-- [x] Create `internal/guardian/request/server.go` with:
-  - `NewServer(tokenRegistry, patternMatcher, executor)` constructor
-  - `POST /request` handler (returns placeholder response for now)
-  - Bind to port 9998 on `cloister-net`
-- [x] Wire into guardian startup in `internal/guardian/guardian.go`
-- [x] **Test (unit)**: Server starts, `/request` endpoint responds
-- [x] **Test (integration)**: Container can reach request server via `cloister-guardian:9998`
+- [ ] Add `DomainApprover` field to `ProxyServer` struct (nil = reject immediately, preserving current behavior)
+- [ ] Add `SessionAllowlist` field to `ProxyServer` struct (nil = skip session check)
+- [ ] Modify `handleConnect`: when domain is not in persistent allowlist:
+  1. Check `SessionAllowlist.IsAllowed(project, domain)` — if allowed, proceed
+  2. If `DomainApprover` is nil, return 403 (backward-compatible)
+  3. Call `DomainApprover.RequestApproval(...)` (blocks up to timeout)
+  4. If approved, proceed to dial upstream
+  5. If denied/timeout, return 403
+- [ ] Extract token and project from request for session allowlist and approval context
+- [ ] **Test**: Unit test — nil DomainApprover returns 403 (backward-compatible)
+- [ ] **Test**: Unit test — DomainApprover approves, connection proceeds
+- [ ] **Test**: Unit test — DomainApprover denies, returns 403
+- [ ] **Test**: Unit test — session allowlist hit bypasses DomainApprover entirely
 
 ---
 
-## Phase 4.2: Pattern Matching and Auto-Approval
+## Phase 6.4: Approval Server Domain Endpoints
 
-Implement command pattern matching for auto-approve and manual-approve decisions.
+Add endpoints to the approval server for listing, approving, and denying domain requests. These endpoints mirror the existing hostexec pattern but add a `scope` parameter.
 
-### 4.2.1 Define pattern matcher interface
-- [x] Create `internal/guardian/patterns/matcher.go` with:
+### 6.4.1 Domain queue field and new HTTP handlers
+- [ ] Add `DomainQueue *DomainQueue` field to approval `Server` struct
+- [ ] Add `ConfigPersister` interface field (for saving approved domains to config files):
   ```go
-  type Matcher interface {
-      Match(cmd string) MatchResult
-  }
-  type MatchResult struct {
-      Action  Action  // AutoApprove, ManualApprove, Deny
-      Pattern string  // The matched pattern (if any)
-  }
-  type Action int
-  const (
-      Deny Action = iota
-      AutoApprove
-      ManualApprove
-  )
-  ```
-- [x] **Test (unit)**: Interface compiles, MatchResult struct works
-
-### 4.2.2 Implement regex-based pattern matcher
-- [x] Create `RegexMatcher` that:
-  - Compiles patterns from config at construction time
-  - Checks auto_approve patterns first (return AutoApprove on match)
-  - Checks manual_approve patterns second (return ManualApprove on match)
-  - Returns Deny if no pattern matches
-- [x] Handle regex compilation errors gracefully (log and skip invalid patterns)
-- [x] **Test (unit)**: `docker compose ps` matches `^docker compose ps$` → AutoApprove
-- [x] **Test (unit)**: `docker compose up -d` matches `^docker compose (up|down|restart|build).*$` → ManualApprove
-- [x] **Test (unit)**: `rm -rf /` matches nothing → Deny
-- [x] **Test (unit)**: Invalid regex pattern → logged, skipped
-
-### 4.2.3 Load patterns from config
-- [x] Add config parsing for `hostexec.auto_approve` and `hostexec.manual_approve` in `internal/config`
-- [x] Pass patterns to `RegexMatcher` during guardian initialization
-- [x] Support per-project pattern additions (merged with global)
-- [x] **Test (unit)**: Config with patterns → matcher initialized correctly
-- [x] **Test (unit)**: Project patterns merge with global patterns
-
-### 4.2.4 Integrate pattern matcher into request handler
-- [x] In `/request` handler, call `matcher.Match(cmd)`
-- [x] If AutoApprove: proceed to execution immediately
-- [x] If ManualApprove: queue for approval (Phase 4.3)
-- [x] If Deny: return denial response immediately
-- [x] **Test (unit)**: Auto-approve pattern → executes without approval queue
-- [x] **Test (unit)**: Manual-approve pattern → queued (mocked)
-- [x] **Test (unit)**: No match → denied immediately
-
----
-
-## Phase 4.3: Approval Queue and Pending Requests
-
-Implement the in-memory queue for pending approval requests.
-
-### 4.3.1 Create approval queue data structure
-- [x] Create `internal/guardian/approval/queue.go` with:
-  ```go
-  type PendingRequest struct {
-      ID        string
-      Cloister  string
-      Project   string
-      Branch    string
-      Agent     string
-      Cmd       string
-      Timestamp time.Time
-      Response  chan<- CommandResponse  // Channel to send result back
-  }
-  type Queue struct {
-      // Thread-safe queue operations
+  type ConfigPersister interface {
+      AddDomainToProject(project, domain string) error
+      AddDomainToGlobal(domain string) error
   }
   ```
-- [x] Implement `Add(request) string` (returns ID)
-- [x] Implement `Get(id) (*PendingRequest, bool)`
-- [x] Implement `Remove(id)`
-- [x] Implement `List() []PendingRequest` (for UI)
-- [x] Generate request IDs with `crypto/rand` (8 bytes hex)
-- [x] **Test (unit)**: Add/Get/Remove/List operations work correctly
-- [x] **Test (unit)**: Concurrent access is safe (use `-race`)
-
-### 4.3.2 Add timeout handling
-- [x] Start timeout goroutine when request is added
-- [x] On timeout: remove from queue, send timeout response on channel
-- [x] Cancel timeout when request is approved/denied
-- [x] Default timeout: 5 minutes (configurable in config)
-- [x] **Test (unit)**: Request times out → timeout response sent
-- [x] **Test (unit)**: Approved before timeout → no timeout response
-
-### 4.3.3 Integrate queue into request handler
-- [x] For ManualApprove matches:
-  - Create response channel
-  - Add to queue with metadata from token lookup
-  - Block waiting on response channel
-  - Return response to client
-- [x] **Test (unit)**: Handler blocks until approval received
-- [x] **Test (unit)**: Handler returns timeout response after timeout
+- [ ] Register new routes in `Start()`:
+  - `GET /pending-domains` — list pending domain requests as JSON
+  - `POST /approve-domain/{id}` — approve with `{"scope": "session|project|global"}`
+  - `POST /deny-domain/{id}` — deny with optional reason
+- [ ] `handlePendingDomains`: serialize `DomainQueue.List()` to JSON
+- [ ] `handleApproveDomain`: parse scope from body, send `DomainResponse` on channel, persist if scope is project/global via `ConfigPersister`, broadcast SSE removal
+- [ ] `handleDenyDomain`: send denied `DomainResponse`, broadcast SSE removal
+- [ ] **Test**: Handler test for `GET /pending-domains` — returns JSON array
+- [ ] **Test**: Handler test for `POST /approve-domain/{id}` with scope "session" — no config persistence, response sent
+- [ ] **Test**: Handler test for `POST /approve-domain/{id}` with scope "project" — calls `ConfigPersister.AddDomainToProject`
+- [ ] **Test**: Handler test for `POST /deny-domain/{id}` — response sent, removed from queue
+- [ ] **Test**: Handler test for approve/deny with unknown ID — returns 404
 
 ---
 
-## Phase 4.4: Host Executor
+## Phase 6.5: Domain Approval Templates
 
-Implement the host-side process that executes approved commands.
+Add HTML templates for domain approval requests in the web UI. Domain requests appear in a separate section from hostexec commands, with scope selection buttons.
 
-### 4.4.1 Define executor interface
-- [x] Create `internal/executor/executor.go` with:
-  ```go
-  type Executor interface {
-      Execute(ctx context.Context, req ExecuteRequest) ExecuteResponse
-  }
-  type ExecuteRequest struct {
-      Token     string
-      Command   string
-      Args      []string
-      Workdir   string
-      Env       map[string]string
-      TimeoutMs int
-  }
-  type ExecuteResponse struct {
-      Status   string // "completed", "timeout", "error"
-      ExitCode int
-      Stdout   string
-      Stderr   string
-      Error    string
-  }
-  ```
-- [x] **Test (unit)**: Types compile and serialize correctly
-
-### 4.4.2 Implement command executor
-- [x] Create `RealExecutor` that uses `os/exec`:
-  - Parse command string into executable + args (shell-free)
-  - Set working directory
-  - Merge environment variables
-  - Capture stdout/stderr
-  - Respect timeout via context
-- [x] Return appropriate error for executable not found
-- [x] **Test (unit)**: Execute `echo hello` → stdout contains "hello"
-- [x] **Test (unit)**: Execute nonexistent command → error response
-- [x] **Test (unit)**: Timeout → partial output + timeout status
-
-### 4.4.3 Implement Unix socket listener
-- [x] Create `internal/executor/socket.go` with socket server:
-  - Listen on `~/.local/share/cloister/hostexec.sock`
-  - Create parent directory if needed
-  - Set socket permissions (0600)
-  - Accept connections, spawn goroutine per connection
-  - Read newline-delimited JSON request
-  - Validate shared secret
-  - Validate token against registry (via injected TokenValidator)
-  - Validate workdir matches token's registered worktree (via injected WorkdirValidator)
-  - Execute command
-  - Write JSON response
-  - Close connection
-- [x] **Test (unit)**: Mock socket, verify request/response flow
-- [x] **Test (integration)**: Real socket communication works
-
-### 4.4.4 Implement shared secret validation
-- [x] Verify secret on every request (socket.go handleConnection)
-- [x] Reject with "invalid secret" if mismatch
-- [x] **Test (unit)**: Wrong secret → rejected (TestSocketServerInvalidSecret)
-- [x] **Test (unit)**: Correct secret → proceeds (TestSocketServerValidRequest)
-
-### 4.4.5 Implement workdir validation
-- [x] Compare request workdir against registered path (via injected WorkdirValidator)
-- [x] Reject with "workdir mismatch" if different
-- [x] **Test (unit)**: Matching workdir → proceeds (TestSocketServerWorkdirValidation)
-- [x] **Test (unit)**: Mismatched workdir → rejected with clear error
-
-### 4.4.6 Start executor with guardian
-- [x] Generate 32-byte secret at guardian start (use token.Generate())
-- [x] Add `cloister guardian start` to spawn executor process
-- [x] Create socket before starting guardian container
-- [x] Bind-mount socket into guardian container at `/var/run/hostexec.sock`
-- [x] Pass shared secret to executor process via environment variable
-- [x] Pass shared secret to guardian container via environment variable
-- [x] Wire TokenValidator to look up token in registry for worktree path
-- [x] Wire WorkdirValidator to compare workdir against registered worktree
-- [x] Graceful shutdown: stop executor when guardian stops
-- [x] **Test (integration)**: `guardian start` creates socket and executor runs
-- [x] **Test (integration)**: `guardian stop` cleans up socket and executor
+### 6.5.1 New HTML templates for domain requests
+- [ ] Create `internal/guardian/approval/templates/domain_request.html`:
+  - Display domain, cloister, project, timestamp
+  - Three approve buttons: "Allow (Session)", "Save to Project", "Save to Global"
+  - One deny button
+  - Use htmx: `hx-post="/approve-domain/{id}"` with `hx-vals='{"scope":"session"}'` etc.
+- [ ] Create `internal/guardian/approval/templates/domain_result.html`:
+  - Show approved/denied status with domain and scope
+- [ ] Update `index.html`:
+  - Add "Domain Requests" section below existing "Command Requests"
+  - Render initial domain requests from server data
+  - Add SSE handlers for `domain-request-added` and `domain-request-removed` events
+  - Notifications for new domain requests
+- [ ] Add new SSE event types: `EventDomainRequestAdded`, `EventDomainRequestRemoved`
+- [ ] Add `BroadcastDomainRequestAdded` and `BroadcastDomainRequestRemoved` to `EventHub`
+- [ ] Update `handleIndex` to pass both command and domain request lists to template
+- [ ] Add `domainTemplateRequest` struct for template rendering (Domain field instead of Cmd)
+- [ ] **Test**: Template rendering test — `domain_request.html` renders without error with sample data
+- [ ] **Test**: SSE format test — domain events serialize correctly
 
 ---
 
-## Phase 4.5: Guardian↔Executor Communication
+## Phase 6.6: Config Persistence
 
-Connect the guardian container to the host executor via the Unix socket.
+Implement `ConfigPersister` that adds approved domains to project or global config files and triggers proxy allowlist reload.
 
-### 4.5.1 Create executor client in guardian
-- [x] Create `internal/guardian/executor/client.go`:
-  - Connect to socket at `/var/run/hostexec.sock`
-  - Send execute request as JSON
-  - Read response
-  - Close connection
-- [x] Handle connection errors gracefully
-- [x] **Test (unit)**: Mock socket, verify wire format
-- [x] **Test (integration)**: Guardian can execute command via socket
-
-### 4.5.2 Wire executor client into request flow
-- [x] After approval (auto or manual), call executor client
-- [x] Map executor response to command response
-- [x] Return to waiting request handler
-- [x] **Test (unit)**: Approved request → executor called → response returned
-
-### 4.5.3 Handle executor errors
-- [x] Connection refused → return error response
-- [x] Timeout → return timeout response with partial output
-- [x] Command failed → return response with exit code and stderr
-- [x] **Test (unit)**: Each error case produces correct response
+### 6.6.1 ConfigPersister implementation
+- [ ] Create `internal/guardian/config_persister.go`
+- [ ] Implement `ConfigPersister` interface:
+  - `AddDomainToProject(project, domain string) error`:
+    1. Load project config via `config.LoadProjectConfig(project)`
+    2. Append `AllowEntry{Domain: domain}` if not already present
+    3. Write via `config.WriteProjectConfig(project, cfg, true)`
+  - `AddDomainToGlobal(domain string) error`:
+    1. Load global config via `config.LoadGlobalConfig()`
+    2. Append `AllowEntry{Domain: domain}` if not already present
+    3. Write via `config.WriteGlobalConfig(cfg)`
+- [ ] Add `ReloadNotifier func()` field — called after config write to signal proxy reload (will be wired to SIGHUP or cache clear)
+- [ ] **Test**: `AddDomainToProject` — writes domain, reload round-trips correctly
+- [ ] **Test**: `AddDomainToProject` with existing domain — no duplicate added
+- [ ] **Test**: `AddDomainToGlobal` — writes domain, round-trips correctly
 
 ---
 
-## Phase 4.6: Approval Server and Web UI
+## Phase 6.7: Guardian Wiring
 
-Implement the approval server (:9999) with htmx-based UI for human review.
+Wire all Phase 6 components together in the guardian startup (`internal/cmd/guardian.go`). This is the integration point where domain queue, session allowlist, config persister, and proxy all connect.
 
-### 4.6.1 Create approval server skeleton
-- [x] Create `internal/guardian/approval/server.go`:
-  - `GET /` → serve HTML UI
-  - `GET /pending` → list pending requests (JSON)
-  - `POST /approve/{id}` → approve request
-  - `POST /deny/{id}` → deny request with optional reason
-- [x] Bind to `127.0.0.1:9999` (localhost only)
-- [x] Wire into guardian startup
-- [x] **Test (unit)**: Endpoints respond correctly
+### 6.7.1 Wire domain approval into guardian startup
+- [ ] In `runGuardianProxy()`:
+  1. Create `DomainQueue` with timeout from config (`approval_timeout`, default 60s)
+  2. Create `SessionAllowlist`
+  3. Create `ConfigPersister` with `ReloadNotifier` that clears `AllowlistCache` and reloads
+  4. Create `DomainApproverImpl` that bridges `DomainQueue` (submits request, waits on channel)
+  5. Set `proxy.DomainApprover` and `proxy.SessionAllowlist`
+  6. Set `approvalServer.DomainQueue` and `approvalServer.ConfigPersister`
+  7. Wire `DomainQueue.SetEventHub` to share the existing `EventHub`
+- [ ] Parse `unlisted_domain_behavior` from config: if `"reject"`, leave `DomainApprover` nil (backward-compatible)
+- [ ] Parse `approval_timeout` from config (default 60s) for `DomainQueue` timeout
+- [ ] On session allowlist approval, also add domain to the project's cached `Allowlist` so subsequent requests from the same project don't re-prompt
+- [ ] **Test**: Integration test (unit-level, no Docker) — create all components, submit domain request through proxy mock, approve via server endpoint, verify domain is allowed on next request
 
-### 4.6.2 Implement pending requests list
-- [x] `GET /pending` returns JSON array of pending requests
-- [x] Include: id, cloister, project, branch, agent, cmd, timestamp
-- [x] **Test (unit)**: Queue with requests → JSON contains all fields
-
-### 4.6.3 Implement approve endpoint
-- [x] `POST /approve/{id}`:
-  - Look up request in queue
-  - Return 404 if not found
-  - Send approved response on request's channel
-  - Remove from queue
-  - Return success JSON
-- [x] **Test (unit)**: Approve existing request → response sent, removed from queue
-- [x] **Test (unit)**: Approve nonexistent → 404
-
-### 4.6.4 Implement deny endpoint
-- [x] `POST /deny/{id}`:
-  - Accept optional `reason` in request body
-  - Send denied response on request's channel
-  - Remove from queue
-  - Return success JSON
-- [x] Default reason: "Denied by user"
-- [x] **Test (unit)**: Deny with reason → reason in response
-- [x] **Test (unit)**: Deny without reason → default reason used
-
-### 4.6.5 Create HTML templates
-- [x] Create `internal/guardian/approval/templates/` with embedded templates:
-  - `index.html` — main page with pending requests list
-  - `request.html` — single request partial (for htmx updates)
-- [x] Use `embed.FS` for single-binary distribution
-- [x] Style with minimal inline CSS (no build step)
-- [x] **Test (unit)**: Templates parse without error
-
-### 4.6.6 Integrate htmx
-- [x] Embed htmx.min.js (~14kb) via `embed.FS`
-- [x] Serve at `/static/htmx.min.js`
-- [x] Include in `index.html` template
-- [x] **Test (unit)**: Static file served correctly
-
-### 4.6.7 Implement approve/deny buttons
-- [x] Add htmx buttons to request template:
-  - Approve: `hx-post="/approve/{id}" hx-swap="outerHTML"`
-  - Deny: `hx-post="/deny/{id}" hx-swap="outerHTML"`
-- [x] Return updated HTML partial showing result
-- [x] **Test (manual)**: Click Approve → request disappears, shows "Approved"
-- [x] **Test (manual)**: Click Deny → request disappears, shows "Denied"
+### 6.7.2 DomainApproverImpl
+- [ ] Create `internal/guardian/domain_approver.go`
+- [ ] Implement `DomainApprover` interface using `DomainQueue`:
+  - Create `DomainRequest` with response channel
+  - Call `DomainQueue.Add(req)`
+  - Block on response channel
+  - Return `DomainApprovalResult` based on response
+- [ ] On "session" scope approval, call `SessionAllowlist.Add(project, domain)` and add to `AllowlistCache` project entry
+- [ ] On "project"/"global" scope approval, `ConfigPersister` handles persistence (already called from server handler), then clear+reload relevant `AllowlistCache` entry
+- [ ] **Test**: Unit test — submit request, approve on channel, verify result
+- [ ] **Test**: Unit test — submit request, timeout, verify timeout result
 
 ---
 
-## Phase 4.7: hostexec Wrapper
+## Phase 6.8: Audit Logging
 
-Create the in-container wrapper script that communicates with the request server.
+Add audit log entries for domain approval events, consistent with existing hostexec audit logging.
 
-### 4.7.1 Validate hostexec script
-- [x] Verify `hostexec` script in repo root matches spec (per container-image.md):
-  - Validates `CLOISTER_GUARDIAN_HOST` and `CLOISTER_TOKEN` are set
-  - Validates at least one argument provided
-  - Sends POST to `http://${CLOISTER_GUARDIAN_HOST}:9998/request`
-  - Includes `X-Cloister-Token` header
-  - Uses `--max-time 300` for 5-minute timeout
-  - Parses JSON response with jq
-  - Prints stdout/stderr appropriately
-  - Exits with command's exit code
-- [x] **Test (unit)**: Script syntax check (`bash -n`)
-
-### 4.7.2 Handle response statuses
-- [x] Verify script handles all statuses:
-  - `approved` or `auto_approved`: print output, exit with exit_code
-  - `denied`: print reason to stderr, exit 1
-  - `timeout`: print timeout message to stderr, exit 1
-  - `error`: print error to stderr, exit 1
-- [x] **Test (integration)**: Each status handled correctly
-
-### 4.7.3 Add to container image
-- [x] Copy `hostexec` (from repo root) to `/usr/local/bin/hostexec` in Dockerfile
-- [x] Set executable permissions
-- [x] **Test (integration)**: `hostexec` available in container
-
-### 4.7.4 Set environment variables at container start
-- [x] Set `CLOISTER_GUARDIAN_HOST=cloister-guardian` in container
-- [x] `CLOISTER_TOKEN` already set (from Phase 1)
-- [x] **Test (integration)**: Environment variables present in container
+### 6.8.1 Domain audit events
+- [ ] Add domain-specific audit methods to `audit.Logger`:
+  - `LogDomainRequest(project, cloister, domain string) error`
+  - `LogDomainApprove(project, cloister, domain, scope, actor string) error`
+  - `LogDomainDeny(project, cloister, domain, reason string) error`
+  - `LogDomainTimeout(project, cloister, domain string) error`
+- [ ] Call `LogDomainRequest` when domain request is added to queue
+- [ ] Call `LogDomainApprove` from `handleApproveDomain`
+- [ ] Call `LogDomainDeny` from `handleDenyDomain`
+- [ ] Call `LogDomainTimeout` from `DomainQueue` timeout handler
+- [ ] **Test**: Unit test — verify audit log output format for each event type
 
 ---
 
-## Phase 4.8: SSE for Real-Time Updates
+## Future Phases (Deferred)
 
-Complete the approval UI with real-time updates via Server-Sent Events.
-
-### 4.8.1 Implement SSE endpoint
-- [x] Create `GET /events` SSE endpoint
-- [x] Broadcast events when:
-  - New request added to queue
-  - Request approved/denied/timed out
-- [x] **Test (unit)**: SSE endpoint sends correctly formatted events
-
-### 4.8.2 Integrate SSE into approval UI
-- [x] Client subscribes on page load
-- [x] Use htmx SSE extension or native EventSource for updates
-- [x] **Test (manual)**: New request appears without page refresh
-
----
-
-## Phase 4.9: Audit Logging
-
-Add logging for all hostexec requests and responses.
-
-### 4.9.1 Define audit log format
-- [x] Request event: `HOSTEXEC REQUEST project=X branch=Y cloister=Z cmd="..."`
-- [x] Auto-approve event: `HOSTEXEC AUTO_APPROVE ... pattern="^..."`
-- [x] Approve event: `HOSTEXEC APPROVE ... user="..."` (user from approval UI)
-- [x] Deny event: `HOSTEXEC DENY ... reason="..."`
-- [x] Complete event: `HOSTEXEC COMPLETE ... exit=N duration=Xs`
-- [x] Timeout event: `HOSTEXEC TIMEOUT ...`
-- [x] Follow existing log format from config-reference.md
-
-### 4.9.2 Integrate with existing logging
-- [x] Use existing guardian logger
-- [x] Log to unified audit log (`~/.local/share/cloister/audit.log`)
-- [x] Log to per-cloister log if enabled
-- [x] **Test (unit)**: Mock logger, verify correct format
-
-### 4.9.3 Add structured fields
-- [x] Include all relevant metadata: project, branch, cloister, agent
-- [x] Include execution duration for completed commands
-- [x] **Test (unit)**: All fields present in log output
-
----
-
-## Phase 4.10: Documentation and Integration
-
-### 4.10.1 Update ~/.claude/rules/cloister.md
-- [x] Review and update the rules file created in Phase 3.4.6
-- [x] Ensure hostexec usage instructions are accurate:
-  - When to use hostexec (git push, docker build, etc.)
-  - Common patterns (`hostexec git push`, `hostexec docker compose up -d`)
-  - What happens when approval is needed
-  - How to check if command was approved
-- [x] **Test (manual)**: Rules file content is helpful for Claude
-
-### 4.10.2 Update specs/guardian-api.md if needed
-- [x] Verify API documentation matches implementation
-- [x] Add any undocumented endpoints or fields
-- [x] **Test (manual)**: API docs accurate
-
-### 4.10.3 Update specs/container-image.md if needed
-- [x] Verify hostexec script documentation matches implementation
-- [x] Document environment variables
-- [x] **Test (manual)**: Container image docs accurate
-
-### 4.10.4 End-to-end verification
-- [x] **Test (manual)**: Full flow from Claude → hostexec → approval UI → execution → output
-- [x] **Test (manual)**: Auto-approve flow works without UI interaction
-- [x] **Test (manual)**: Denial flow shows clear message in container
-
----
-
-## Not In Scope (Deferred to Later Phases)
-
-### Phase 5: Worktree Support
+### Phase 5: Worktree Support (Skipped)
 - `cloister start -b <branch>` creates managed worktrees
-- Worktree cleanup and management
-- Multiple cloisters for same project on different branches
-
-### Phase 6: Domain Approval Flow
-- Proxy holds connection for unlisted domains
-- Interactive domain approval with persistence options (session/project/global)
-- Pending domain requests in approval UI
+- Worktree naming: `<project>-<branch>`
+- Worktree cleanup protection
+- CLI: `worktree list/remove`, `cloister path <name>`
 
 ### Phase 7: Polish
-- Shell completion (bash, zsh, fish)
-- Read-only reference mounts (`/refs`)
-- Audit logging improvements (currently basic in Phase 4.8)
-- Detached mode (`cloister start -d`)
-- Non-git directory support with `--allow-no-git`
-- Multi-arch Docker image builds (linux/amd64, linux/arm64)
+- Image distribution and auto-pull
+- Custom image configuration
+- Multi-arch container images
+- Shell completion
+- Read-only reference mounts
+- Audit logging improvements
+- Detached mode, non-git support
 - Guardian API versioning
-- Remove env var credential fallback
-
-### Future: Devcontainer Integration
-- Devcontainer.json discovery and image building
-- Security overrides for mounts and capabilities
-- Feature allowlisting
+- Structured logging
