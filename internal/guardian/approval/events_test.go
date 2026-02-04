@@ -3,6 +3,7 @@ package approval
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -412,5 +413,93 @@ func TestServer_HandleEvents_ServerShutdown(t *testing.T) {
 	// Should return 503 Service Unavailable
 	if rr.Code != http.StatusServiceUnavailable {
 		t.Errorf("expected status %d, got %d", http.StatusServiceUnavailable, rr.Code)
+	}
+}
+
+func TestEventHub_BroadcastDomainRequestAdded(t *testing.T) {
+	hub := NewEventHub()
+	ch := hub.Subscribe()
+	defer hub.Unsubscribe(ch)
+
+	req := &DomainRequest{
+		ID:        "domain123",
+		Domain:    "example.com",
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Timestamp: time.Date(2024, 1, 15, 14, 32, 5, 0, time.UTC),
+	}
+
+	hub.BroadcastDomainRequestAdded(req)
+
+	select {
+	case event := <-ch:
+		if event.Type != EventDomainRequestAdded {
+			t.Errorf("expected type %s, got %s", EventDomainRequestAdded, event.Type)
+		}
+		// Data should contain rendered HTML
+		if !strings.Contains(event.Data, "test-cloister") {
+			t.Errorf("expected data to contain cloister name, got %q", event.Data)
+		}
+		if !strings.Contains(event.Data, "example.com") {
+			t.Errorf("expected data to contain domain, got %q", event.Data)
+		}
+		if !strings.Contains(event.Data, "test-project") {
+			t.Errorf("expected data to contain project, got %q", event.Data)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("timeout waiting for event")
+	}
+}
+
+func TestEventHub_BroadcastDomainRequestRemoved(t *testing.T) {
+	hub := NewEventHub()
+	ch := hub.Subscribe()
+	defer hub.Unsubscribe(ch)
+
+	hub.BroadcastDomainRequestRemoved("domain456")
+
+	select {
+	case event := <-ch:
+		if event.Type != EventDomainRequestRemoved {
+			t.Errorf("expected type %s, got %s", EventDomainRequestRemoved, event.Type)
+		}
+		// Data should be valid JSON with ID field
+		var data RemovedEventData
+		if err := json.Unmarshal([]byte(event.Data), &data); err != nil {
+			t.Fatalf("failed to parse event data as JSON: %v", err)
+		}
+		if data.ID != "domain456" {
+			t.Errorf("expected id 'domain456', got %q", data.ID)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("timeout waiting for event")
+	}
+}
+
+func TestFormatSSE_DomainEvents(t *testing.T) {
+	tests := []struct {
+		name     string
+		event    Event
+		expected string
+	}{
+		{
+			name:     "domain-request-added event",
+			event:    Event{Type: EventDomainRequestAdded, Data: `{"id":"123","domain":"example.com"}`},
+			expected: "event: domain-request-added\ndata: {\"id\":\"123\",\"domain\":\"example.com\"}\n\n",
+		},
+		{
+			name:     "domain-request-removed event",
+			event:    Event{Type: EventDomainRequestRemoved, Data: `{"id":"abc"}`},
+			expected: "event: domain-request-removed\ndata: {\"id\":\"abc\"}\n\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := FormatSSE(tc.event)
+			if result != tc.expected {
+				t.Errorf("expected %q, got %q", tc.expected, result)
+			}
+		})
 	}
 }

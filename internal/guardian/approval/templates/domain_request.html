@@ -1,0 +1,18 @@
+{{define "domain_request"}}
+<li class="request" id="request-{{.ID}}">
+    <div class="request-header">
+        <div class="request-meta">
+            <span><strong>{{.Cloister}}</strong></span>
+            <span>{{.Project}}</span>
+        </div>
+        <div class="request-time">{{.Timestamp}}</div>
+    </div>
+    <div class="request-cmd">{{.Domain}}</div>
+    <div class="request-actions">
+        <button class="btn btn-approve" hx-post="/approve-domain/{{.ID}}" hx-vals='{"scope":"session"}' hx-swap="outerHTML" hx-target="closest .request">Allow (Session)</button>
+        <button class="btn btn-approve" hx-post="/approve-domain/{{.ID}}" hx-vals='{"scope":"project"}' hx-swap="outerHTML" hx-target="closest .request">Save to Project</button>
+        <button class="btn btn-approve" hx-post="/approve-domain/{{.ID}}" hx-vals='{"scope":"global"}' hx-swap="outerHTML" hx-target="closest .request">Save to Global</button>
+        <button class="btn btn-deny" hx-post="/deny-domain/{{.ID}}" hx-swap="outerHTML" hx-target="closest .request">Deny</button>
+    </div>
+</li>
+{{end}}

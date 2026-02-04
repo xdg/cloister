@@ -1,0 +1,13 @@
+{{define "domain_result"}}
+<li class="request request-{{.Status}}" id="request-{{.ID}}">
+    <div class="request-result">
+        <span class="result-status">{{if eq .Status "approved"}}Approved{{else}}Denied{{end}}</span>
+        <span class="result-cmd">{{.Domain}}</span>
+        {{if eq .Status "approved"}}
+            {{if .Scope}}<span class="result-scope">({{.Scope}})</span>{{end}}
+        {{else}}
+            {{if .Reason}}<span class="result-reason">{{.Reason}}</span>{{end}}
+        {{end}}
+    </div>
+</li>
+{{end}}

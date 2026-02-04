@@ -156,26 +156,25 @@ func (h *EventHub) BroadcastRequestRemoved(id string) {
 	})
 }
 
-// BroadcastDomainRequestAdded broadcasts a domain-request-added event.
-// This is a placeholder for Phase 6.5 - currently just broadcasts a simple event.
+// BroadcastDomainRequestAdded broadcasts a domain-request-added event with rendered HTML.
 func (h *EventHub) BroadcastDomainRequestAdded(req *DomainRequest) {
-	// For now, just broadcast a simple JSON event
-	// Phase 6.5 will add proper template rendering
-	data := struct {
-		ID       string `json:"id"`
-		Domain   string `json:"domain"`
-		Project  string `json:"project"`
-		Cloister string `json:"cloister"`
-	}{
-		ID:       req.ID,
-		Domain:   req.Domain,
-		Project:  req.Project,
-		Cloister: req.Cloister,
+	// Render the domain_request template
+	var buf bytes.Buffer
+	templateReq := domainTemplateRequest{
+		ID:        req.ID,
+		Domain:    req.Domain,
+		Cloister:  req.Cloister,
+		Project:   req.Project,
+		Timestamp: req.Timestamp.Format(time.RFC3339),
 	}
-	jsonData, _ := json.Marshal(data)
+	if err := templates.ExecuteTemplate(&buf, "domain_request", templateReq); err != nil {
+		// Log error but don't fail - SSE is best-effort
+		return
+	}
+
 	h.Broadcast(Event{
-		Type: "domain-request-added",
-		Data: string(jsonData),
+		Type: EventDomainRequestAdded,
+		Data: buf.String(),
 	})
 }
 

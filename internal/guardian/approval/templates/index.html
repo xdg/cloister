@@ -131,6 +131,7 @@
 </head>
 <body>
     <h1>Cloister Approval Queue</h1>
+    <h2 style="font-size: 1.2rem; font-weight: 600; margin: 20px 0 10px;">Command Requests</h2>
     <div class="queue">
         {{if .Requests}}
         <ul class="request-list" id="request-list">
@@ -141,6 +142,20 @@
         {{else}}
         <div class="queue-empty" id="queue-empty">
             No pending requests
+        </div>
+        {{end}}
+    </div>
+    <h2 style="font-size: 1.2rem; font-weight: 600; margin: 20px 0 10px;">Domain Requests</h2>
+    <div class="queue">
+        {{if .DomainRequests}}
+        <ul class="request-list" id="domain-request-list">
+            {{range .DomainRequests}}
+            {{template "domain_request" .}}
+            {{end}}
+        </ul>
+        {{else}}
+        <div class="queue-empty" id="domain-queue-empty">
+            No pending domain requests
         </div>
         {{end}}
     </div>
@@ -211,6 +226,68 @@
                     emptyDiv.className = 'queue-empty';
                     emptyDiv.id = 'queue-empty';
                     emptyDiv.textContent = 'No pending requests';
+                    list.parentNode.replaceChild(emptyDiv, list);
+                }
+            });
+
+            eventSource.addEventListener('domain-request-added', function(e) {
+                var emptyDiv = document.getElementById('domain-queue-empty');
+                var list = document.getElementById('domain-request-list');
+
+                // If the queue was empty, replace with a list
+                if (emptyDiv) {
+                    var ul = document.createElement('ul');
+                    ul.className = 'request-list';
+                    ul.id = 'domain-request-list';
+                    ul.innerHTML = e.data;
+                    emptyDiv.parentNode.replaceChild(ul, emptyDiv);
+                } else if (list) {
+                    // Append to existing list
+                    list.insertAdjacentHTML('beforeend', e.data);
+                }
+
+                // Re-initialize htmx for the new content
+                if (typeof htmx !== 'undefined') {
+                    htmx.process(document.getElementById('domain-request-list'));
+                }
+
+                // Show browser notification if permission granted
+                if ('Notification' in window &&
+                    Notification.permission === 'granted') {
+
+                    // Extract request info from the rendered HTML
+                    var temp = document.createElement('div');
+                    temp.innerHTML = e.data;
+                    var cloister = temp.querySelector('.request-meta strong')?.textContent || 'Unknown';
+                    var domain = temp.querySelector('.request-cmd')?.textContent || '';
+
+                    var notification = new Notification('Cloister: Domain Approval Requested', {
+                        body: cloister + ': ' + domain,
+                        tag: 'cloister-domain-request',  // Collapse multiple into one
+                        requireInteraction: false
+                    });
+
+                    notification.onclick = function() {
+                        window.focus();
+                        notification.close();
+                    };
+                }
+            });
+
+            eventSource.addEventListener('domain-request-removed', function(e) {
+                var data = JSON.parse(e.data);
+                var requestEl = document.getElementById('request-' + data.id);
+                if (requestEl) {
+                    requestEl.remove();
+                }
+
+                // If list is now empty, show the empty message
+                var list = document.getElementById('domain-request-list');
+                if (list && list.children.length === 0) {
+                    var emptyDiv = document.createElement('div');
+                    emptyDiv.className = 'queue-empty';
+                    emptyDiv.id = 'domain-queue-empty';
+                    emptyDiv.textContent = 'No pending domain requests';
                     list.parentNode.replaceChild(emptyDiv, list);
                 }
             });

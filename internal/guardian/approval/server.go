@@ -89,6 +89,14 @@ func NewServer(queue *Queue, auditLogger *audit.Logger) *Server {
 	}
 }
 
+// SetDomainQueue sets the domain queue and wires its event hub connection.
+func (s *Server) SetDomainQueue(dq *DomainQueue) {
+	s.DomainQueue = dq
+	if dq != nil && s.Events != nil {
+		dq.SetEventHub(s.Events)
+	}
+}
+
 // Start begins accepting connections on the approval server.
 // The server is bound to localhost only for security.
 // Returns an error if the server is already running or fails to start.
@@ -165,7 +173,8 @@ func (s *Server) ListenAddr() string {
 
 // indexData holds the data passed to the index.html template.
 type indexData struct {
-	Requests []templateRequest
+	Requests       []templateRequest
+	DomainRequests []domainTemplateRequest
 }
 
 // templateRequest holds request data for template rendering.
@@ -179,11 +188,29 @@ type templateRequest struct {
 	Timestamp string
 }
 
+// domainTemplateRequest holds domain request data for template rendering.
+type domainTemplateRequest struct {
+	ID        string
+	Domain    string
+	Cloister  string
+	Project   string
+	Timestamp string
+}
+
 // resultData holds the data passed to the result.html template.
 type resultData struct {
 	ID     string
 	Status string
 	Cmd    string
+}
+
+// domainResultData holds the data passed to the domain_result.html template.
+type domainResultData struct {
+	ID     string
+	Status string
+	Domain string
+	Scope  string
+	Reason string
 }
 
 // handleIndex serves the HTML UI for the approval interface.
@@ -202,6 +229,21 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			Agent:     req.Agent,
 			Cmd:       req.Cmd,
 			Timestamp: req.Timestamp.Format(time.RFC3339),
+		}
+	}
+
+	// Add domain requests if DomainQueue is available
+	if s.DomainQueue != nil {
+		pendingDomains := s.DomainQueue.List()
+		data.DomainRequests = make([]domainTemplateRequest, len(pendingDomains))
+		for i, req := range pendingDomains {
+			data.DomainRequests[i] = domainTemplateRequest{
+				ID:        req.ID,
+				Domain:    req.Domain,
+				Cloister:  req.Cloister,
+				Project:   req.Project,
+				Timestamp: req.Timestamp.Format(time.RFC3339),
+			}
 		}
 	}
 
@@ -474,6 +516,21 @@ func (s *Server) writeResultHTML(w http.ResponseWriter, id, status, cmd string) 
 	}
 }
 
+// writeDomainResultHTML renders the domain_result template for htmx responses.
+func (s *Server) writeDomainResultHTML(w http.ResponseWriter, id, status, domain, scope, reason string) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	data := domainResultData{
+		ID:     id,
+		Status: status,
+		Domain: domain,
+		Scope:  scope,
+		Reason: reason,
+	}
+	if err := templates.ExecuteTemplate(w, "domain_result", data); err != nil {
+		http.Error(w, "template error", http.StatusInternalServerError)
+	}
+}
+
 // pendingDomainRequestJSON represents a pending domain request in JSON format for the API.
 type pendingDomainRequestJSON struct {
 	ID        string `json:"id"`
@@ -614,6 +671,12 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	// Broadcast removal event to SSE clients
 	s.Events.BroadcastDomainRequestRemoved(id)
 
+	// Check if this is an htmx request
+	if r.Header.Get("HX-Request") == "true" {
+		s.writeDomainResultHTML(w, id, "approved", req.Domain, scope, "")
+		return
+	}
+
 	s.writeJSON(w, http.StatusOK, approveDomainResponse{
 		Status: "approved",
 		ID:     id,
@@ -674,6 +737,12 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Broadcast removal event to SSE clients
 	s.Events.BroadcastDomainRequestRemoved(id)
+
+	// Check if this is an htmx request
+	if r.Header.Get("HX-Request") == "true" {
+		s.writeDomainResultHTML(w, id, "denied", req.Domain, "", reason)
+		return
+	}
 
 	s.writeJSON(w, http.StatusOK, denyDomainResponse{
 		Status: "denied",

@@ -154,24 +154,24 @@ Add endpoints to the approval server for listing, approving, and denying domain 
 Add HTML templates for domain approval requests in the web UI. Domain requests appear in a separate section from hostexec commands, with scope selection buttons.
 
 ### 6.5.1 New HTML templates for domain requests
-- [ ] Create `internal/guardian/approval/templates/domain_request.html`:
+- [x] Create `internal/guardian/approval/templates/domain_request.html`:
   - Display domain, cloister, project, timestamp
   - Three approve buttons: "Allow (Session)", "Save to Project", "Save to Global"
   - One deny button
   - Use htmx: `hx-post="/approve-domain/{id}"` with `hx-vals='{"scope":"session"}'` etc.
-- [ ] Create `internal/guardian/approval/templates/domain_result.html`:
+- [x] Create `internal/guardian/approval/templates/domain_result.html`:
   - Show approved/denied status with domain and scope
-- [ ] Update `index.html`:
+- [x] Update `index.html`:
   - Add "Domain Requests" section below existing "Command Requests"
   - Render initial domain requests from server data
   - Add SSE handlers for `domain-request-added` and `domain-request-removed` events
   - Notifications for new domain requests
-- [ ] Add new SSE event types: `EventDomainRequestAdded`, `EventDomainRequestRemoved`
-- [ ] Add `BroadcastDomainRequestAdded` and `BroadcastDomainRequestRemoved` to `EventHub`
-- [ ] Update `handleIndex` to pass both command and domain request lists to template
-- [ ] Add `domainTemplateRequest` struct for template rendering (Domain field instead of Cmd)
-- [ ] **Test**: Template rendering test — `domain_request.html` renders without error with sample data
-- [ ] **Test**: SSE format test — domain events serialize correctly
+- [x] Add new SSE event types: `EventDomainRequestAdded`, `EventDomainRequestRemoved`
+- [x] Add `BroadcastDomainRequestAdded` and `BroadcastDomainRequestRemoved` to `EventHub`
+- [x] Update `handleIndex` to pass both command and domain request lists to template
+- [x] Add `domainTemplateRequest` struct for template rendering (Domain field instead of Cmd)
+- [x] **Test**: Template rendering test — `domain_request.html` renders without error with sample data
+- [x] **Test**: SSE format test — domain events serialize correctly
 
 ---
 

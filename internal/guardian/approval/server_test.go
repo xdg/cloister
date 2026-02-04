@@ -613,6 +613,125 @@ func TestTemplates_ParseFS(t *testing.T) {
 	}
 }
 
+func TestTemplates_DomainRequestPartial(t *testing.T) {
+	// Test that domain_request template executes without error
+	data := domainTemplateRequest{
+		ID:        "domain123",
+		Domain:    "example.com",
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Timestamp: "2024-01-15T14:32:05Z",
+	}
+
+	var buf bytes.Buffer
+	err := templates.ExecuteTemplate(&buf, "domain_request", data)
+	if err != nil {
+		t.Fatalf("failed to execute domain_request template: %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify key content is present
+	if !strings.Contains(output, "example.com") {
+		t.Error("expected output to contain 'example.com'")
+	}
+	if !strings.Contains(output, "test-cloister") {
+		t.Error("expected output to contain 'test-cloister'")
+	}
+	if !strings.Contains(output, "test-project") {
+		t.Error("expected output to contain 'test-project'")
+	}
+	if !strings.Contains(output, "domain123") {
+		t.Error("expected output to contain request ID 'domain123'")
+	}
+	if !strings.Contains(output, "Allow (Session)") {
+		t.Error("expected output to contain 'Allow (Session)' button")
+	}
+	if !strings.Contains(output, "Save to Project") {
+		t.Error("expected output to contain 'Save to Project' button")
+	}
+	if !strings.Contains(output, "Save to Global") {
+		t.Error("expected output to contain 'Save to Global' button")
+	}
+	if !strings.Contains(output, "Deny") {
+		t.Error("expected output to contain 'Deny' button")
+	}
+}
+
+func TestTemplates_DomainResultApproved(t *testing.T) {
+	// Test that domain_result template renders for approved state
+	data := struct {
+		ID     string
+		Domain string
+		Status string
+		Scope  string
+	}{
+		ID:     "domain456",
+		Domain: "trusted.com",
+		Status: "approved",
+		Scope:  "project",
+	}
+
+	var buf bytes.Buffer
+	err := templates.ExecuteTemplate(&buf, "domain_result", data)
+	if err != nil {
+		t.Fatalf("failed to execute domain_result template with approved status: %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify key content is present
+	if !strings.Contains(output, "domain456") {
+		t.Error("expected output to contain request ID 'domain456'")
+	}
+	if !strings.Contains(output, "trusted.com") {
+		t.Error("expected output to contain 'trusted.com'")
+	}
+	if !strings.Contains(output, "Approved") {
+		t.Error("expected output to contain 'Approved'")
+	}
+	if !strings.Contains(output, "project") {
+		t.Error("expected output to contain scope 'project'")
+	}
+}
+
+func TestTemplates_DomainResultDenied(t *testing.T) {
+	// Test that domain_result template renders for denied state
+	data := struct {
+		ID     string
+		Domain string
+		Status string
+		Reason string
+	}{
+		ID:     "domain789",
+		Domain: "suspicious.com",
+		Status: "denied",
+		Reason: "Suspicious domain",
+	}
+
+	var buf bytes.Buffer
+	err := templates.ExecuteTemplate(&buf, "domain_result", data)
+	if err != nil {
+		t.Fatalf("failed to execute domain_result template with denied status: %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify key content is present
+	if !strings.Contains(output, "domain789") {
+		t.Error("expected output to contain request ID 'domain789'")
+	}
+	if !strings.Contains(output, "suspicious.com") {
+		t.Error("expected output to contain 'suspicious.com'")
+	}
+	if !strings.Contains(output, "Denied") {
+		t.Error("expected output to contain 'Denied'")
+	}
+	if !strings.Contains(output, "Suspicious domain") {
+		t.Error("expected output to contain reason 'Suspicious domain'")
+	}
+}
+
 func TestServer_StaticHtmxServed(t *testing.T) {
 	queue := NewQueue()
 	server := NewServer(queue, nil)
@@ -1493,5 +1612,80 @@ func TestServer_HandleApproveDomain_MissingConfigPersister(t *testing.T) {
 
 	if resp.Error != "config persistence not available" {
 		t.Errorf("expected error 'config persistence not available', got %q", resp.Error)
+	}
+}
+
+func TestServer_SetDomainQueue(t *testing.T) {
+	queue := NewQueue()
+	server := NewServer(queue, nil)
+
+	// Verify server has an EventHub
+	if server.Events == nil {
+		t.Fatal("expected server to have EventHub")
+	}
+
+	// Create a domain queue
+	domainQueue := NewDomainQueue()
+
+	// Initially the domain queue should not have an event hub
+	if domainQueue.events != nil {
+		t.Error("expected new domain queue to have nil event hub")
+	}
+
+	// Set the domain queue on the server
+	server.SetDomainQueue(domainQueue)
+
+	// Verify the domain queue was set
+	if server.DomainQueue != domainQueue {
+		t.Error("expected server.DomainQueue to be set")
+	}
+
+	// Verify the event hub was wired to the domain queue
+	if domainQueue.events == nil {
+		t.Error("expected domain queue event hub to be wired after SetDomainQueue")
+	}
+
+	// Verify it's the same event hub
+	if domainQueue.events != server.Events {
+		t.Error("expected domain queue to use server's event hub")
+	}
+
+	// Verify events are actually broadcast
+	ch := server.Events.Subscribe()
+	defer server.Events.Unsubscribe(ch)
+
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Response:  make(chan DomainResponse, 1),
+	}
+
+	_, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Should receive the broadcast event
+	select {
+	case event := <-ch:
+		if event.Type != EventDomainRequestAdded {
+			t.Errorf("expected event type %s, got %s", EventDomainRequestAdded, event.Type)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Error("timeout waiting for domain request added event")
+	}
+}
+
+func TestServer_SetDomainQueue_Nil(t *testing.T) {
+	queue := NewQueue()
+	server := NewServer(queue, nil)
+
+	// Setting nil domain queue should not panic
+	server.SetDomainQueue(nil)
+
+	if server.DomainQueue != nil {
+		t.Error("expected server.DomainQueue to be nil")
 	}
 }
