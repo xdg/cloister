@@ -12,9 +12,27 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
 )
+
+// writeTestConfig creates a custom guardian config for e2e tests.
+// The config is based on defaults but customized for test requirements:
+// - unlisted_domain_behavior: "reject" - tests expect immediate 403, not approval flow
+func writeTestConfig() error {
+	// Start with production defaults
+	cfg := config.DefaultGlobalConfig()
+
+	// Customize for tests: reject unlisted domains immediately
+	// This allows TestProxy_BlockedDomain to verify blocking behavior
+	// without waiting for the 60s approval timeout
+	cfg.Proxy.UnlistedDomainBehavior = "reject"
+
+	// Write to XDG_CONFIG_HOME/cloister/config.yaml
+	// (XDG_CONFIG_HOME is already set to temp dir by TestMain)
+	return config.WriteGlobalConfig(cfg)
+}
 
 // TestMain sets up the guardian for all e2e tests and tears it down on exit.
 // This allows tests to share a single guardian instance, which is more efficient
@@ -39,6 +57,14 @@ func TestMain(m *testing.M) {
 	// This allows tests to run without conflicting with a production guardian
 	// or with tests running in other worktrees.
 	os.Setenv(guardian.InstanceIDEnvVar, guardian.GenerateInstanceID())
+
+	// Write custom config for e2e tests
+	if err := writeTestConfig(); err != nil {
+		fmt.Fprintf(os.Stderr, "SKIP: Could not write test config: %v\n", err)
+		os.RemoveAll(tempConfigDir)
+		os.RemoveAll(tempStateDir)
+		os.Exit(0)
+	}
 
 	// Check Docker availability first
 	if err := docker.CheckDaemon(); err != nil {
