@@ -84,7 +84,25 @@ func TestProxyServer_StartStop(t *testing.T) {
 }
 
 func TestProxyServer_ConnectMethod(t *testing.T) {
+	// Start a mock upstream
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanupUpstream := startMockUpstream(t, echoHandler)
+	defer cleanupUpstream()
+
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
 	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{upstreamHost})
+
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
 	}
@@ -102,13 +120,11 @@ func TestProxyServer_ConnectMethod(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create request: %v", err)
 		}
-		req.Host = "api.anthropic.com:443"
+		req.Host = upstreamAddr
 
-		client := &http.Client{
-			// Don't follow redirects
-			CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+		client := noProxyClient()
+		client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
 		}
 
 		resp, err := client.Do(req)
@@ -198,47 +214,6 @@ func TestProxyServer_ListenAddr(t *testing.T) {
 	if addr == "" {
 		t.Error("expected non-empty address after start")
 	}
-}
-
-// startMockUpstream creates a mock TCP server that echoes data back to the client.
-// It returns the server address and a cleanup function.
-func startMockUpstream(t *testing.T, handler func(net.Conn)) (string, func()) {
-	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("failed to start mock upstream: %v", err)
-	}
-
-	var wg sync.WaitGroup
-	done := make(chan struct{})
-
-	go func() {
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				select {
-				case <-done:
-					return
-				default:
-					continue
-				}
-			}
-			wg.Add(1)
-			go func(c net.Conn) {
-				defer wg.Done()
-				defer c.Close()
-				handler(c)
-			}(conn)
-		}
-	}()
-
-	cleanup := func() {
-		close(done)
-		listener.Close()
-		wg.Wait()
-	}
-
-	return listener.Addr().String(), cleanup
 }
 
 func TestProxyServer_TunnelEstablishment(t *testing.T) {

@@ -267,18 +267,18 @@ Phase 6 implementation is complete but has test failures and improvements identi
 - [x] **Test**: Run `make test` and verify all API tests pass
 
 ### 6.9.2 Fix proxy allowlist enforcement (Priority 1)
-- [ ] **Issue**: Allowed domains returning 403 instead of 200
-- [ ] **Root cause**: Proxy allowlist lookup not recognizing known domains
-- [ ] **Files affected**: `internal/guardian/proxy.go`, `internal/guardian/proxy_test.go`
-- [ ] **Tests failing**:
+- [x] **Issue**: Allowed domains returning 403 instead of 200
+- [x] **Root cause**: Proxy allowlist lookup not recognizing known domains
+- [x] **Files affected**: `internal/guardian/proxy.go`, `internal/guardian/proxy_test.go`
+- [x] **Tests failing**:
   - `TestProxyServer_AllowlistEnforcement` (api.anthropic.com, api.openai.com, generativelanguage.googleapis.com)
   - `TestProxyServer_ConnectMethod/CONNECT_returns_200_for_allowed_domain`
-- [ ] **Possible causes**:
+- [x] **Possible causes**:
   - Port stripping issue (domain vs domain:443)
   - Cached allowlist not being consulted
   - Session allowlist lookup interfering with static allowlist
-- [ ] **Expected fix**: Ensure static allowlist check happens before domain approval logic
-- [ ] **Test**: Run `make test` and verify proxy allowlist tests pass
+- [x] **Expected fix**: Ensure static allowlist check happens before domain approval logic
+- [x] **Test**: Run `make test` and verify proxy allowlist tests pass
 
 ### 6.9.3 Fix request server routing (Priority 2)
 - [ ] **Issue**: Request server handler returning 405 instead of 200

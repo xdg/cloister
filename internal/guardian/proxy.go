@@ -368,25 +368,29 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// Get the allowlist to use for this request
 	allowlist := p.getAllowlistForRequest(r)
 
+	// Ensure we have an allowlist - fall back to global if nil
+	if allowlist == nil {
+		allowlist = p.Allowlist
+	}
+
 	// Extract project name once for reuse
 	projectName := p.extractProjectName(r)
 
-	// Check allowlist - if allowed, proceed immediately
-	allowed := allowlist != nil && allowlist.IsAllowed(host)
+	// Check static allowlist FIRST, before session or approval logic
+	staticAllowed := allowlist != nil && allowlist.IsAllowed(host)
+	clog.Debug("handleConnect: host=%s, allowlist=%v, staticAllowed=%v", host, allowlist != nil, staticAllowed)
 
-	if !allowed {
-		// Not in persistent allowlist - check session allowlist
+	// If NOT in static allowlist, check session allowlist and domain approver
+	if !staticAllowed {
+		sessionAllowed := false
 		if p.SessionAllowlist != nil && projectName != "" {
-			if p.SessionAllowlist.IsAllowed(projectName, host) {
-				allowed = true
-			}
+			sessionAllowed = p.SessionAllowlist.IsAllowed(projectName, host)
 		}
 
-		// If still not allowed, try domain approver
-		if !allowed {
+		if !sessionAllowed {
 			if p.DomainApprover == nil {
 				// No approver - reject immediately (backward compatible)
-				http.Error(w, "Forbidden - domain not in allowlist", http.StatusForbidden)
+				http.Error(w, "Forbidden - domain not allowed", http.StatusForbidden)
 				return
 			}
 
@@ -398,7 +402,6 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-
 	// Establish connection to upstream server.
 	// We use net.Dial (not TLS) because the client will perform TLS handshake
 	// through the tunnel - this is how HTTP CONNECT proxies work.
@@ -515,8 +518,10 @@ func copyWithIdleTimeout(dst net.Conn, src net.Conn, idleTimeout time.Duration) 
 // getAllowlistForRequest determines the correct allowlist to use for a request.
 // It first tries to use per-project allowlists if configured, falling back to the global allowlist.
 func (p *ProxyServer) getAllowlistForRequest(r *http.Request) *Allowlist {
+	clog.Debug("getAllowlistForRequest: AllowlistCache=%v, TokenLookup=%v", p.AllowlistCache != nil, p.TokenLookup != nil)
 	// If no per-project support is configured, use global allowlist
 	if p.AllowlistCache == nil || p.TokenLookup == nil {
+		clog.Debug("getAllowlistForRequest: returning p.Allowlist (global)")
 		return p.Allowlist
 	}
 

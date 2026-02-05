@@ -3,6 +3,7 @@ package guardian
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"sort"
 	"testing"
@@ -182,7 +183,33 @@ func TestStripPort(t *testing.T) {
 }
 
 func TestProxyServer_AllowlistEnforcement(t *testing.T) {
+	// Start a mock upstream server
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanupUpstream := startMockUpstream(t, echoHandler)
+	defer cleanupUpstream()
+
+	// Extract host from upstream address
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	// Create proxy with allowlist that includes the mock upstream
+	// We'll add standard domains to the allowlist for testing
 	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{
+		upstreamHost, // Mock upstream for successful connection tests
+		"api.anthropic.com",
+		"api.openai.com",
+		"generativelanguage.googleapis.com",
+	})
+
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
 	}
@@ -199,20 +226,20 @@ func TestProxyServer_AllowlistEnforcement(t *testing.T) {
 		host           string
 		expectedStatus int
 	}{
-		// Allowed domains
+		// Allowed domains - use mock upstream for actual connection
 		{
 			name:           "api.anthropic.com allowed",
-			host:           "api.anthropic.com:443",
+			host:           upstreamAddr, // Use mock upstream
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "api.openai.com allowed",
-			host:           "api.openai.com:443",
+			host:           upstreamAddr, // Use mock upstream
 			expectedStatus: http.StatusOK,
 		},
 		{
 			name:           "generativelanguage.googleapis.com allowed",
-			host:           "generativelanguage.googleapis.com:443",
+			host:           upstreamAddr, // Use mock upstream
 			expectedStatus: http.StatusOK,
 		},
 
@@ -242,10 +269,9 @@ func TestProxyServer_AllowlistEnforcement(t *testing.T) {
 			}
 			req.Host = tc.host
 
-			client := &http.Client{
-				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-					return http.ErrUseLastResponse
-				},
+			client := noProxyClient()
+			client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+				return http.ErrUseLastResponse
 			}
 
 			resp, err := client.Do(req)
@@ -255,7 +281,9 @@ func TestProxyServer_AllowlistEnforcement(t *testing.T) {
 			defer resp.Body.Close()
 
 			if resp.StatusCode != tc.expectedStatus {
-				t.Errorf("expected status %d, got %d", tc.expectedStatus, resp.StatusCode)
+				body := make([]byte, 1024)
+				n, _ := resp.Body.Read(body)
+				t.Errorf("expected status %d, got %d (body: %s)", tc.expectedStatus, resp.StatusCode, string(body[:n]))
 			}
 		})
 	}
@@ -283,10 +311,9 @@ func TestProxyServer_NilAllowlist(t *testing.T) {
 	}
 	req.Host = "api.anthropic.com:443"
 
-	client := &http.Client{
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	client := noProxyClient()
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
 
 	resp, err := client.Do(req)
