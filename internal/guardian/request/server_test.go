@@ -17,6 +17,16 @@ import (
 	"github.com/xdg/cloister/internal/guardian/patterns"
 )
 
+// noProxyClient returns an HTTP client that doesn't use any proxy.
+// This is needed in tests to avoid using the cloister guardian proxy.
+func noProxyClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: nil,
+		},
+	}
+}
+
 func TestNewServer(t *testing.T) {
 	lookup := mockTokenLookup(map[string]TokenInfo{
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
@@ -244,7 +254,7 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(TokenHeader, "valid-token")
 
-	client := &http.Client{}
+	client := noProxyClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
@@ -751,7 +761,7 @@ func TestServer_HandleRequest_GETReturns405(t *testing.T) {
 	}
 	req.Header.Set(TokenHeader, "valid-token")
 
-	client := &http.Client{}
+	client := noProxyClient()
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)

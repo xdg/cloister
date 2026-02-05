@@ -281,12 +281,12 @@ Phase 6 implementation is complete but has test failures and improvements identi
 - [x] **Test**: Run `make test` and verify proxy allowlist tests pass
 
 ### 6.9.3 Fix request server routing (Priority 2)
-- [ ] **Issue**: Request server handler returning 405 instead of 200
-- [ ] **Root cause**: Similar to 6.9.1, method registration issue
-- [ ] **Files affected**: `internal/guardian/request/server_test.go`
-- [ ] **Test failing**: `TestServer_HandleRequest_ViaHTTPServer`
-- [ ] **Expected fix**: Verify HTTP method registration matches test
-- [ ] **Test**: Run `make test` and verify request server tests pass
+- [x] **Issue**: Request server handler returning 405 instead of 200
+- [x] **Root cause**: Similar to 6.9.1, method registration issue
+- [x] **Files affected**: `internal/guardian/request/server_test.go`
+- [x] **Test failing**: `TestServer_HandleRequest_ViaHTTPServer`
+- [x] **Expected fix**: Verify HTTP method registration matches test
+- [x] **Test**: Run `make test` and verify request server tests pass
 
 ### 6.9.4 Fix or skip environment-specific tests (Priority 3)
 - [ ] **Issue**: Project detection tests expecting path containing "cloister", getting "/work"

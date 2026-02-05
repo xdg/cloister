@@ -98,9 +98,9 @@ func (s *Server) Start() error {
 
 	mux := http.NewServeMux()
 
-	// Apply auth middleware to the request handler
-	requestHandler := AuthMiddleware(s.TokenLookup)(http.HandlerFunc(s.handleRequest))
-	mux.Handle("POST /request", requestHandler)
+	// Apply auth middleware to the request handler and route manually by method
+	requestHandler := AuthMiddleware(s.TokenLookup)(http.HandlerFunc(s.handleRequestRouter))
+	mux.Handle("/request", requestHandler)
 
 	s.listener = listener
 	s.server = &http.Server{
@@ -140,6 +140,15 @@ func (s *Server) ListenAddr() string {
 		return ""
 	}
 	return s.listener.Addr().String()
+}
+
+// handleRequestRouter routes /request requests based on method.
+func (s *Server) handleRequestRouter(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	s.handleRequest(w, r)
 }
 
 // handleRequest processes POST /request from cloister containers.
