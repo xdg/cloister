@@ -7,6 +7,9 @@ import (
 
 // defaultConfigTemplate is the commented YAML template for the default global config.
 // Using a template string provides control over comments and formatting.
+//
+// IMPORTANT: This template must stay in sync with DefaultGlobalConfig() in defaults.go.
+// The TestDefaultConfigTemplateMatchesDefaults test enforces this.
 const defaultConfigTemplate = `# Cloister global configuration
 # See https://github.com/xdg/cloister/specs/config-reference.md for full documentation
 
@@ -28,6 +31,14 @@ proxy:
     - domain: "stackoverflow.com"
     - domain: "man7.org"
     - domain: "linux.die.net"
+    - domain: "cppreference.com"
+    - domain: "en.cppreference.com"
+    - domain: "typescriptlang.org"
+    - domain: "nodejs.org"
+    - domain: "docs.docker.com"
+    - domain: "kubernetes.io"
+    - domain: "ruby-doc.org"
+    - domain: "docs.npmjs.com"
 
     # Package registries (for in-container package installs)
     - domain: "registry.npmjs.org"
@@ -37,6 +48,9 @@ proxy:
     - domain: "files.pythonhosted.org"
     - domain: "crates.io"
     - domain: "static.crates.io"
+    - domain: "rubygems.org"
+    - domain: "index.rubygems.org"
+    - domain: "yarnpkg.com"
 
     # AI provider APIs (required for agents to function)
     - domain: "api.anthropic.com"
@@ -73,43 +87,23 @@ hostexec:
   # NOTE: Package installs (npm, pip, cargo, go) run inside the container
   # via proxy, not via hostexec. hostexec is for host-specific operations.
   auto_approve:
-    - pattern: "^docker compose ps$"
-    - pattern: "^docker compose logs.*$"
+    # Read-only container inspection (safe, no side effects)
+    - pattern: "^docker ps.*$"
 
   # Patterns that require manual approval. All other requests are logged
   # and denied.
+  #
+  # Security philosophy: only read-only operations by default.
+  # Broad patterns like "aws .+" or "curl .+" are intentionally excluded
+  # because they could be used for data exfiltration or credential abuse.
+  # Network access should go through the proxy allowlist, not hostexec.
+  # Users can add broader patterns to their project config if needed.
   manual_approve:
-    # Dev environment lifecycle
-    - pattern: "^docker compose (up|down|restart|build).*$"
-
-    # External tools requiring credentials (human can inspect args)
-    - pattern: "^gh .+$"
-    - pattern: "^jira .+$"
-    - pattern: "^aws .+$"
-    - pattern: "^gcloud .+$"
-
-    # Network access with full path visibility (proxy can't inspect paths)
-    - pattern: "^curl .+$"
-    - pattern: "^wget .+$"
-
-# Devcontainer integration
-devcontainer:
-  enabled: true
-
-  # Feature allowlist
-  features:
-    allow:
-      - "ghcr.io/devcontainers/features/*"
-      - "ghcr.io/devcontainers-contrib/features/*"
-
-  # Always block these mounts regardless of devcontainer.json
-  blocked_mounts:
-    - "~/.ssh"
-    - "~/.aws"
-    - "~/.config/gcloud"
-    - "~/.gnupg"
-    - "~/.config/gh"
-    - "/var/run/docker.sock"
+    # GitHub CLI - read-only operations only
+    - pattern: "^gh pr (view|list|status|checks|diff)( .+)?$"
+    - pattern: "^gh issue (view|list)( .+)?$"
+    - pattern: "^gh repo view( .+)?$"
+    - pattern: "^gh run (list|view|watch)( .+)?$"
 
 # AI agent configurations
 agents:
@@ -118,6 +112,7 @@ agents:
     env:
       - "ANTHROPIC_*"
       - "CLAUDE_*"
+    skip_permissions: true
 
   codex:
     command: "codex"
@@ -132,7 +127,7 @@ agents:
 
 # Default settings for new cloisters
 defaults:
-  image: "cloister:latest"
+  # image intentionally omitted — signals use of version-matched image
   shell: "/bin/bash"
   user: "cloister"
   agent: "claude"  # Default agent if not specified

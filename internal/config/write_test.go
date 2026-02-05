@@ -60,7 +60,6 @@ func TestWriteDefaultConfig_Creates(t *testing.T) {
 		"domain: \"api.anthropic.com\"",
 		"request:",
 		"hostexec:",
-		// Note: devcontainer section not in defaults (not yet implemented)
 		"agents:",
 		"defaults:",
 		"log:",
@@ -566,6 +565,189 @@ func TestWriteGlobalConfig_Overwrites(t *testing.T) {
 
 	if parsedCfg.Proxy.Listen != ":2222" {
 		t.Errorf("parsedCfg.Proxy.Listen = %q, want %q", parsedCfg.Proxy.Listen, ":2222")
+	}
+}
+
+// TestDefaultConfigTemplateMatchesDefaults ensures the hard-coded YAML template
+// in defaultConfigTemplate stays in sync with DefaultGlobalConfig(). If this
+// test fails, one of them was updated without the other.
+func TestDefaultConfigTemplateMatchesDefaults(t *testing.T) {
+	parsed, err := ParseGlobalConfig([]byte(defaultConfigTemplate))
+	if err != nil {
+		t.Fatalf("ParseGlobalConfig(defaultConfigTemplate) error = %v", err)
+	}
+	expected := DefaultGlobalConfig()
+
+	// --- Proxy ---
+	if parsed.Proxy.Listen != expected.Proxy.Listen {
+		t.Errorf("Proxy.Listen: template=%q, defaults=%q", parsed.Proxy.Listen, expected.Proxy.Listen)
+	}
+	if parsed.Proxy.UnlistedDomainBehavior != expected.Proxy.UnlistedDomainBehavior {
+		t.Errorf("Proxy.UnlistedDomainBehavior: template=%q, defaults=%q",
+			parsed.Proxy.UnlistedDomainBehavior, expected.Proxy.UnlistedDomainBehavior)
+	}
+	if parsed.Proxy.ApprovalTimeout != expected.Proxy.ApprovalTimeout {
+		t.Errorf("Proxy.ApprovalTimeout: template=%q, defaults=%q",
+			parsed.Proxy.ApprovalTimeout, expected.Proxy.ApprovalTimeout)
+	}
+	if parsed.Proxy.RateLimit != expected.Proxy.RateLimit {
+		t.Errorf("Proxy.RateLimit: template=%d, defaults=%d", parsed.Proxy.RateLimit, expected.Proxy.RateLimit)
+	}
+	if parsed.Proxy.MaxRequestBytes != expected.Proxy.MaxRequestBytes {
+		t.Errorf("Proxy.MaxRequestBytes: template=%d, defaults=%d",
+			parsed.Proxy.MaxRequestBytes, expected.Proxy.MaxRequestBytes)
+	}
+
+	// Compare allow domains as sets
+	templateDomains := make(map[string]bool)
+	for _, e := range parsed.Proxy.Allow {
+		templateDomains[e.Domain] = true
+	}
+	defaultDomains := make(map[string]bool)
+	for _, e := range expected.Proxy.Allow {
+		defaultDomains[e.Domain] = true
+	}
+	for d := range defaultDomains {
+		if !templateDomains[d] {
+			t.Errorf("domain %q in DefaultGlobalConfig but missing from template", d)
+		}
+	}
+	for d := range templateDomains {
+		if !defaultDomains[d] {
+			t.Errorf("domain %q in template but missing from DefaultGlobalConfig", d)
+		}
+	}
+
+	// --- Request ---
+	if parsed.Request.Listen != expected.Request.Listen {
+		t.Errorf("Request.Listen: template=%q, defaults=%q", parsed.Request.Listen, expected.Request.Listen)
+	}
+	if parsed.Request.Timeout != expected.Request.Timeout {
+		t.Errorf("Request.Timeout: template=%q, defaults=%q", parsed.Request.Timeout, expected.Request.Timeout)
+	}
+
+	// --- Hostexec ---
+	if parsed.Hostexec.Listen != expected.Hostexec.Listen {
+		t.Errorf("Hostexec.Listen: template=%q, defaults=%q", parsed.Hostexec.Listen, expected.Hostexec.Listen)
+	}
+
+	templatePatterns := make(map[string]bool)
+	for _, p := range parsed.Hostexec.AutoApprove {
+		templatePatterns[p.Pattern] = true
+	}
+	defaultPatterns := make(map[string]bool)
+	for _, p := range expected.Hostexec.AutoApprove {
+		defaultPatterns[p.Pattern] = true
+	}
+	for p := range defaultPatterns {
+		if !templatePatterns[p] {
+			t.Errorf("auto_approve pattern %q in DefaultGlobalConfig but missing from template", p)
+		}
+	}
+	for p := range templatePatterns {
+		if !defaultPatterns[p] {
+			t.Errorf("auto_approve pattern %q in template but missing from DefaultGlobalConfig", p)
+		}
+	}
+
+	templatePatterns = make(map[string]bool)
+	for _, p := range parsed.Hostexec.ManualApprove {
+		templatePatterns[p.Pattern] = true
+	}
+	defaultPatterns = make(map[string]bool)
+	for _, p := range expected.Hostexec.ManualApprove {
+		defaultPatterns[p.Pattern] = true
+	}
+	for p := range defaultPatterns {
+		if !templatePatterns[p] {
+			t.Errorf("manual_approve pattern %q in DefaultGlobalConfig but missing from template", p)
+		}
+	}
+	for p := range templatePatterns {
+		if !defaultPatterns[p] {
+			t.Errorf("manual_approve pattern %q in template but missing from DefaultGlobalConfig", p)
+		}
+	}
+
+	// --- Agents ---
+	for name, expectedAgent := range expected.Agents {
+		parsedAgent, ok := parsed.Agents[name]
+		if !ok {
+			t.Errorf("agent %q in DefaultGlobalConfig but missing from template", name)
+			continue
+		}
+		if parsedAgent.Command != expectedAgent.Command {
+			t.Errorf("agent %q Command: template=%q, defaults=%q", name, parsedAgent.Command, expectedAgent.Command)
+		}
+		if len(parsedAgent.Env) != len(expectedAgent.Env) {
+			t.Errorf("agent %q Env count: template=%d, defaults=%d", name, len(parsedAgent.Env), len(expectedAgent.Env))
+		} else {
+			for i, env := range expectedAgent.Env {
+				if parsedAgent.Env[i] != env {
+					t.Errorf("agent %q Env[%d]: template=%q, defaults=%q", name, i, parsedAgent.Env[i], env)
+				}
+			}
+		}
+		// SkipPerms
+		switch {
+		case expectedAgent.SkipPerms == nil && parsedAgent.SkipPerms == nil:
+			// ok
+		case expectedAgent.SkipPerms == nil || parsedAgent.SkipPerms == nil:
+			t.Errorf("agent %q SkipPerms: template=%v, defaults=%v", name, parsedAgent.SkipPerms, expectedAgent.SkipPerms)
+		case *expectedAgent.SkipPerms != *parsedAgent.SkipPerms:
+			t.Errorf("agent %q SkipPerms: template=%v, defaults=%v", name, *parsedAgent.SkipPerms, *expectedAgent.SkipPerms)
+		}
+	}
+	for name := range parsed.Agents {
+		if _, ok := expected.Agents[name]; !ok {
+			t.Errorf("agent %q in template but missing from DefaultGlobalConfig", name)
+		}
+	}
+
+	// --- Defaults ---
+	if parsed.Defaults.Image != expected.Defaults.Image {
+		t.Errorf("Defaults.Image: template=%q, defaults=%q", parsed.Defaults.Image, expected.Defaults.Image)
+	}
+	if parsed.Defaults.Shell != expected.Defaults.Shell {
+		t.Errorf("Defaults.Shell: template=%q, defaults=%q", parsed.Defaults.Shell, expected.Defaults.Shell)
+	}
+	if parsed.Defaults.User != expected.Defaults.User {
+		t.Errorf("Defaults.User: template=%q, defaults=%q", parsed.Defaults.User, expected.Defaults.User)
+	}
+	if parsed.Defaults.Agent != expected.Defaults.Agent {
+		t.Errorf("Defaults.Agent: template=%q, defaults=%q", parsed.Defaults.Agent, expected.Defaults.Agent)
+	}
+
+	// --- Log ---
+	if parsed.Log.File != expected.Log.File {
+		t.Errorf("Log.File: template=%q, defaults=%q", parsed.Log.File, expected.Log.File)
+	}
+	if parsed.Log.Stdout != expected.Log.Stdout {
+		t.Errorf("Log.Stdout: template=%v, defaults=%v", parsed.Log.Stdout, expected.Log.Stdout)
+	}
+	if parsed.Log.Level != expected.Log.Level {
+		t.Errorf("Log.Level: template=%q, defaults=%q", parsed.Log.Level, expected.Log.Level)
+	}
+	if parsed.Log.PerCloister != expected.Log.PerCloister {
+		t.Errorf("Log.PerCloister: template=%v, defaults=%v", parsed.Log.PerCloister, expected.Log.PerCloister)
+	}
+	if parsed.Log.PerCloisterDir != expected.Log.PerCloisterDir {
+		t.Errorf("Log.PerCloisterDir: template=%q, defaults=%q",
+			parsed.Log.PerCloisterDir, expected.Log.PerCloisterDir)
+	}
+
+	// --- Devcontainer (should both be zero value) ---
+	if parsed.Devcontainer.Enabled != expected.Devcontainer.Enabled {
+		t.Errorf("Devcontainer.Enabled: template=%v, defaults=%v",
+			parsed.Devcontainer.Enabled, expected.Devcontainer.Enabled)
+	}
+	if len(parsed.Devcontainer.Features.Allow) != len(expected.Devcontainer.Features.Allow) {
+		t.Errorf("Devcontainer.Features.Allow: template has %d, defaults has %d",
+			len(parsed.Devcontainer.Features.Allow), len(expected.Devcontainer.Features.Allow))
+	}
+	if len(parsed.Devcontainer.BlockedMounts) != len(expected.Devcontainer.BlockedMounts) {
+		t.Errorf("Devcontainer.BlockedMounts: template has %d, defaults has %d",
+			len(parsed.Devcontainer.BlockedMounts), len(expected.Devcontainer.BlockedMounts))
 	}
 }
 
