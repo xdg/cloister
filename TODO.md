@@ -252,10 +252,10 @@ Add audit log entries for domain approval events, consistent with existing hoste
 Phase 6 implementation is complete but has test failures and improvements identified during code review.
 
 ### 6.9.1 Fix API routing issues (Priority 1)
-- [ ] **Issue**: All API tests returning 405 (Method Not Allowed)
-- [ ] **Root cause**: HTTP method mismatch or routing registration issue in guardian API server
-- [ ] **Files affected**: `internal/guardian/api_test.go`, possibly `internal/guardian/api.go`
-- [ ] **Tests failing**:
+- [x] **Issue**: All API tests returning 405 (Method Not Allowed)
+- [x] **Root cause**: HTTP method mismatch or routing registration issue in guardian API server
+- [x] **Files affected**: `internal/guardian/api_test.go`, possibly `internal/guardian/api.go`
+- [x] **Tests failing**:
   - `TestAPIServer_RegisterToken`
   - `TestAPIServer_RevokeToken`
   - `TestAPIServer_ListTokens`
@@ -263,8 +263,8 @@ Phase 6 implementation is complete but has test failures and improvements identi
   - `TestClient_RegisterToken`
   - `TestClient_RevokeToken`
   - `TestClient_ListTokens`
-- [ ] **Expected fix**: Verify HTTP method registration (GET/POST/DELETE) matches test expectations
-- [ ] **Test**: Run `make test` and verify all API tests pass
+- [x] **Expected fix**: Verify HTTP method registration (GET/POST/DELETE) matches test expectations
+- [x] **Test**: Run `make test` and verify all API tests pass
 
 ### 6.9.2 Fix proxy allowlist enforcement (Priority 1)
 - [ ] **Issue**: Allowed domains returning 403 instead of 200

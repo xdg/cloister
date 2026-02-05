@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -57,6 +58,21 @@ func (r *mockRegistry) List() map[string]TokenInfo {
 
 func (r *mockRegistry) Count() int {
 	return len(r.tokens)
+}
+
+// noProxyClient returns an HTTP client that doesn't use the proxy.
+// This is necessary for tests running inside the cloister container where
+// HTTP_PROXY is set to the guardian proxy.
+func noProxyClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: nil,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+		},
+	}
 }
 
 func TestAPIServer_StartStop(t *testing.T) {
@@ -150,9 +166,11 @@ func TestAPIServer_RegisterToken(t *testing.T) {
 		},
 	}
 
+	client := noProxyClient()
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := http.Post(baseURL+"/tokens", "application/json", bytes.NewBufferString(tc.body))
+			resp, err := client.Post(baseURL+"/tokens", "application/json", bytes.NewBufferString(tc.body))
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
@@ -215,6 +233,8 @@ func TestAPIServer_RevokeToken(t *testing.T) {
 		},
 	}
 
+	client := noProxyClient()
+
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			req, err := http.NewRequest(http.MethodDelete, baseURL+"/tokens/"+tc.token, nil)
@@ -222,7 +242,7 @@ func TestAPIServer_RevokeToken(t *testing.T) {
 				t.Fatalf("failed to create request: %v", err)
 			}
 
-			resp, err := http.DefaultClient.Do(req)
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
@@ -257,7 +277,8 @@ func TestAPIServer_ListTokens(t *testing.T) {
 
 	baseURL := "http://" + api.ListenAddr()
 
-	resp, err := http.Get(baseURL + "/tokens")
+	client := noProxyClient()
+	resp, err := client.Get(baseURL + "/tokens")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -305,7 +326,8 @@ func TestAPIServer_ListTokensEmpty(t *testing.T) {
 
 	baseURL := "http://" + api.ListenAddr()
 
-	resp, err := http.Get(baseURL + "/tokens")
+	client := noProxyClient()
+	resp, err := client.Get(baseURL + "/tokens")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -341,7 +363,8 @@ func TestAPIServer_ContentType(t *testing.T) {
 	baseURL := "http://" + api.ListenAddr()
 
 	// Check that responses have JSON content type
-	resp, err := http.Get(baseURL + "/tokens")
+	client := noProxyClient()
+	resp, err := client.Get(baseURL + "/tokens")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}

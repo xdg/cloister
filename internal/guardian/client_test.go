@@ -19,6 +19,7 @@ func TestClient_RegisterToken(t *testing.T) {
 	}()
 
 	client := NewClient(api.ListenAddr())
+	client.HTTPClient = noProxyClient()
 
 	// Test successful registration
 	err := client.RegisterToken("test-token-123", "my-cloister", "my-project")
@@ -47,6 +48,7 @@ func TestClient_RegisterTokenErrors(t *testing.T) {
 	}()
 
 	client := NewClient(api.ListenAddr())
+	client.HTTPClient = noProxyClient()
 
 	// Test empty token
 	err := client.RegisterToken("", "my-cloister", "my-project")
@@ -76,6 +78,7 @@ func TestClient_RevokeToken(t *testing.T) {
 	}()
 
 	client := NewClient(api.ListenAddr())
+	client.HTTPClient = noProxyClient()
 
 	// Test successful revocation
 	err := client.RevokeToken("token-to-revoke")
@@ -111,6 +114,7 @@ func TestClient_ListTokens(t *testing.T) {
 	}()
 
 	client := NewClient(api.ListenAddr())
+	client.HTTPClient = noProxyClient()
 
 	tokens, err := client.ListTokens()
 	if err != nil {
@@ -143,6 +147,7 @@ func TestClient_ListTokensEmpty(t *testing.T) {
 	}()
 
 	client := NewClient(api.ListenAddr())
+	client.HTTPClient = noProxyClient()
 
 	tokens, err := client.ListTokens()
 	if err != nil {

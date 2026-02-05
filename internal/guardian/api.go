@@ -81,9 +81,8 @@ func (a *APIServer) Start() error {
 	}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /tokens", a.handleRegisterToken)
-	mux.HandleFunc("DELETE /tokens/{token}", a.handleRevokeToken)
-	mux.HandleFunc("GET /tokens", a.handleListTokens)
+	mux.HandleFunc("/tokens", a.handleTokens)
+	mux.HandleFunc("/tokens/{token}", a.handleRevokeToken)
 
 	a.listener = listener
 	a.server = &http.Server{
@@ -156,6 +155,18 @@ type errorResponse struct {
 	Error string `json:"error"`
 }
 
+// handleTokens routes /tokens requests based on method.
+func (a *APIServer) handleTokens(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		a.handleRegisterToken(w, r)
+	case http.MethodGet:
+		a.handleListTokens(w, r)
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+	}
+}
+
 // handleRegisterToken handles POST /tokens requests.
 func (a *APIServer) handleRegisterToken(w http.ResponseWriter, r *http.Request) {
 	var req registerTokenRequest
@@ -181,6 +192,11 @@ func (a *APIServer) handleRegisterToken(w http.ResponseWriter, r *http.Request) 
 
 // handleRevokeToken handles DELETE /tokens/{token} requests.
 func (a *APIServer) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
 	token := r.PathValue("token")
 	if token == "" {
 		a.writeError(w, http.StatusBadRequest, "token is required")
