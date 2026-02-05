@@ -23,15 +23,16 @@ func TestDetectGitRoot_CurrentRepo(t *testing.T) {
 		t.Errorf("expected absolute path, got %q", root)
 	}
 
-	// Should contain "cloister" in the path (the repo name)
-	if !strings.Contains(root, "cloister") {
-		t.Errorf("expected path to contain 'cloister', got %q", root)
-	}
-
 	// The .git directory should exist at the root
 	gitDir := filepath.Join(root, ".git")
 	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
 		t.Errorf("expected .git directory at %q", gitDir)
+	}
+
+	// Verify the detected root is actually a git repository by checking
+	// that we can successfully run git commands in it
+	if _, err := runGit(root, "rev-parse", "--git-dir"); err != nil {
+		t.Errorf("detected root %q is not a valid git repository: %v", root, err)
 	}
 }
 
@@ -340,9 +341,10 @@ func TestDetectProject_Valid(t *testing.T) {
 		t.Errorf("expected absolute path for Root, got %q", info.Root)
 	}
 
-	// Root should contain "cloister"
-	if !strings.Contains(info.Root, "cloister") {
-		t.Errorf("expected Root to contain 'cloister', got %q", info.Root)
+	// Verify the detected root is a valid git repository
+	gitDir := filepath.Join(info.Root, ".git")
+	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
+		t.Errorf("expected .git directory at %q", gitDir)
 	}
 
 	// Branch should be non-empty

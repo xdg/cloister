@@ -289,17 +289,17 @@ Phase 6 implementation is complete but has test failures and improvements identi
 - [x] **Test**: Run `make test` and verify request server tests pass
 
 ### 6.9.4 Fix or skip environment-specific tests (Priority 3)
-- [ ] **Issue**: Project detection tests expecting path containing "cloister", getting "/work"
-- [ ] **Root cause**: Tests written for development environment, not cloister container
-- [ ] **Files affected**: `internal/project/detect_test.go`
-- [ ] **Tests failing**:
+- [x] **Issue**: Project detection tests expecting path containing "cloister", getting "/work"
+- [x] **Root cause**: Tests written for development environment, not cloister container
+- [x] **Files affected**: `internal/project/detect_test.go`
+- [x] **Tests failing**:
   - `TestDetectGitRoot_CurrentRepo`
   - `TestDetectProject_Valid`
-- [ ] **Options**:
+- [x] **Options**:
   1. Skip these tests when running inside cloister (check env var)
   2. Make tests environment-agnostic (don't check path contents)
   3. Accept failures (non-critical, doesn't affect Phase 6)
-- [ ] **Test**: Decide on approach and implement
+- [x] **Test**: Decide on approach and implement
 
 ---
 
