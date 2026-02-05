@@ -247,6 +247,164 @@ Add audit log entries for domain approval events, consistent with existing hoste
 
 ---
 
+## Phase 6.9: Test Fixes and Polish
+
+Phase 6 implementation is complete but has test failures and improvements identified during code review.
+
+### 6.9.1 Fix API routing issues (Priority 1)
+- [ ] **Issue**: All API tests returning 405 (Method Not Allowed)
+- [ ] **Root cause**: HTTP method mismatch or routing registration issue in guardian API server
+- [ ] **Files affected**: `internal/guardian/api_test.go`, possibly `internal/guardian/api.go`
+- [ ] **Tests failing**:
+  - `TestAPIServer_RegisterToken`
+  - `TestAPIServer_RevokeToken`
+  - `TestAPIServer_ListTokens`
+  - `TestAPIServer_ContentType`
+  - `TestClient_RegisterToken`
+  - `TestClient_RevokeToken`
+  - `TestClient_ListTokens`
+- [ ] **Expected fix**: Verify HTTP method registration (GET/POST/DELETE) matches test expectations
+- [ ] **Test**: Run `make test` and verify all API tests pass
+
+### 6.9.2 Fix proxy allowlist enforcement (Priority 1)
+- [ ] **Issue**: Allowed domains returning 403 instead of 200
+- [ ] **Root cause**: Proxy allowlist lookup not recognizing known domains
+- [ ] **Files affected**: `internal/guardian/proxy.go`, `internal/guardian/proxy_test.go`
+- [ ] **Tests failing**:
+  - `TestProxyServer_AllowlistEnforcement` (api.anthropic.com, api.openai.com, generativelanguage.googleapis.com)
+  - `TestProxyServer_ConnectMethod/CONNECT_returns_200_for_allowed_domain`
+- [ ] **Possible causes**:
+  - Port stripping issue (domain vs domain:443)
+  - Cached allowlist not being consulted
+  - Session allowlist lookup interfering with static allowlist
+- [ ] **Expected fix**: Ensure static allowlist check happens before domain approval logic
+- [ ] **Test**: Run `make test` and verify proxy allowlist tests pass
+
+### 6.9.3 Fix request server routing (Priority 2)
+- [ ] **Issue**: Request server handler returning 405 instead of 200
+- [ ] **Root cause**: Similar to 6.9.1, method registration issue
+- [ ] **Files affected**: `internal/guardian/request/server_test.go`
+- [ ] **Test failing**: `TestServer_HandleRequest_ViaHTTPServer`
+- [ ] **Expected fix**: Verify HTTP method registration matches test
+- [ ] **Test**: Run `make test` and verify request server tests pass
+
+### 6.9.4 Fix or skip environment-specific tests (Priority 3)
+- [ ] **Issue**: Project detection tests expecting path containing "cloister", getting "/work"
+- [ ] **Root cause**: Tests written for development environment, not cloister container
+- [ ] **Files affected**: `internal/project/detect_test.go`
+- [ ] **Tests failing**:
+  - `TestDetectGitRoot_CurrentRepo`
+  - `TestDetectProject_Valid`
+- [ ] **Options**:
+  1. Skip these tests when running inside cloister (check env var)
+  2. Make tests environment-agnostic (don't check path contents)
+  3. Accept failures (non-critical, doesn't affect Phase 6)
+- [ ] **Test**: Decide on approach and implement
+
+---
+
+## Phase 6.10: Enhancements from Alternative Implementation
+
+During Phase 6 development, an alternative implementation (claude branch) was created with some superior design choices. These should be evaluated and potentially adopted.
+
+### 6.10.1 Token-based session isolation (from claude branch)
+- [ ] **Current**: Session allowlist uses project-based isolation (`map[project]domains`)
+- [ ] **Proposed**: Use token-based isolation (`map[token]domains`)
+- [ ] **Rationale**: More flexible for multi-cloister scenarios (multiple cloisters per project)
+- [ ] **Benefits**:
+  - Each cloister session has independent session cache
+  - Prevents session approval leakage between cloisters in same project
+  - Natural cleanup on token revocation (already wired)
+- [ ] **Files to modify**:
+  - `internal/guardian/session_allowlist.go` - Change map key from project to token
+  - `internal/guardian/domain_approver.go` - Pass token instead of project
+  - `internal/guardian/proxy.go` - Extract token for session check
+  - Tests for all above
+- [ ] **Backward compatibility**: No config changes needed, internal refactor only
+- [ ] **Test**: Unit tests for token-based isolation, integration test with multiple tokens
+
+### 6.10.2 Request deduplication (from claude branch)
+- [ ] **Current**: Multiple requests for same domain create separate queue entries
+- [ ] **Proposed**: Coalesce duplicate requests (same token + domain)
+- [ ] **Rationale**: Better UX - user only sees one approval request even if container retries connection
+- [ ] **Benefits**:
+  - Avoids duplicate prompts in UI
+  - Reduces queue noise
+  - Handles container connection retries gracefully
+- [ ] **Implementation**:
+  - Add `pending map[string]string` to `DomainQueue` tracking "token:domain" → requestID
+  - In `DomainQueue.Add()`, check if "token:domain" already exists
+  - If exists, return existing request ID instead of creating new entry
+  - Clean up pending entry when request is removed
+- [ ] **Files to modify**:
+  - `internal/guardian/approval/domain_queue.go` - Add pending map and deduplication logic
+  - `internal/guardian/approval/domain_queue_test.go` - Add deduplication tests
+- [ ] **Edge case**: Ensure timeout cancellation works for coalesced requests
+- [ ] **Test**: Unit test for deduplication, verify both requesters receive response
+
+### 6.10.3 Domain validation before approval
+- [ ] **Current**: No validation - any string can be approved as domain
+- [ ] **Proposed**: Validate domain format and port before queueing
+- [ ] **Rationale**: Prevent approval of invalid domains (e.g., `http://evil.com:22`)
+- [ ] **Validation rules**:
+  - Port must be common HTTP/HTTPS ports (80, 443, 8080, 8443) or omitted
+  - Domain format: hostname or hostname:port
+  - Reject obvious non-HTTP protocols
+- [ ] **Files to modify**:
+  - `internal/guardian/proxy.go` - Validate before calling `DomainApprover.RequestApproval()`
+  - `internal/guardian/domain_approver.go` - Add validation function
+  - Tests for validation logic
+- [ ] **Test**: Unit tests for valid/invalid domains, verify invalid rejected before queueing
+
+### 6.10.4 Wildcard domain support
+- [ ] **Current**: User must approve each subdomain separately (`api.example.com`, `www.example.com`, `cdn.example.com`)
+- [ ] **Proposed**: Support wildcard patterns (`*.example.com`)
+- [ ] **Rationale**: Reduce approval fatigue for multi-subdomain services
+- [ ] **Implementation**:
+  - Add `Pattern` field to `AllowEntry` in config package
+  - Implement glob matching in `Allowlist.IsAllowed()`
+  - Update config persistence to support patterns
+  - Update UI to show "wildcard" badge for pattern approvals
+- [ ] **Files to modify**:
+  - `internal/config/config.go` - Add Pattern field
+  - `internal/guardian/allowlist.go` - Add pattern matching
+  - `internal/guardian/config_persister.go` - Persist patterns
+  - UI templates - Display pattern vs exact match
+  - Tests for pattern matching
+- [ ] **Security consideration**: Require explicit user confirmation for wildcard approvals
+- [ ] **Test**: Unit tests for pattern matching, config persistence round-trip
+
+### 6.10.5 Session allowlist cleanup on cloister stop
+- [ ] **Current**: Session allowlist grows unbounded, only cleared on token revocation or guardian restart
+- [ ] **Proposed**: Add cleanup mechanism when cloisters stop
+- [ ] **Rationale**: Prevent memory leak from long-running guardian with many ephemeral cloisters
+- [ ] **Implementation**:
+  - Add mechanism to notify guardian when cloister container stops
+  - Call `SessionAllowlist.Clear(project)` or equivalent on stop
+  - May require guardian to track active cloisters
+- [ ] **Files to modify**:
+  - Guardian lifecycle management (needs investigation)
+  - Session allowlist cleanup hooks
+- [ ] **Note**: This is a lifecycle issue, not urgent but should be addressed
+- [ ] **Test**: Integration test with cloister start/stop, verify session cleanup
+
+### 6.10.6 Improve error handling in config persistence
+- [ ] **Current**: `ConfigPersister` errors logged but not surfaced to user
+- [ ] **Proposed**: Surface persistence errors to user via UI or response
+- [ ] **Rationale**: User should know if "Save to Project" actually failed
+- [ ] **Implementation**:
+  - Modify `handleApproveDomain` to check `ConfigPersister` error
+  - If persistence fails, send modified response indicating fallback to session scope
+  - Update UI to show persistence failure notification
+- [ ] **Files to modify**:
+  - `internal/guardian/approval/server.go` - Handle persister errors
+  - `internal/guardian/approval/domain_queue.go` - Add persistence status to response
+  - UI templates - Show persistence failure
+- [ ] **UX**: "Approved for session only (config save failed: permission denied)"
+- [ ] **Test**: Unit test for persistence failure handling
+
+---
+
 ## Future Phases (Deferred)
 
 ### Phase 5: Worktree Support (Skipped)
