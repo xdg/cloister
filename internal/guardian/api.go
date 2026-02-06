@@ -47,6 +47,10 @@ type APIServer struct {
 	// Registry is the token registry to manage.
 	Registry TokenRegistry
 
+	// SessionAllowlist is used to clear session-approved domains when a token is revoked.
+	// If nil, no session cleanup is performed.
+	SessionAllowlist SessionAllowlist
+
 	server   *http.Server
 	listener net.Listener
 	mu       sync.Mutex
@@ -210,6 +214,11 @@ func (a *APIServer) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 	if !a.Registry.Revoke(token) {
 		a.writeError(w, http.StatusNotFound, "token not found")
 		return
+	}
+
+	// Clear session-approved domains for this token to prevent memory leak
+	if a.SessionAllowlist != nil {
+		a.SessionAllowlist.Clear(token)
 	}
 
 	a.writeJSON(w, http.StatusOK, statusResponse{Status: "revoked"})

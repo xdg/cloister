@@ -60,6 +60,7 @@ type DomainApprover interface {
 type SessionAllowlist interface {
 	IsAllowed(token, domain string) bool
 	Add(token, domain string) error
+	Clear(token string) // Called when token is revoked to clean up session domains
 }
 
 // ProxyServer is an HTTP CONNECT proxy that enforces domain allowlists

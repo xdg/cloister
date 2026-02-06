@@ -422,6 +422,9 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	proxy.DomainApprover = domainApprover
 	proxy.SessionAllowlist = sessionAllowlist
 
+	// Set session allowlist on API server for cleanup on token revocation
+	api.SessionAllowlist = sessionAllowlist
+
 	// Create executor client if shared secret and port are available
 	var execClient request.CommandExecutor
 	sharedSecret := os.Getenv(guardian.SharedSecretEnvVar)

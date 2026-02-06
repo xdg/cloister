@@ -374,19 +374,20 @@ During Phase 6 development, an alternative implementation (claude branch) was cr
 - [x] **Security consideration**: Require explicit user confirmation for wildcard approvals
 - [x] **Test**: Unit tests for pattern matching, config persistence round-trip
 
-### 6.10.5 Session allowlist cleanup on cloister stop
-- [ ] **Current**: Session allowlist grows unbounded, only cleared on token revocation or guardian restart
-- [ ] **Proposed**: Add cleanup mechanism when cloisters stop
-- [ ] **Rationale**: Prevent memory leak from long-running guardian with many ephemeral cloisters
-- [ ] **Implementation**:
-  - Add mechanism to notify guardian when cloister container stops
-  - Call `SessionAllowlist.Clear(project)` or equivalent on stop
-  - May require guardian to track active cloisters
-- [ ] **Files to modify**:
-  - Guardian lifecycle management (needs investigation)
-  - Session allowlist cleanup hooks
-- [ ] **Note**: This is a lifecycle issue, not urgent but should be addressed
-- [ ] **Test**: Integration test with cloister start/stop, verify session cleanup
+### 6.10.5 Session allowlist cleanup on token revocation
+- [x] **Current**: Session allowlist grows unbounded, only cleared on guardian restart
+- [x] **Proposed**: Clear session allowlist when token is revoked
+- [x] **Rationale**: Prevent memory leak from long-running guardian with many ephemeral cloisters
+- [x] **Implementation**:
+  - Add `SessionAllowlist` field to `APIServer` struct
+  - Call `SessionAllowlist.Clear(token)` in `handleRevokeToken` after successful revocation
+  - Wire `SessionAllowlist` to API server in guardian startup
+- [x] **Files modified**:
+  - `internal/guardian/api.go` - Added SessionAllowlist field and cleanup call
+  - `internal/cmd/guardian.go` - Wire sessionAllowlist to API server
+  - `internal/guardian/api_test.go` - Added tests for cleanup behavior
+- [x] **Note**: Clear is idempotent, safe to call even if token has no sessions
+- [x] **Test**: Unit tests for cleanup on revocation, nil SessionAllowlist handling
 
 ### 6.10.6 Improve error handling in config persistence
 - [ ] **Current**: `ConfigPersister` errors logged but not surfaced to user

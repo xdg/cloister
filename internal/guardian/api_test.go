@@ -359,3 +359,113 @@ func TestAPIServer_ContentType(t *testing.T) {
 		t.Errorf("expected Content-Type application/json, got %s", contentType)
 	}
 }
+
+// mockSessionAllowlist implements SessionAllowlist for testing.
+type mockSessionAllowlist struct {
+	clearedTokens []string
+}
+
+func (m *mockSessionAllowlist) IsAllowed(token, domain string) bool {
+	return false
+}
+
+func (m *mockSessionAllowlist) Add(token, domain string) error {
+	return nil
+}
+
+func (m *mockSessionAllowlist) Clear(token string) {
+	m.clearedTokens = append(m.clearedTokens, token)
+}
+
+func TestAPIServer_RevokeTokenClearsSessionAllowlist(t *testing.T) {
+	registry := newMockRegistry()
+	registry.tokens["test-token"] = TokenInfo{CloisterName: "test-cloister"}
+
+	sessionAllowlist := &mockSessionAllowlist{}
+
+	api := NewAPIServer(":0", registry)
+	api.SessionAllowlist = sessionAllowlist
+
+	if err := api.Start(); err != nil {
+		t.Fatalf("failed to start API server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = api.Stop(ctx)
+	}()
+
+	baseURL := "http://" + api.ListenAddr()
+	client := noProxyClient()
+
+	// Revoke the token
+	req, err := http.NewRequest(http.MethodDelete, baseURL+"/tokens/test-token", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	// Verify token was revoked from registry
+	if _, ok := registry.tokens["test-token"]; ok {
+		t.Error("token was not revoked from registry")
+	}
+
+	// Verify session allowlist was cleared for this token
+	if len(sessionAllowlist.clearedTokens) != 1 {
+		t.Errorf("expected 1 cleared token, got %d", len(sessionAllowlist.clearedTokens))
+	}
+	if len(sessionAllowlist.clearedTokens) > 0 && sessionAllowlist.clearedTokens[0] != "test-token" {
+		t.Errorf("expected cleared token 'test-token', got %q", sessionAllowlist.clearedTokens[0])
+	}
+}
+
+func TestAPIServer_RevokeTokenWithNilSessionAllowlist(t *testing.T) {
+	registry := newMockRegistry()
+	registry.tokens["test-token"] = TokenInfo{CloisterName: "test-cloister"}
+
+	// API server without session allowlist (nil)
+	api := NewAPIServer(":0", registry)
+	// api.SessionAllowlist is nil by default
+
+	if err := api.Start(); err != nil {
+		t.Fatalf("failed to start API server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = api.Stop(ctx)
+	}()
+
+	baseURL := "http://" + api.ListenAddr()
+	client := noProxyClient()
+
+	// Revoke the token - should not panic with nil SessionAllowlist
+	req, err := http.NewRequest(http.MethodDelete, baseURL+"/tokens/test-token", nil)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	// Verify token was revoked from registry
+	if _, ok := registry.tokens["test-token"]; ok {
+		t.Error("token was not revoked from registry")
+	}
+}
