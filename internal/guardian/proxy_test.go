@@ -1278,17 +1278,17 @@ func TestProxyServer_PerProjectAllowlist(t *testing.T) {
 
 // mockDomainApprover is a test implementation of DomainApprover.
 type mockDomainApprover struct {
-	approveFunc func(project, cloister, domain string) (DomainApprovalResult, error)
+	approveFunc func(project, cloister, domain, token string) (DomainApprovalResult, error)
 	callCount   int
 	mu          sync.Mutex
 }
 
-func (m *mockDomainApprover) RequestApproval(project, cloister, domain string) (DomainApprovalResult, error) {
+func (m *mockDomainApprover) RequestApproval(project, cloister, domain, token string) (DomainApprovalResult, error) {
 	m.mu.Lock()
 	m.callCount++
 	m.mu.Unlock()
 	if m.approveFunc != nil {
-		return m.approveFunc(project, cloister, domain)
+		return m.approveFunc(project, cloister, domain, token)
 	}
 	return DomainApprovalResult{Approved: false}, nil
 }
@@ -1358,7 +1358,7 @@ func TestProxyServer_DomainApproval_ApprovalAllowsConnection(t *testing.T) {
 	p := NewProxyServer(":0")
 	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
 	p.DomainApprover = &mockDomainApprover{
-		approveFunc: func(project, cloister, domain string) (DomainApprovalResult, error) {
+		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
 			return DomainApprovalResult{Approved: true, Scope: "session"}, nil
 		},
 	}
@@ -1417,7 +1417,7 @@ func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
 	p := NewProxyServer(":0")
 	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
 	p.DomainApprover = &mockDomainApprover{
-		approveFunc: func(project, cloister, domain string) (DomainApprovalResult, error) {
+		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
 			return DomainApprovalResult{Approved: false}, nil
 		},
 	}
@@ -1473,7 +1473,7 @@ func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
 func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
 	// Test that session allowlist hit bypasses DomainApprover entirely
 	approver := &mockDomainApprover{
-		approveFunc: func(project, cloister, domain string) (DomainApprovalResult, error) {
+		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
 			t.Error("DomainApprover should not be called when session allowlist matches")
 			return DomainApprovalResult{Approved: false}, nil
 		},
@@ -1496,8 +1496,8 @@ func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
 	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
 	p.DomainApprover = approver
 	p.SessionAllowlist = NewSessionAllowlist()
-	// Add the upstream to session allowlist
-	_ = p.SessionAllowlist.Add("test-project", upstreamAddr)
+	// Add the upstream to session allowlist (using token, not project)
+	_ = p.SessionAllowlist.Add("test-token", upstreamAddr)
 
 	// Configure per-project support
 	globalAllowlist := NewAllowlist([]string{})
@@ -1562,7 +1562,7 @@ func TestProxyServer_DomainApproval_TokenParsedOnce(t *testing.T) {
 	p := NewProxyServer(":0")
 	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
 	p.DomainApprover = &mockDomainApprover{
-		approveFunc: func(project, cloister, domain string) (DomainApprovalResult, error) {
+		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
 			// Verify project name was extracted correctly
 			if project != "test-project" {
 				t.Errorf("expected project 'test-project', got '%s'", project)

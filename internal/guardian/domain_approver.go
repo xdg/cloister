@@ -30,8 +30,11 @@ func NewDomainApprover(queue *approval.DomainQueue, sessionAllowlist SessionAllo
 // RequestApproval submits a domain approval request and blocks until the human
 // responds with approval/denial or the request times out.
 //
+// The token parameter is used for session allowlist updates (token-based isolation),
+// while project is used for the approval queue/UI display.
+//
 // On "session" scope approval:
-//   - Adds domain to SessionAllowlist for ephemeral access
+//   - Adds domain to SessionAllowlist using token (token-based isolation)
 //   - Adds domain to the project's cached Allowlist for current guardian session
 //
 // On "project" or "global" scope approval:
@@ -40,11 +43,12 @@ func NewDomainApprover(queue *approval.DomainQueue, sessionAllowlist SessionAllo
 //
 // Returns an error if the queue add operation fails, otherwise returns the
 // approval result (approved/denied/timeout).
-func (d *DomainApproverImpl) RequestApproval(project, cloister, domain string) (DomainApprovalResult, error) {
+func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token string) (DomainApprovalResult, error) {
 	// Create response channel (buffered to prevent goroutine leaks)
 	respChan := make(chan approval.DomainResponse, 1)
 
 	// Create and submit the request
+	// Note: The DomainRequest uses project for display in the approval queue/UI
 	req := &approval.DomainRequest{
 		Cloister:  cloister,
 		Project:   project,
@@ -71,10 +75,11 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain string) (
 	// Handle approval based on scope
 	switch resp.Scope {
 	case "session":
-		// Add to session allowlist for ephemeral access
-		if d.sessionAllowlist != nil {
-			if err := d.sessionAllowlist.Add(project, domain); err != nil {
-				clog.Warn("failed to add domain %s to session allowlist for project %s: %v", domain, project, err)
+		// Add to session allowlist using token (token-based isolation)
+		// This ensures each cloister session has independent session cache
+		if d.sessionAllowlist != nil && token != "" {
+			if err := d.sessionAllowlist.Add(token, domain); err != nil {
+				clog.Warn("failed to add domain %s to session allowlist for token: %v", domain, err)
 			}
 		}
 

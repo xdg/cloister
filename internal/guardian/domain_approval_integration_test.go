@@ -88,7 +88,7 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	var approvalErr error
 
 	go func() {
-		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain)
+		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain, "test-token")
 		close(done)
 	}()
 
@@ -169,7 +169,7 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	// 4. Verify domain is allowed on next request
 
 	// Check session allowlist
-	if !sessionAllowlist.IsAllowed(testProject, testDomain) {
+	if !sessionAllowlist.IsAllowed("test-token", testDomain) {
 		t.Error("domain should be in session allowlist after approval")
 	}
 
@@ -192,7 +192,7 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 
 	// Verify second request for same domain doesn't require approval
 	// (would be caught by session allowlist or cached allowlist)
-	if !sessionAllowlist.IsAllowed(testProject, testDomain) {
+	if !sessionAllowlist.IsAllowed("test-token", testDomain) {
 		t.Error("second check should still find domain in session allowlist")
 	}
 }
@@ -232,7 +232,7 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	var approvalErr error
 
 	go func() {
-		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain)
+		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain, "test-token")
 		close(done)
 	}()
 
@@ -297,7 +297,7 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	}
 
 	// Verify domain is NOT in session allowlist for project scope
-	if sessionAllowlist.IsAllowed(testProject, testDomain) {
+	if sessionAllowlist.IsAllowed("test-token", testDomain) {
 		t.Error("project scope should not add domain to session allowlist")
 	}
 }
@@ -335,7 +335,7 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 	var approvalErr error
 
 	go func() {
-		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain)
+		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain, "test-token")
 		close(done)
 	}()
 
@@ -384,7 +384,7 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 	}
 
 	// Verify domain is NOT in allowlists
-	if sessionAllowlist.IsAllowed(testProject, testDomain) {
+	if sessionAllowlist.IsAllowed("test-token", testDomain) {
 		t.Error("denied domain should not be in session allowlist")
 	}
 
@@ -409,7 +409,7 @@ func TestDomainApprovalIntegration_Timeout(t *testing.T) {
 	const testCloister = "test-cloister"
 
 	// Submit approval request (will timeout before approval)
-	approvalResult, err := domainApprover.RequestApproval(testProject, testCloister, testDomain)
+	approvalResult, err := domainApprover.RequestApproval(testProject, testCloister, testDomain, "test-token")
 
 	// Verify timeout result
 	if err != nil {
@@ -420,7 +420,7 @@ func TestDomainApprovalIntegration_Timeout(t *testing.T) {
 	}
 
 	// Verify domain is NOT in allowlists
-	if sessionAllowlist.IsAllowed(testProject, testDomain) {
+	if sessionAllowlist.IsAllowed("test-token", testDomain) {
 		t.Error("timed-out domain should not be in session allowlist")
 	}
 }
@@ -453,7 +453,7 @@ func TestDomainApprovalIntegration_GetPendingDomains(t *testing.T) {
 
 	// Submit approval request
 	go func() {
-		_, _ = domainApprover.RequestApproval(testProject, testCloister, testDomain)
+		_, _ = domainApprover.RequestApproval(testProject, testCloister, testDomain, "test-token")
 	}()
 
 	// Wait for request to be added

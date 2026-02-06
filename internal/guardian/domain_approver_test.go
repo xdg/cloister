@@ -15,7 +15,7 @@ func TestDomainApproverImpl_RequestApproval_Timeout(t *testing.T) {
 	approver := NewDomainApprover(queue, sessionAllowlist, cache)
 
 	// Submit request and wait for timeout
-	result, err := approver.RequestApproval("test-project", "test-cloister", "example.com:443")
+	result, err := approver.RequestApproval("test-project", "test-cloister", "example.com:443", "test-token")
 
 	if err != nil {
 		t.Fatalf("RequestApproval returned error: %v", err)
@@ -37,7 +37,7 @@ func TestDomainApproverImpl_RequestApproval_Denied(t *testing.T) {
 	var result DomainApprovalResult
 	var err error
 	go func() {
-		result, err = approver.RequestApproval("test-project", "test-cloister", "example.com:443")
+		result, err = approver.RequestApproval("test-project", "test-cloister", "example.com:443", "test-token")
 		close(done)
 	}()
 
@@ -85,7 +85,7 @@ func TestDomainApproverImpl_RequestApproval_SessionScope(t *testing.T) {
 	var result DomainApprovalResult
 	var err error
 	go func() {
-		result, err = approver.RequestApproval("test-project", "test-cloister", "example.com:443")
+		result, err = approver.RequestApproval("test-project", "test-cloister", "example.com:443", "test-token")
 		close(done)
 	}()
 
@@ -122,8 +122,8 @@ func TestDomainApproverImpl_RequestApproval_SessionScope(t *testing.T) {
 		t.Errorf("Expected Scope=session, got %s", result.Scope)
 	}
 
-	// Verify domain was added to session allowlist
-	if !sessionAllowlist.IsAllowed("test-project", "example.com:443") {
+	// Verify domain was added to session allowlist (using token, not project)
+	if !sessionAllowlist.IsAllowed("test-token", "example.com:443") {
 		t.Errorf("Domain not added to session allowlist")
 	}
 
@@ -146,7 +146,7 @@ func TestDomainApproverImpl_RequestApproval_ProjectScope(t *testing.T) {
 	var result DomainApprovalResult
 	var err error
 	go func() {
-		result, err = approver.RequestApproval("test-project", "test-cloister", "example.com:443")
+		result, err = approver.RequestApproval("test-project", "test-cloister", "example.com:443", "test-token")
 		close(done)
 	}()
 
@@ -185,7 +185,7 @@ func TestDomainApproverImpl_RequestApproval_ProjectScope(t *testing.T) {
 
 	// For project scope, the domain should NOT be added to session allowlist
 	// (ConfigPersister handles persistence, cache reload happens via SIGHUP)
-	if sessionAllowlist.IsAllowed("test-project", "example.com:443") {
+	if sessionAllowlist.IsAllowed("test-token", "example.com:443") {
 		t.Errorf("Domain should not be in session allowlist for project scope")
 	}
 }
@@ -202,7 +202,7 @@ func TestDomainApproverImpl_RequestApproval_GlobalScope(t *testing.T) {
 	var result DomainApprovalResult
 	var err error
 	go func() {
-		result, err = approver.RequestApproval("test-project", "test-cloister", "example.com:443")
+		result, err = approver.RequestApproval("test-project", "test-cloister", "example.com:443", "test-token")
 		close(done)
 	}()
 
@@ -241,7 +241,7 @@ func TestDomainApproverImpl_RequestApproval_GlobalScope(t *testing.T) {
 
 	// For global scope, the domain should NOT be added to session allowlist
 	// (ConfigPersister handles persistence, cache reload happens via SIGHUP)
-	if sessionAllowlist.IsAllowed("test-project", "example.com:443") {
+	if sessionAllowlist.IsAllowed("test-token", "example.com:443") {
 		t.Errorf("Domain should not be in session allowlist for global scope")
 	}
 }

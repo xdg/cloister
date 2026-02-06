@@ -308,20 +308,20 @@ Phase 6 implementation is complete but has test failures and improvements identi
 During Phase 6 development, an alternative implementation (claude branch) was created with some superior design choices. These should be evaluated and potentially adopted.
 
 ### 6.10.1 Token-based session isolation (from claude branch)
-- [ ] **Current**: Session allowlist uses project-based isolation (`map[project]domains`)
-- [ ] **Proposed**: Use token-based isolation (`map[token]domains`)
-- [ ] **Rationale**: More flexible for multi-cloister scenarios (multiple cloisters per project)
-- [ ] **Benefits**:
+- [x] **Current**: Session allowlist uses project-based isolation (`map[project]domains`)
+- [x] **Proposed**: Use token-based isolation (`map[token]domains`)
+- [x] **Rationale**: More flexible for multi-cloister scenarios (multiple cloisters per project)
+- [x] **Benefits**:
   - Each cloister session has independent session cache
   - Prevents session approval leakage between cloisters in same project
   - Natural cleanup on token revocation (already wired)
-- [ ] **Files to modify**:
+- [x] **Files to modify**:
   - `internal/guardian/session_allowlist.go` - Change map key from project to token
   - `internal/guardian/domain_approver.go` - Pass token instead of project
   - `internal/guardian/proxy.go` - Extract token for session check
   - Tests for all above
-- [ ] **Backward compatibility**: No config changes needed, internal refactor only
-- [ ] **Test**: Unit tests for token-based isolation, integration test with multiple tokens
+- [x] **Backward compatibility**: No config changes needed, internal refactor only
+- [x] **Test**: Unit tests for token-based isolation, integration test with multiple tokens
 
 ### 6.10.2 Request deduplication (from claude branch)
 - [ ] **Current**: Multiple requests for same domain create separate queue entries

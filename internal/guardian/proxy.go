@@ -48,14 +48,18 @@ type DomainApprovalResult struct {
 
 // DomainApprover requests human approval for unlisted domains.
 // Implementations should block until approval/denial/timeout (typically 60s).
+// The token parameter is used for session allowlist updates (token-based isolation),
+// while project is used for the approval queue/UI display.
 type DomainApprover interface {
-	RequestApproval(project, cloister, domain string) (DomainApprovalResult, error)
+	RequestApproval(project, cloister, domain, token string) (DomainApprovalResult, error)
 }
 
-// SessionAllowlist tracks ephemeral session-approved domains per project.
+// SessionAllowlist tracks ephemeral session-approved domains per token.
+// Token-based isolation ensures each cloister session has an independent
+// domain cache, even when multiple cloisters belong to the same project.
 type SessionAllowlist interface {
-	IsAllowed(project, domain string) bool
-	Add(project, domain string) error
+	IsAllowed(token, domain string) bool
+	Add(token, domain string) error
 }
 
 // ProxyServer is an HTTP CONNECT proxy that enforces domain allowlists
@@ -373,7 +377,8 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		allowlist = p.Allowlist
 	}
 
-	// Extract project name once for reuse
+	// Extract token and project name once for reuse
+	token := p.extractToken(r)
 	projectName := p.extractProjectName(r)
 
 	// Check static allowlist FIRST, before session or approval logic
@@ -383,8 +388,8 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// If NOT in static allowlist, check session allowlist and domain approver
 	if !staticAllowed {
 		sessionAllowed := false
-		if p.SessionAllowlist != nil && projectName != "" {
-			sessionAllowed = p.SessionAllowlist.IsAllowed(projectName, host)
+		if p.SessionAllowlist != nil && token != "" {
+			sessionAllowed = p.SessionAllowlist.IsAllowed(token, host)
 		}
 
 		if !sessionAllowed {
@@ -395,7 +400,8 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Request approval (blocks until response)
-			result, err := p.DomainApprover.RequestApproval(projectName, "", host)
+			// Note: DomainApprover still uses project name for the approval queue/UI display
+			result, err := p.DomainApprover.RequestApproval(projectName, "", host, token)
 			if err != nil || !result.Approved {
 				http.Error(w, "Forbidden - domain not approved", http.StatusForbidden)
 				return
@@ -472,6 +478,16 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 }
 
+// extractToken extracts the authentication token from the request.
+// Returns empty string if token cannot be extracted.
+func (p *ProxyServer) extractToken(r *http.Request) string {
+	token, ok := p.parseBasicAuth(r.Header.Get("Proxy-Authorization"))
+	if !ok {
+		return ""
+	}
+	return token
+}
+
 // extractProjectName extracts the project name from the request token.
 // Returns empty string if project cannot be determined.
 func (p *ProxyServer) extractProjectName(r *http.Request) string {
@@ -480,8 +496,8 @@ func (p *ProxyServer) extractProjectName(r *http.Request) string {
 	}
 
 	// Extract token from Proxy-Authorization header
-	token, ok := p.parseBasicAuth(r.Header.Get("Proxy-Authorization"))
-	if !ok || token == "" {
+	token := p.extractToken(r)
+	if token == "" {
 		return ""
 	}
 
