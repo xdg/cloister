@@ -21,8 +21,17 @@ type mockConfigPersister struct {
 	addDomainToGlobalCalls []struct {
 		domain string
 	}
-	addDomainToProjectErr error
-	addDomainToGlobalErr  error
+	addPatternToProjectCalls []struct {
+		project string
+		pattern string
+	}
+	addPatternToGlobalCalls []struct {
+		pattern string
+	}
+	addDomainToProjectErr  error
+	addDomainToGlobalErr   error
+	addPatternToProjectErr error
+	addPatternToGlobalErr  error
 }
 
 func (m *mockConfigPersister) AddDomainToProject(project, domain string) error {
@@ -38,6 +47,21 @@ func (m *mockConfigPersister) AddDomainToGlobal(domain string) error {
 		domain string
 	}{domain})
 	return m.addDomainToGlobalErr
+}
+
+func (m *mockConfigPersister) AddPatternToProject(project, pattern string) error {
+	m.addPatternToProjectCalls = append(m.addPatternToProjectCalls, struct {
+		project string
+		pattern string
+	}{project, pattern})
+	return m.addPatternToProjectErr
+}
+
+func (m *mockConfigPersister) AddPatternToGlobal(pattern string) error {
+	m.addPatternToGlobalCalls = append(m.addPatternToGlobalCalls, struct {
+		pattern string
+	}{pattern})
+	return m.addPatternToGlobalErr
 }
 
 // TestDomainApprovalIntegration_FullFlow tests the complete domain approval workflow

@@ -44,6 +44,8 @@ const DefaultApprovalPort = 9999
 type ConfigPersister interface {
 	AddDomainToProject(project, domain string) error
 	AddDomainToGlobal(domain string) error
+	AddPatternToProject(project, pattern string) error
+	AddPatternToGlobal(pattern string) error
 }
 
 // Server handles approval requests from the host via a web UI.
@@ -214,6 +216,7 @@ type domainTemplateRequest struct {
 	Cloister  string
 	Project   string
 	Timestamp string
+	Wildcard  string // Suggested wildcard pattern like "*.example.com" (empty if not applicable)
 }
 
 // resultData holds the data passed to the result.html template.
@@ -225,11 +228,12 @@ type resultData struct {
 
 // domainResultData holds the data passed to the domain_result.html template.
 type domainResultData struct {
-	ID     string
-	Status string
-	Domain string
-	Scope  string
-	Reason string
+	ID        string
+	Status    string
+	Domain    string
+	Scope     string
+	Reason    string
+	IsPattern bool
 }
 
 // handleIndex serves the HTML UI for the approval interface.
@@ -262,6 +266,7 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 				Cloister:  req.Cloister,
 				Project:   req.Project,
 				Timestamp: req.Timestamp.Format(time.RFC3339),
+				Wildcard:  domainToWildcard(req.Domain),
 			}
 		}
 	}
@@ -536,14 +541,15 @@ func (s *Server) writeResultHTML(w http.ResponseWriter, id, status, cmd string) 
 }
 
 // writeDomainResultHTML renders the domain_result template for htmx responses.
-func (s *Server) writeDomainResultHTML(w http.ResponseWriter, id, status, domain, scope, reason string) {
+func (s *Server) writeDomainResultHTML(w http.ResponseWriter, id, status, domain, scope, reason string, isPattern bool) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := domainResultData{
-		ID:     id,
-		Status: status,
-		Domain: domain,
-		Scope:  scope,
-		Reason: reason,
+		ID:        id,
+		Status:    status,
+		Domain:    domain,
+		Scope:     scope,
+		Reason:    reason,
+		IsPattern: isPattern,
 	}
 	if err := templates.ExecuteTemplate(w, "domain_result", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
@@ -592,7 +598,8 @@ func (s *Server) handlePendingDomains(w http.ResponseWriter, r *http.Request) {
 
 // approveDomainRequest is the request body for POST /approve-domain/{id}.
 type approveDomainRequest struct {
-	Scope string `json:"scope"` // "session", "project", or "global"
+	Scope   string `json:"scope"`   // "session", "project", or "global"
+	Pattern string `json:"pattern"` // optional wildcard pattern like "*.example.com"
 }
 
 // approveDomainResponse is the response body for POST /approve-domain/{id}.
@@ -644,48 +651,69 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	domain := req.Domain
 	project := req.Project
 	cloister := req.Cloister
+	pattern := approveReq.Pattern
+	isPattern := pattern != ""
+
+	// Determine what to persist: exact domain or wildcard pattern
+	persistValue := domain
+	if isPattern {
+		persistValue = pattern
+	}
 
 	// Persist to config if needed
 	if scope == "project" {
-		if err := s.ConfigPersister.AddDomainToProject(req.Project, req.Domain); err != nil {
+		var err error
+		if isPattern {
+			err = s.ConfigPersister.AddPatternToProject(req.Project, pattern)
+		} else {
+			err = s.ConfigPersister.AddDomainToProject(req.Project, domain)
+		}
+		if err != nil {
 			// Send denied response so client doesn't wait for timeout
 			broadcastDomainResponse(req, DomainResponse{
 				Status: "denied",
-				Reason: fmt.Sprintf("failed to persist domain to project: %v", err),
+				Reason: fmt.Sprintf("failed to persist to project: %v", err),
 			})
 			// Remove from queue (also cancels timeout)
 			s.DomainQueue.Remove(id)
 			// Broadcast removal event to SSE clients
 			s.Events.BroadcastDomainRequestRemoved(id)
-			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to persist domain to project: %v", err))
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to persist to project: %v", err))
 			return
 		}
 	} else if scope == "global" {
-		if err := s.ConfigPersister.AddDomainToGlobal(req.Domain); err != nil {
+		var err error
+		if isPattern {
+			err = s.ConfigPersister.AddPatternToGlobal(pattern)
+		} else {
+			err = s.ConfigPersister.AddDomainToGlobal(domain)
+		}
+		if err != nil {
 			// Send denied response so client doesn't wait for timeout
 			broadcastDomainResponse(req, DomainResponse{
 				Status: "denied",
-				Reason: fmt.Sprintf("failed to persist domain to global: %v", err),
+				Reason: fmt.Sprintf("failed to persist to global: %v", err),
 			})
 			// Remove from queue (also cancels timeout)
 			s.DomainQueue.Remove(id)
 			// Broadcast removal event to SSE clients
 			s.Events.BroadcastDomainRequestRemoved(id)
-			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to persist domain to global: %v", err))
+			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to persist to global: %v", err))
 			return
 		}
 	}
 
 	// Log DOMAIN_APPROVE event
 	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogDomainApprove(project, cloister, domain, scope, getUserIdentity())
+		_ = s.AuditLogger.LogDomainApprove(project, cloister, persistValue, scope, getUserIdentity())
 	}
 
 	// Send approved response on the request's channels BEFORE removing from queue
 	// to prevent race conditions. Broadcasts to all waiting callers (coalesced requests).
 	broadcastDomainResponse(req, DomainResponse{
-		Status: "approved",
-		Scope:  scope,
+		Status:  "approved",
+		Scope:   scope,
+		Pattern: pattern,
 	})
 
 	// Remove from queue (also cancels timeout)
@@ -696,7 +724,11 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Check if this is an htmx request
 	if r.Header.Get("HX-Request") == "true" {
-		s.writeDomainResultHTML(w, id, "approved", req.Domain, scope, "")
+		displayValue := domain
+		if isPattern {
+			displayValue = pattern
+		}
+		s.writeDomainResultHTML(w, id, "approved", displayValue, scope, "", isPattern)
 		return
 	}
 
@@ -771,7 +803,7 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Check if this is an htmx request
 	if r.Header.Get("HX-Request") == "true" {
-		s.writeDomainResultHTML(w, id, "denied", req.Domain, "", reason)
+		s.writeDomainResultHTML(w, id, "denied", req.Domain, "", reason, false)
 		return
 	}
 

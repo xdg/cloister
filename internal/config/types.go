@@ -24,9 +24,12 @@ type ProxyConfig struct {
 	MaxRequestBytes        int64        `yaml:"max_request_bytes,omitempty"`
 }
 
-// AllowEntry represents a single domain in an allowlist.
+// AllowEntry represents a single domain or pattern in an allowlist.
+// Either Domain or Pattern should be set, not both.
+// Pattern supports wildcard matching in the format "*.example.com".
 type AllowEntry struct {
-	Domain string `yaml:"domain,omitempty"`
+	Domain  string `yaml:"domain,omitempty"`
+	Pattern string `yaml:"pattern,omitempty"`
 }
 
 // RequestConfig contains settings for the request server that handles

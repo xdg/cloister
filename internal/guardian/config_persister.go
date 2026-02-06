@@ -122,6 +122,112 @@ func validateDomain(domain string) error {
 	return nil
 }
 
+// validatePattern checks if a pattern string is valid for use in the allowlist.
+// Valid patterns are in the format "*.example.com".
+func validatePattern(pattern string) error {
+	if pattern == "" {
+		return fmt.Errorf("pattern cannot be empty")
+	}
+	if strings.ContainsAny(pattern, " \t\n\r") {
+		return fmt.Errorf("pattern cannot contain whitespace: %q", pattern)
+	}
+	if !strings.HasPrefix(pattern, "*.") {
+		return fmt.Errorf("pattern must start with '*.': %q", pattern)
+	}
+	if len(pattern) < 4 {
+		return fmt.Errorf("pattern too short: %q", pattern)
+	}
+	return nil
+}
+
+// AddPatternToProject adds a wildcard pattern to a project's allowlist if not already present.
+// It loads the project config, checks for duplicates, appends the pattern if needed,
+// and writes the updated config back to disk with autoCreate=true.
+// The ReloadNotifier callback is invoked after successful write if not nil.
+func (p *ConfigPersisterImpl) AddPatternToProject(project, pattern string) error {
+	// Validate pattern before processing
+	if err := validatePattern(pattern); err != nil {
+		return err
+	}
+
+	// Lock to prevent concurrent modifications
+	p.projectMu.Lock()
+	defer p.projectMu.Unlock()
+
+	// Load existing project config
+	cfg, err := config.LoadProjectConfig(project)
+	if err != nil {
+		return fmt.Errorf("load project config: %w", err)
+	}
+
+	// Check if pattern already exists in allowlist
+	for _, entry := range cfg.Proxy.Allow {
+		if entry.Pattern == pattern {
+			// Pattern already present, no need to add
+			return nil
+		}
+	}
+
+	// Append new pattern
+	cfg.Proxy.Allow = append(cfg.Proxy.Allow, config.AllowEntry{Pattern: pattern})
+
+	// Write updated config with autoCreate=true (overwrite)
+	if err := config.WriteProjectConfig(project, cfg, true); err != nil {
+		return fmt.Errorf("write project config: %w", err)
+	}
+
+	// Notify proxy to reload its allowlist cache (panic-safe)
+	if p.ReloadNotifier != nil {
+		safeNotify(p.ReloadNotifier)
+	}
+
+	return nil
+}
+
+// AddPatternToGlobal adds a wildcard pattern to the global allowlist if not already present.
+// It loads the global config, checks for duplicates, appends the pattern if needed,
+// and writes the updated config back to disk.
+// The ReloadNotifier callback is invoked after successful write if not nil.
+func (p *ConfigPersisterImpl) AddPatternToGlobal(pattern string) error {
+	// Validate pattern before processing
+	if err := validatePattern(pattern); err != nil {
+		return err
+	}
+
+	// Lock to prevent concurrent modifications
+	p.globalMu.Lock()
+	defer p.globalMu.Unlock()
+
+	// Load existing global config
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		return fmt.Errorf("load global config: %w", err)
+	}
+
+	// Check if pattern already exists in allowlist
+	for _, entry := range cfg.Proxy.Allow {
+		if entry.Pattern == pattern {
+			// Pattern already present, no need to add
+			return nil
+		}
+	}
+
+	// Append new pattern
+	cfg.Proxy.Allow = append(cfg.Proxy.Allow, config.AllowEntry{Pattern: pattern})
+
+	// Write updated config (always overwrites)
+	if err := config.WriteGlobalConfig(cfg); err != nil {
+		return fmt.Errorf("write global config: %w", err)
+	}
+
+	// Notify proxy to reload its allowlist cache (panic-safe)
+	if p.ReloadNotifier != nil {
+		safeNotify(p.ReloadNotifier)
+	}
+
+	return nil
+}
+
 // safeNotify calls the notifier function in a panic-safe manner.
 // If the notifier panics, the panic is caught and discarded.
 func safeNotify(notifier func()) {

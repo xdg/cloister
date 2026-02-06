@@ -14,9 +14,10 @@ import (
 
 // DomainResponse represents the result of a domain approval decision.
 type DomainResponse struct {
-	Status string `json:"status"` // "approved", "denied", or "timeout"
-	Scope  string `json:"scope"`  // "session", "project", or "global" (only for approved)
-	Reason string `json:"reason,omitempty"`
+	Status  string `json:"status"`            // "approved", "denied", or "timeout"
+	Scope   string `json:"scope"`             // "session", "project", or "global" (only for approved)
+	Reason  string `json:"reason,omitempty"`  // Reason for denial (only for denied)
+	Pattern string `json:"pattern,omitempty"` // Wildcard pattern if approved with wildcard (e.g., "*.example.com")
 }
 
 // DomainRequest represents a domain approval request awaiting human decision.

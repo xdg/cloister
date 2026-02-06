@@ -357,22 +357,22 @@ During Phase 6 development, an alternative implementation (claude branch) was cr
 - [x] **Test**: Unit tests for valid/invalid domains, verify invalid rejected before queueing
 
 ### 6.10.4 Wildcard domain support
-- [ ] **Current**: User must approve each subdomain separately (`api.example.com`, `www.example.com`, `cdn.example.com`)
-- [ ] **Proposed**: Support wildcard patterns (`*.example.com`)
-- [ ] **Rationale**: Reduce approval fatigue for multi-subdomain services
-- [ ] **Implementation**:
+- [x] **Current**: User must approve each subdomain separately (`api.example.com`, `www.example.com`, `cdn.example.com`)
+- [x] **Proposed**: Support wildcard patterns (`*.example.com`)
+- [x] **Rationale**: Reduce approval fatigue for multi-subdomain services
+- [x] **Implementation**:
   - Add `Pattern` field to `AllowEntry` in config package
   - Implement glob matching in `Allowlist.IsAllowed()`
   - Update config persistence to support patterns
   - Update UI to show "wildcard" badge for pattern approvals
-- [ ] **Files to modify**:
+- [x] **Files to modify**:
   - `internal/config/config.go` - Add Pattern field
   - `internal/guardian/allowlist.go` - Add pattern matching
   - `internal/guardian/config_persister.go` - Persist patterns
   - UI templates - Display pattern vs exact match
   - Tests for pattern matching
-- [ ] **Security consideration**: Require explicit user confirmation for wildcard approvals
-- [ ] **Test**: Unit tests for pattern matching, config persistence round-trip
+- [x] **Security consideration**: Require explicit user confirmation for wildcard approvals
+- [x] **Test**: Unit tests for pattern matching, config persistence round-trip
 
 ### 6.10.5 Session allowlist cleanup on cloister stop
 - [ ] **Current**: Session allowlist grows unbounded, only cleared on token revocation or guardian restart

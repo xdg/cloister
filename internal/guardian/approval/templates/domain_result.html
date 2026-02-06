@@ -5,6 +5,7 @@
         <span class="result-cmd">{{.Domain}}</span>
         {{if eq .Status "approved"}}
             {{if .Scope}}<span class="result-scope">({{.Scope}})</span>{{end}}
+            {{if .IsPattern}}<span class="result-badge wildcard-badge">wildcard</span>{{end}}
         {{else}}
             {{if .Reason}}<span class="result-reason">{{.Reason}}</span>{{end}}
         {{end}}

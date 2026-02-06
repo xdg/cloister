@@ -469,3 +469,276 @@ func TestAddDomainToProject_MultipleAdditions(t *testing.T) {
 		}
 	}
 }
+
+// Tests for pattern persistence
+
+func TestAddPatternToProject_WritesAndReloads(t *testing.T) {
+	// Setup isolated config environment
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	// Create a test project config
+	projectName := "test-project"
+	initialCfg := &config.ProjectConfig{
+		Remote: "git@github.com:example/repo.git",
+		Root:   "/test/path",
+		Proxy: config.ProjectProxyConfig{
+			Allow: []config.AllowEntry{
+				{Domain: "example.com"},
+			},
+		},
+	}
+	if err := config.WriteProjectConfig(projectName, initialCfg, false); err != nil {
+		t.Fatalf("WriteProjectConfig() error = %v", err)
+	}
+
+	// Track reload calls
+	reloadCalled := false
+	persister := &ConfigPersisterImpl{
+		ReloadNotifier: func() {
+			reloadCalled = true
+		},
+	}
+
+	// Add new pattern
+	newPattern := "*.example.com"
+	if err := persister.AddPatternToProject(projectName, newPattern); err != nil {
+		t.Fatalf("AddPatternToProject() error = %v", err)
+	}
+
+	// Verify reload notifier was called
+	if !reloadCalled {
+		t.Error("ReloadNotifier should have been called")
+	}
+
+	// Verify pattern was added by reloading config
+	cfg, err := config.LoadProjectConfig(projectName)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig() error = %v", err)
+	}
+
+	// Check that domain and pattern are both present
+	foundDomain := false
+	foundPattern := false
+	for _, entry := range cfg.Proxy.Allow {
+		if entry.Domain == "example.com" {
+			foundDomain = true
+		}
+		if entry.Pattern == "*.example.com" {
+			foundPattern = true
+		}
+	}
+
+	if !foundDomain {
+		t.Error("domain 'example.com' should be present in allowlist")
+	}
+	if !foundPattern {
+		t.Error("pattern '*.example.com' should be present in allowlist")
+	}
+
+	// Verify total count
+	if len(cfg.Proxy.Allow) != 2 {
+		t.Errorf("cfg.Proxy.Allow length = %d, want 2", len(cfg.Proxy.Allow))
+	}
+}
+
+func TestAddPatternToProject_NoDuplicate(t *testing.T) {
+	// Setup isolated config environment
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	// Create a test project config with a pattern
+	projectName := "test-project"
+	existingPattern := "*.example.com"
+	initialCfg := &config.ProjectConfig{
+		Remote: "git@github.com:example/repo.git",
+		Root:   "/test/path",
+		Proxy: config.ProjectProxyConfig{
+			Allow: []config.AllowEntry{
+				{Pattern: existingPattern},
+			},
+		},
+	}
+	if err := config.WriteProjectConfig(projectName, initialCfg, false); err != nil {
+		t.Fatalf("WriteProjectConfig() error = %v", err)
+	}
+
+	// Track reload calls
+	reloadCalled := false
+	persister := &ConfigPersisterImpl{
+		ReloadNotifier: func() {
+			reloadCalled = true
+		},
+	}
+
+	// Try to add the same pattern again
+	if err := persister.AddPatternToProject(projectName, existingPattern); err != nil {
+		t.Fatalf("AddPatternToProject() error = %v", err)
+	}
+
+	// Reload notifier should NOT be called since no write occurred
+	if reloadCalled {
+		t.Error("ReloadNotifier should NOT have been called when pattern already exists")
+	}
+
+	// Verify only one entry exists
+	cfg, err := config.LoadProjectConfig(projectName)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig() error = %v", err)
+	}
+
+	if len(cfg.Proxy.Allow) != 1 {
+		t.Errorf("cfg.Proxy.Allow length = %d, want 1 (no duplicate)", len(cfg.Proxy.Allow))
+	}
+
+	if cfg.Proxy.Allow[0].Pattern != existingPattern {
+		t.Errorf("cfg.Proxy.Allow[0].Pattern = %q, want %q", cfg.Proxy.Allow[0].Pattern, existingPattern)
+	}
+}
+
+func TestAddPatternToProject_InvalidPattern(t *testing.T) {
+	// Setup isolated config environment
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	persister := &ConfigPersisterImpl{}
+
+	tests := []struct {
+		name    string
+		pattern string
+	}{
+		{"empty pattern", ""},
+		{"missing asterisk prefix", "example.com"},
+		{"whitespace", "*.example .com"},
+		{"too short", "*."},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := persister.AddPatternToProject("test-project", tc.pattern)
+			if err == nil {
+				t.Errorf("AddPatternToProject(%q) should return error", tc.pattern)
+			}
+		})
+	}
+}
+
+func TestAddPatternToGlobal_WritesAndReloads(t *testing.T) {
+	// Setup isolated config environment
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	// Create a test global config
+	initialCfg := &config.GlobalConfig{
+		Proxy: config.ProxyConfig{
+			Listen: ":3128",
+			Allow: []config.AllowEntry{
+				{Domain: "golang.org"},
+			},
+		},
+	}
+	if err := config.WriteGlobalConfig(initialCfg); err != nil {
+		t.Fatalf("WriteGlobalConfig() error = %v", err)
+	}
+
+	// Track reload calls
+	reloadCalled := false
+	persister := &ConfigPersisterImpl{
+		ReloadNotifier: func() {
+			reloadCalled = true
+		},
+	}
+
+	// Add new pattern
+	newPattern := "*.googleapis.com"
+	if err := persister.AddPatternToGlobal(newPattern); err != nil {
+		t.Fatalf("AddPatternToGlobal() error = %v", err)
+	}
+
+	// Verify reload notifier was called
+	if !reloadCalled {
+		t.Error("ReloadNotifier should have been called")
+	}
+
+	// Verify pattern was added by reloading config
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		t.Fatalf("LoadGlobalConfig() error = %v", err)
+	}
+
+	// Check that domain and pattern are both present
+	foundDomain := false
+	foundPattern := false
+	for _, entry := range cfg.Proxy.Allow {
+		if entry.Domain == "golang.org" {
+			foundDomain = true
+		}
+		if entry.Pattern == "*.googleapis.com" {
+			foundPattern = true
+		}
+	}
+
+	if !foundDomain {
+		t.Error("domain 'golang.org' should be present in allowlist")
+	}
+	if !foundPattern {
+		t.Error("pattern '*.googleapis.com' should be present in allowlist")
+	}
+}
+
+func TestAddPatternToGlobal_NoDuplicate(t *testing.T) {
+	// Setup isolated config environment
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	// Create a test global config with a pattern
+	existingPattern := "*.googleapis.com"
+	initialCfg := &config.GlobalConfig{
+		Proxy: config.ProxyConfig{
+			Listen: ":3128",
+			Allow: []config.AllowEntry{
+				{Pattern: existingPattern},
+			},
+		},
+	}
+	if err := config.WriteGlobalConfig(initialCfg); err != nil {
+		t.Fatalf("WriteGlobalConfig() error = %v", err)
+	}
+
+	// Track reload calls
+	reloadCalled := false
+	persister := &ConfigPersisterImpl{
+		ReloadNotifier: func() {
+			reloadCalled = true
+		},
+	}
+
+	// Try to add the same pattern again
+	if err := persister.AddPatternToGlobal(existingPattern); err != nil {
+		t.Fatalf("AddPatternToGlobal() error = %v", err)
+	}
+
+	// Reload notifier should NOT be called since no write occurred
+	if reloadCalled {
+		t.Error("ReloadNotifier should NOT have been called when pattern already exists")
+	}
+
+	// Verify only one entry exists
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		t.Fatalf("LoadGlobalConfig() error = %v", err)
+	}
+
+	if len(cfg.Proxy.Allow) != 1 {
+		t.Errorf("cfg.Proxy.Allow length = %d, want 1 (no duplicate)", len(cfg.Proxy.Allow))
+	}
+
+	if cfg.Proxy.Allow[0].Pattern != existingPattern {
+		t.Errorf("cfg.Proxy.Allow[0].Pattern = %q, want %q", cfg.Proxy.Allow[0].Pattern, existingPattern)
+	}
+}

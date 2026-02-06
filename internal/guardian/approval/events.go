@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -166,6 +167,7 @@ func (h *EventHub) BroadcastDomainRequestAdded(req *DomainRequest) {
 		Cloister:  req.Cloister,
 		Project:   req.Project,
 		Timestamp: req.Timestamp.Format(time.RFC3339),
+		Wildcard:  domainToWildcard(req.Domain),
 	}
 	if err := templates.ExecuteTemplate(&buf, "domain_request", templateReq); err != nil {
 		// Log error but don't fail - SSE is best-effort
@@ -176,6 +178,19 @@ func (h *EventHub) BroadcastDomainRequestAdded(req *DomainRequest) {
 		Type: EventDomainRequestAdded,
 		Data: buf.String(),
 	})
+}
+
+// domainToWildcard converts a domain like "api.example.com" to a wildcard
+// pattern like "*.example.com". Returns empty string if the domain doesn't
+// have at least two labels (e.g., "example.com" has no subdomain to wildcard).
+func domainToWildcard(domain string) string {
+	// Find the first dot
+	idx := strings.Index(domain, ".")
+	if idx == -1 || idx == len(domain)-1 {
+		return ""
+	}
+	// Return *.rest_of_domain
+	return "*" + domain[idx:]
 }
 
 // BroadcastDomainRequestRemoved broadcasts a domain-request-removed event.

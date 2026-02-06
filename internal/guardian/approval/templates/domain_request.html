@@ -12,6 +12,10 @@
         <button class="btn btn-approve" hx-post="/approve-domain/{{.ID}}" hx-vals='{"scope":"session"}' hx-swap="outerHTML" hx-target="closest .request">Allow (Session)</button>
         <button class="btn btn-approve" hx-post="/approve-domain/{{.ID}}" hx-vals='{"scope":"project"}' hx-swap="outerHTML" hx-target="closest .request">Save to Project</button>
         <button class="btn btn-approve" hx-post="/approve-domain/{{.ID}}" hx-vals='{"scope":"global"}' hx-swap="outerHTML" hx-target="closest .request">Save to Global</button>
+        {{if .Wildcard}}
+        <button class="btn btn-wildcard" hx-post="/approve-domain/{{.ID}}" hx-vals='{"scope":"project","pattern":"{{.Wildcard}}"}' hx-swap="outerHTML" hx-target="closest .request" title="Save {{.Wildcard}} to Project">Wildcard (Project)</button>
+        <button class="btn btn-wildcard" hx-post="/approve-domain/{{.ID}}" hx-vals='{"scope":"global","pattern":"{{.Wildcard}}"}' hx-swap="outerHTML" hx-target="closest .request" title="Save {{.Wildcard}} to Global">Wildcard (Global)</button>
+        {{end}}
         <button class="btn btn-deny" hx-post="/deny-domain/{{.ID}}" hx-swap="outerHTML" hx-target="closest .request">Deny</button>
     </div>
 </li>

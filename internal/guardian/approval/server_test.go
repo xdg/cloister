@@ -661,15 +661,17 @@ func TestTemplates_DomainRequestPartial(t *testing.T) {
 func TestTemplates_DomainResultApproved(t *testing.T) {
 	// Test that domain_result template renders for approved state
 	data := struct {
-		ID     string
-		Domain string
-		Status string
-		Scope  string
+		ID        string
+		Domain    string
+		Status    string
+		Scope     string
+		IsPattern bool
 	}{
-		ID:     "domain456",
-		Domain: "trusted.com",
-		Status: "approved",
-		Scope:  "project",
+		ID:        "domain456",
+		Domain:    "trusted.com",
+		Status:    "approved",
+		Scope:     "project",
+		IsPattern: false,
 	}
 
 	var buf bytes.Buffer
@@ -698,15 +700,17 @@ func TestTemplates_DomainResultApproved(t *testing.T) {
 func TestTemplates_DomainResultDenied(t *testing.T) {
 	// Test that domain_result template renders for denied state
 	data := struct {
-		ID     string
-		Domain string
-		Status string
-		Reason string
+		ID        string
+		Domain    string
+		Status    string
+		Reason    string
+		IsPattern bool
 	}{
-		ID:     "domain789",
-		Domain: "suspicious.com",
-		Status: "denied",
-		Reason: "Suspicious domain",
+		ID:        "domain789",
+		Domain:    "suspicious.com",
+		Status:    "denied",
+		Reason:    "Suspicious domain",
+		IsPattern: false,
 	}
 
 	var buf bytes.Buffer
@@ -1128,8 +1132,17 @@ type mockConfigPersister struct {
 	addDomainToGlobalCalls []struct {
 		domain string
 	}
-	addDomainToProjectErr error
-	addDomainToGlobalErr  error
+	addPatternToProjectCalls []struct {
+		project string
+		pattern string
+	}
+	addPatternToGlobalCalls []struct {
+		pattern string
+	}
+	addDomainToProjectErr  error
+	addDomainToGlobalErr   error
+	addPatternToProjectErr error
+	addPatternToGlobalErr  error
 }
 
 func (m *mockConfigPersister) AddDomainToProject(project, domain string) error {
@@ -1145,6 +1158,21 @@ func (m *mockConfigPersister) AddDomainToGlobal(domain string) error {
 		domain string
 	}{domain})
 	return m.addDomainToGlobalErr
+}
+
+func (m *mockConfigPersister) AddPatternToProject(project, pattern string) error {
+	m.addPatternToProjectCalls = append(m.addPatternToProjectCalls, struct {
+		project string
+		pattern string
+	}{project, pattern})
+	return m.addPatternToProjectErr
+}
+
+func (m *mockConfigPersister) AddPatternToGlobal(pattern string) error {
+	m.addPatternToGlobalCalls = append(m.addPatternToGlobalCalls, struct {
+		pattern string
+	}{pattern})
+	return m.addPatternToGlobalErr
 }
 
 func TestServer_HandleApproveDomain_SessionScope(t *testing.T) {
@@ -1356,6 +1384,173 @@ func TestServer_HandleApproveDomain_GlobalScope(t *testing.T) {
 		}
 		if approvalResp.Scope != "global" {
 			t.Errorf("expected approval response scope 'global', got %q", approvalResp.Scope)
+		}
+	default:
+		t.Error("expected approval response on channel")
+	}
+
+	// Verify request was removed from queue
+	if domainQueue.Len() != 0 {
+		t.Errorf("expected domain queue to be empty, got %d", domainQueue.Len())
+	}
+}
+
+func TestServer_HandleApproveDomain_PatternProjectScope(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "api.example.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	mockPersister := &mockConfigPersister{}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	server.ConfigPersister = mockPersister
+
+	// Approve with a wildcard pattern instead of exact domain
+	body := `{"scope": "project", "pattern": "*.example.com"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+	if resp.Scope != "project" {
+		t.Errorf("expected scope 'project', got %q", resp.Scope)
+	}
+
+	// Verify AddPatternToProject was called instead of AddDomainToProject
+	if len(mockPersister.addDomainToProjectCalls) != 0 {
+		t.Errorf("expected AddDomainToProject NOT to be called, got %d calls", len(mockPersister.addDomainToProjectCalls))
+	}
+	if len(mockPersister.addPatternToProjectCalls) != 1 {
+		t.Fatalf("expected AddPatternToProject to be called once, got %d calls", len(mockPersister.addPatternToProjectCalls))
+	}
+	call := mockPersister.addPatternToProjectCalls[0]
+	if call.project != "test-project" {
+		t.Errorf("expected project 'test-project', got %q", call.project)
+	}
+	if call.pattern != "*.example.com" {
+		t.Errorf("expected pattern '*.example.com', got %q", call.pattern)
+	}
+
+	// Verify the response was sent on the channel with pattern info
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "project" {
+			t.Errorf("expected approval response scope 'project', got %q", approvalResp.Scope)
+		}
+		if approvalResp.Pattern != "*.example.com" {
+			t.Errorf("expected approval response pattern '*.example.com', got %q", approvalResp.Pattern)
+		}
+	default:
+		t.Error("expected approval response on channel")
+	}
+
+	// Verify request was removed from queue
+	if domainQueue.Len() != 0 {
+		t.Errorf("expected domain queue to be empty, got %d", domainQueue.Len())
+	}
+}
+
+func TestServer_HandleApproveDomain_PatternGlobalScope(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "cdn.example.org",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	mockPersister := &mockConfigPersister{}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	server.ConfigPersister = mockPersister
+
+	// Approve with a wildcard pattern at global scope
+	body := `{"scope": "global", "pattern": "*.example.org"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+	if resp.Scope != "global" {
+		t.Errorf("expected scope 'global', got %q", resp.Scope)
+	}
+
+	// Verify AddPatternToGlobal was called instead of AddDomainToGlobal
+	if len(mockPersister.addDomainToGlobalCalls) != 0 {
+		t.Errorf("expected AddDomainToGlobal NOT to be called, got %d calls", len(mockPersister.addDomainToGlobalCalls))
+	}
+	if len(mockPersister.addPatternToGlobalCalls) != 1 {
+		t.Fatalf("expected AddPatternToGlobal to be called once, got %d calls", len(mockPersister.addPatternToGlobalCalls))
+	}
+	call := mockPersister.addPatternToGlobalCalls[0]
+	if call.pattern != "*.example.org" {
+		t.Errorf("expected pattern '*.example.org', got %q", call.pattern)
+	}
+
+	// Verify the response was sent on the channel with pattern info
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "global" {
+			t.Errorf("expected approval response scope 'global', got %q", approvalResp.Scope)
+		}
+		if approvalResp.Pattern != "*.example.org" {
+			t.Errorf("expected approval response pattern '*.example.org', got %q", approvalResp.Pattern)
 		}
 	default:
 		t.Error("expected approval response on channel")
