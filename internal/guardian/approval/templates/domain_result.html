@@ -1,11 +1,17 @@
 {{define "domain_result"}}
-<li class="request request-{{.Status}}" id="request-{{.ID}}">
+<li class="request request-{{.Status}}{{if .PersistenceError}} request-warning{{end}}" id="request-{{.ID}}">
     <div class="request-result">
         <span class="result-status">{{if eq .Status "approved"}}Approved{{else}}Denied{{end}}</span>
         <span class="result-cmd">{{.Domain}}</span>
         {{if eq .Status "approved"}}
             {{if .Scope}}<span class="result-scope">({{.Scope}})</span>{{end}}
             {{if .IsPattern}}<span class="result-badge wildcard-badge">wildcard</span>{{end}}
+            {{if .PersistenceError}}
+            <div class="persistence-warning">
+                <span class="warning-icon">&#9888;</span>
+                <span class="warning-text">Approved for session only ({{.PersistenceError}})</span>
+            </div>
+            {{end}}
         {{else}}
             {{if .Reason}}<span class="result-reason">{{.Reason}}</span>{{end}}
         {{end}}

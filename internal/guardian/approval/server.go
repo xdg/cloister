@@ -228,12 +228,13 @@ type resultData struct {
 
 // domainResultData holds the data passed to the domain_result.html template.
 type domainResultData struct {
-	ID        string
-	Status    string
-	Domain    string
-	Scope     string
-	Reason    string
-	IsPattern bool
+	ID               string
+	Status           string
+	Domain           string
+	Scope            string
+	Reason           string
+	IsPattern        bool
+	PersistenceError string // Error message if config persistence failed (domain still approved for session)
 }
 
 // handleIndex serves the HTML UI for the approval interface.
@@ -541,15 +542,16 @@ func (s *Server) writeResultHTML(w http.ResponseWriter, id, status, cmd string) 
 }
 
 // writeDomainResultHTML renders the domain_result template for htmx responses.
-func (s *Server) writeDomainResultHTML(w http.ResponseWriter, id, status, domain, scope, reason string, isPattern bool) {
+func (s *Server) writeDomainResultHTML(w http.ResponseWriter, id, status, domain, scope, reason string, isPattern bool, persistenceError string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := domainResultData{
-		ID:        id,
-		Status:    status,
-		Domain:    domain,
-		Scope:     scope,
-		Reason:    reason,
-		IsPattern: isPattern,
+		ID:               id,
+		Status:           status,
+		Domain:           domain,
+		Scope:            scope,
+		Reason:           reason,
+		IsPattern:        isPattern,
+		PersistenceError: persistenceError,
 	}
 	if err := templates.ExecuteTemplate(w, "domain_result", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
@@ -660,6 +662,11 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 		persistValue = pattern
 	}
 
+	// Track persistence error - if config save fails, we fall back to session scope
+	// but still approve the domain for immediate use
+	var persistenceError string
+	requestedScope := scope
+
 	// Persist to config if needed
 	if scope == "project" {
 		var err error
@@ -669,17 +676,10 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 			err = s.ConfigPersister.AddDomainToProject(req.Project, domain)
 		}
 		if err != nil {
-			// Send denied response so client doesn't wait for timeout
-			broadcastDomainResponse(req, DomainResponse{
-				Status: "denied",
-				Reason: fmt.Sprintf("failed to persist to project: %v", err),
-			})
-			// Remove from queue (also cancels timeout)
-			s.DomainQueue.Remove(id)
-			// Broadcast removal event to SSE clients
-			s.Events.BroadcastDomainRequestRemoved(id)
-			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to persist to project: %v", err))
-			return
+			// Log the error but don't fail - fall back to session scope
+			persistenceError = fmt.Sprintf("failed to persist to project config: %v", err)
+			scope = "session"
+			isPattern = false // Session scope doesn't persist patterns
 		}
 	} else if scope == "global" {
 		var err error
@@ -689,32 +689,31 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 			err = s.ConfigPersister.AddDomainToGlobal(domain)
 		}
 		if err != nil {
-			// Send denied response so client doesn't wait for timeout
-			broadcastDomainResponse(req, DomainResponse{
-				Status: "denied",
-				Reason: fmt.Sprintf("failed to persist to global: %v", err),
-			})
-			// Remove from queue (also cancels timeout)
-			s.DomainQueue.Remove(id)
-			// Broadcast removal event to SSE clients
-			s.Events.BroadcastDomainRequestRemoved(id)
-			s.writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to persist to global: %v", err))
-			return
+			// Log the error but don't fail - fall back to session scope
+			persistenceError = fmt.Sprintf("failed to persist to global config: %v", err)
+			scope = "session"
+			isPattern = false // Session scope doesn't persist patterns
 		}
 	}
 
-	// Log DOMAIN_APPROVE event
+	// Log DOMAIN_APPROVE event (with actual scope used, not requested scope)
 	if s.AuditLogger != nil {
 		_ = s.AuditLogger.LogDomainApprove(project, cloister, persistValue, scope, getUserIdentity())
 	}
 
 	// Send approved response on the request's channels BEFORE removing from queue
 	// to prevent race conditions. Broadcasts to all waiting callers (coalesced requests).
-	broadcastDomainResponse(req, DomainResponse{
-		Status:  "approved",
-		Scope:   scope,
-		Pattern: pattern,
-	})
+	resp := DomainResponse{
+		Status:           "approved",
+		Scope:            scope,
+		Pattern:          pattern,
+		PersistenceError: persistenceError,
+	}
+	// Clear pattern if we fell back to session scope
+	if scope == "session" && requestedScope != "session" {
+		resp.Pattern = ""
+	}
+	broadcastDomainResponse(req, resp)
 
 	// Remove from queue (also cancels timeout)
 	s.DomainQueue.Remove(id)
@@ -725,10 +724,10 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	// Check if this is an htmx request
 	if r.Header.Get("HX-Request") == "true" {
 		displayValue := domain
-		if isPattern {
+		if isPattern && persistenceError == "" {
 			displayValue = pattern
 		}
-		s.writeDomainResultHTML(w, id, "approved", displayValue, scope, "", isPattern)
+		s.writeDomainResultHTML(w, id, "approved", displayValue, scope, "", isPattern && persistenceError == "", persistenceError)
 		return
 	}
 
@@ -803,7 +802,7 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Check if this is an htmx request
 	if r.Header.Get("HX-Request") == "true" {
-		s.writeDomainResultHTML(w, id, "denied", req.Domain, "", reason, false)
+		s.writeDomainResultHTML(w, id, "denied", req.Domain, "", reason, false, "")
 		return
 	}
 

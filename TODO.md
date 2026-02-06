@@ -390,19 +390,21 @@ During Phase 6 development, an alternative implementation (claude branch) was cr
 - [x] **Test**: Unit tests for cleanup on revocation, nil SessionAllowlist handling
 
 ### 6.10.6 Improve error handling in config persistence
-- [ ] **Current**: `ConfigPersister` errors logged but not surfaced to user
-- [ ] **Proposed**: Surface persistence errors to user via UI or response
-- [ ] **Rationale**: User should know if "Save to Project" actually failed
-- [ ] **Implementation**:
+- [x] **Current**: `ConfigPersister` errors logged but not surfaced to user
+- [x] **Proposed**: Surface persistence errors to user via UI or response
+- [x] **Rationale**: User should know if "Save to Project" actually failed
+- [x] **Implementation**:
   - Modify `handleApproveDomain` to check `ConfigPersister` error
   - If persistence fails, send modified response indicating fallback to session scope
   - Update UI to show persistence failure notification
-- [ ] **Files to modify**:
-  - `internal/guardian/approval/server.go` - Handle persister errors
-  - `internal/guardian/approval/domain_queue.go` - Add persistence status to response
-  - UI templates - Show persistence failure
-- [ ] **UX**: "Approved for session only (config save failed: permission denied)"
-- [ ] **Test**: Unit test for persistence failure handling
+- [x] **Files modified**:
+  - `internal/guardian/approval/server.go` - Handle persister errors, fall back to session scope
+  - `internal/guardian/approval/domain_queue.go` - Added PersistenceError field to DomainResponse
+  - `internal/guardian/approval/templates/domain_result.html` - Show persistence failure warning
+  - `internal/guardian/approval/templates/index.html` - Added CSS for warning styling
+  - `internal/guardian/approval/server_test.go` - Added tests for persistence failure handling
+- [x] **UX**: "Approved for session only (config save failed: permission denied)"
+- [x] **Test**: Unit tests for persistence failure handling (project, global, pattern scopes)
 
 ---
 

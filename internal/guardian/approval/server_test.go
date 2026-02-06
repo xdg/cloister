@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"html/template"
 	"net/http"
 	"net/http/httptest"
@@ -660,13 +661,7 @@ func TestTemplates_DomainRequestPartial(t *testing.T) {
 
 func TestTemplates_DomainResultApproved(t *testing.T) {
 	// Test that domain_result template renders for approved state
-	data := struct {
-		ID        string
-		Domain    string
-		Status    string
-		Scope     string
-		IsPattern bool
-	}{
+	data := domainResultData{
 		ID:        "domain456",
 		Domain:    "trusted.com",
 		Status:    "approved",
@@ -695,17 +690,15 @@ func TestTemplates_DomainResultApproved(t *testing.T) {
 	if !strings.Contains(output, "project") {
 		t.Error("expected output to contain scope 'project'")
 	}
+	// Should NOT contain warning class when there's no persistence error
+	if strings.Contains(output, "request-warning") {
+		t.Error("expected output NOT to contain 'request-warning' class when no persistence error")
+	}
 }
 
 func TestTemplates_DomainResultDenied(t *testing.T) {
 	// Test that domain_result template renders for denied state
-	data := struct {
-		ID        string
-		Domain    string
-		Status    string
-		Reason    string
-		IsPattern bool
-	}{
+	data := domainResultData{
 		ID:        "domain789",
 		Domain:    "suspicious.com",
 		Status:    "denied",
@@ -2245,5 +2238,281 @@ func TestServer_HandleApproveDomain_NilAuditLogger(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+}
+
+func TestServer_HandleApproveDomain_PersistenceError_FallsBackToSession(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Create a mock persister that returns an error
+	mockPersister := &mockConfigPersister{
+		addDomainToProjectErr: errors.New("permission denied"),
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	server.ConfigPersister = mockPersister
+
+	body := `{"scope": "project"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	// Should still succeed (not return an error)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Should be approved
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+
+	// Scope should fall back to session
+	if resp.Scope != "session" {
+		t.Errorf("expected scope 'session' (fallback), got %q", resp.Scope)
+	}
+
+	// Verify the response was sent on the channel
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "session" {
+			t.Errorf("expected approval response scope 'session' (fallback), got %q", approvalResp.Scope)
+		}
+		// Should include persistence error message
+		if approvalResp.PersistenceError == "" {
+			t.Error("expected persistence error to be set")
+		}
+		if !strings.Contains(approvalResp.PersistenceError, "permission denied") {
+			t.Errorf("expected persistence error to contain 'permission denied', got %q", approvalResp.PersistenceError)
+		}
+	default:
+		t.Error("expected approval response on channel")
+	}
+
+	// Verify request was removed from queue
+	if domainQueue.Len() != 0 {
+		t.Errorf("expected domain queue to be empty, got %d", domainQueue.Len())
+	}
+}
+
+func TestServer_HandleApproveDomain_PersistenceError_GlobalFallsBackToSession(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Create a mock persister that returns an error for global config
+	mockPersister := &mockConfigPersister{
+		addDomainToGlobalErr: errors.New("read-only filesystem"),
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	server.ConfigPersister = mockPersister
+
+	body := `{"scope": "global"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	// Should still succeed (not return an error)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Should be approved
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+
+	// Scope should fall back to session
+	if resp.Scope != "session" {
+		t.Errorf("expected scope 'session' (fallback), got %q", resp.Scope)
+	}
+
+	// Verify the response was sent on the channel with error info
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "session" {
+			t.Errorf("expected approval response scope 'session' (fallback), got %q", approvalResp.Scope)
+		}
+		// Should include persistence error message
+		if !strings.Contains(approvalResp.PersistenceError, "read-only filesystem") {
+			t.Errorf("expected persistence error to contain 'read-only filesystem', got %q", approvalResp.PersistenceError)
+		}
+	default:
+		t.Error("expected approval response on channel")
+	}
+}
+
+func TestServer_HandleApproveDomain_PersistenceError_PatternFallsBackToSession(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "api.example.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	// Create a mock persister that returns an error for patterns
+	mockPersister := &mockConfigPersister{
+		addPatternToProjectErr: errors.New("disk full"),
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	server.ConfigPersister = mockPersister
+
+	// Approve with wildcard pattern
+	body := `{"scope": "project", "pattern": "*.example.com"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	// Should still succeed
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	// Should be approved with fallback to session
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+	if resp.Scope != "session" {
+		t.Errorf("expected scope 'session' (fallback), got %q", resp.Scope)
+	}
+
+	// Verify the response was sent on the channel
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "session" {
+			t.Errorf("expected approval response scope 'session' (fallback), got %q", approvalResp.Scope)
+		}
+		// Pattern should be cleared since we fell back to session
+		if approvalResp.Pattern != "" {
+			t.Errorf("expected pattern to be cleared on fallback, got %q", approvalResp.Pattern)
+		}
+		// Should include persistence error message
+		if !strings.Contains(approvalResp.PersistenceError, "disk full") {
+			t.Errorf("expected persistence error to contain 'disk full', got %q", approvalResp.PersistenceError)
+		}
+	default:
+		t.Error("expected approval response on channel")
+	}
+}
+
+func TestTemplates_DomainResultWithPersistenceError(t *testing.T) {
+	// Test that domain_result template renders persistence warning
+	data := domainResultData{
+		ID:               "domain123",
+		Domain:           "example.com",
+		Status:           "approved",
+		Scope:            "session",
+		IsPattern:        false,
+		PersistenceError: "failed to persist to project config: permission denied",
+	}
+
+	var buf bytes.Buffer
+	err := templates.ExecuteTemplate(&buf, "domain_result", data)
+	if err != nil {
+		t.Fatalf("failed to execute domain_result template with persistence error: %v", err)
+	}
+
+	output := buf.String()
+
+	// Verify key content is present
+	if !strings.Contains(output, "domain123") {
+		t.Error("expected output to contain request ID 'domain123'")
+	}
+	if !strings.Contains(output, "example.com") {
+		t.Error("expected output to contain 'example.com'")
+	}
+	if !strings.Contains(output, "Approved") {
+		t.Error("expected output to contain 'Approved'")
+	}
+	if !strings.Contains(output, "session") {
+		t.Error("expected output to contain scope 'session'")
+	}
+	// Should contain the warning class
+	if !strings.Contains(output, "request-warning") {
+		t.Error("expected output to contain 'request-warning' class")
+	}
+	// Should contain the persistence warning
+	if !strings.Contains(output, "persistence-warning") {
+		t.Error("expected output to contain 'persistence-warning' div")
+	}
+	// Should contain the warning text
+	if !strings.Contains(output, "Approved for session only") {
+		t.Error("expected output to contain 'Approved for session only'")
+	}
+	if !strings.Contains(output, "permission denied") {
+		t.Error("expected output to contain the error message")
 	}
 }
