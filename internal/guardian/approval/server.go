@@ -169,6 +169,11 @@ func (s *Server) Stop(ctx context.Context) error {
 		s.Events.Close()
 	}
 
+	// Use a background context if nil is provided
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	return s.server.Shutdown(ctx)
 }
 

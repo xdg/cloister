@@ -2,11 +2,92 @@ package guardian
 
 import (
 	"fmt"
+	"net"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/guardian/approval"
 )
+
+// blockedPorts is the set of ports that are not valid for HTTP proxy requests.
+// These are well-known ports for non-HTTP protocols.
+var blockedPorts = map[int]bool{
+	21:    true, // FTP
+	22:    true, // SSH
+	23:    true, // Telnet
+	25:    true, // SMTP
+	53:    true, // DNS
+	110:   true, // POP3
+	143:   true, // IMAP
+	389:   true, // LDAP
+	465:   true, // SMTPS
+	587:   true, // SMTP submission
+	636:   true, // LDAPS
+	993:   true, // IMAPS
+	995:   true, // POP3S
+	3306:  true, // MySQL
+	5432:  true, // PostgreSQL
+	6379:  true, // Redis
+	27017: true, // MongoDB
+}
+
+// ValidateDomain checks if a domain is valid for approval.
+// Returns an error describing why the domain is invalid, or nil if valid.
+//
+// Validation rules:
+//   - No scheme prefix (http://, https://, ftp://, etc.)
+//   - Port, if present, must not be a well-known non-HTTP port (SSH, database, etc.)
+//   - Hostname must not be empty and contain valid characters
+func ValidateDomain(domain string) error {
+	if domain == "" {
+		return fmt.Errorf("domain is empty")
+	}
+
+	// Check for scheme prefixes (reject http://, https://, ftp://, etc.)
+	if strings.Contains(domain, "://") {
+		return fmt.Errorf("domain contains scheme prefix (use hostname:port format, not URLs)")
+	}
+
+	// Split host and port
+	host, portStr, err := net.SplitHostPort(domain)
+	if err != nil {
+		// No port specified - that's valid, host is the entire domain
+		host = domain
+		portStr = ""
+	}
+
+	// Check hostname is not empty
+	if host == "" {
+		return fmt.Errorf("hostname is empty")
+	}
+
+	// Validate port if present
+	if portStr != "" {
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			return fmt.Errorf("invalid port %q: %w", portStr, err)
+		}
+		if port < 1 || port > 65535 {
+			return fmt.Errorf("port %d out of valid range (1-65535)", port)
+		}
+		if blockedPorts[port] {
+			return fmt.Errorf("port %d not allowed (non-HTTP protocol)", port)
+		}
+	}
+
+	// Basic hostname validation - check for obviously invalid characters
+	// We allow: alphanumeric, hyphens, dots (for subdomains), and colons (for IPv6)
+	// We reject: spaces, slashes, and other URL-like characters
+	for _, r := range host {
+		if r == ' ' || r == '/' || r == '\\' || r == '?' || r == '#' || r == '@' {
+			return fmt.Errorf("hostname contains invalid character %q", r)
+		}
+	}
+
+	return nil
+}
 
 // DomainApproverImpl implements the DomainApprover interface using DomainQueue
 // to request human approval for unlisted domains.

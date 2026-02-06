@@ -399,6 +399,12 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 
+			// Validate domain format before queueing for approval
+			if err := ValidateDomain(host); err != nil {
+				http.Error(w, fmt.Sprintf("Forbidden - invalid domain: %v", err), http.StatusForbidden)
+				return
+			}
+
 			// Request approval (blocks until response)
 			// Note: DomainApprover still uses project name for the approval queue/UI display
 			result, err := p.DomainApprover.RequestApproval(projectName, "", host, token)

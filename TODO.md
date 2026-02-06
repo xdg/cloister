@@ -343,18 +343,18 @@ During Phase 6 development, an alternative implementation (claude branch) was cr
 - [x] **Test**: Unit test for deduplication, verify both requesters receive response
 
 ### 6.10.3 Domain validation before approval
-- [ ] **Current**: No validation - any string can be approved as domain
-- [ ] **Proposed**: Validate domain format and port before queueing
-- [ ] **Rationale**: Prevent approval of invalid domains (e.g., `http://evil.com:22`)
-- [ ] **Validation rules**:
+- [x] **Current**: No validation - any string can be approved as domain
+- [x] **Proposed**: Validate domain format and port before queueing
+- [x] **Rationale**: Prevent approval of invalid domains (e.g., `http://evil.com:22`)
+- [x] **Validation rules**:
   - Port must be common HTTP/HTTPS ports (80, 443, 8080, 8443) or omitted
   - Domain format: hostname or hostname:port
   - Reject obvious non-HTTP protocols
-- [ ] **Files to modify**:
+- [x] **Files to modify**:
   - `internal/guardian/proxy.go` - Validate before calling `DomainApprover.RequestApproval()`
   - `internal/guardian/domain_approver.go` - Add validation function
   - Tests for validation logic
-- [ ] **Test**: Unit tests for valid/invalid domains, verify invalid rejected before queueing
+- [x] **Test**: Unit tests for valid/invalid domains, verify invalid rejected before queueing
 
 ### 6.10.4 Wildcard domain support
 - [ ] **Current**: User must approve each subdomain separately (`api.example.com`, `www.example.com`, `cdn.example.com`)
