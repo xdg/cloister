@@ -49,12 +49,14 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 
 	// Create and submit the request
 	// Note: The DomainRequest uses project for display in the approval queue/UI
+	// Token is used for request deduplication (same token+domain = same queue entry)
 	req := &approval.DomainRequest{
 		Cloister:  cloister,
 		Project:   project,
 		Domain:    domain,
+		Token:     token,
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- approval.DomainResponse{respChan},
 	}
 
 	_, err := d.queue.Add(req)

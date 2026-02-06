@@ -644,12 +644,10 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	if scope == "project" {
 		if err := s.ConfigPersister.AddDomainToProject(req.Project, req.Domain); err != nil {
 			// Send denied response so client doesn't wait for timeout
-			if req.Response != nil {
-				req.Response <- DomainResponse{
-					Status: "denied",
-					Reason: fmt.Sprintf("failed to persist domain to project: %v", err),
-				}
-			}
+			broadcastDomainResponse(req, DomainResponse{
+				Status: "denied",
+				Reason: fmt.Sprintf("failed to persist domain to project: %v", err),
+			})
 			// Remove from queue (also cancels timeout)
 			s.DomainQueue.Remove(id)
 			// Broadcast removal event to SSE clients
@@ -660,12 +658,10 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	} else if scope == "global" {
 		if err := s.ConfigPersister.AddDomainToGlobal(req.Domain); err != nil {
 			// Send denied response so client doesn't wait for timeout
-			if req.Response != nil {
-				req.Response <- DomainResponse{
-					Status: "denied",
-					Reason: fmt.Sprintf("failed to persist domain to global: %v", err),
-				}
-			}
+			broadcastDomainResponse(req, DomainResponse{
+				Status: "denied",
+				Reason: fmt.Sprintf("failed to persist domain to global: %v", err),
+			})
 			// Remove from queue (also cancels timeout)
 			s.DomainQueue.Remove(id)
 			// Broadcast removal event to SSE clients
@@ -680,14 +676,12 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 		_ = s.AuditLogger.LogDomainApprove(project, cloister, domain, scope, getUserIdentity())
 	}
 
-	// Send approved response on the request's channel BEFORE removing from queue
-	// to prevent race conditions
-	if req.Response != nil {
-		req.Response <- DomainResponse{
-			Status: "approved",
-			Scope:  scope,
-		}
-	}
+	// Send approved response on the request's channels BEFORE removing from queue
+	// to prevent race conditions. Broadcasts to all waiting callers (coalesced requests).
+	broadcastDomainResponse(req, DomainResponse{
+		Status: "approved",
+		Scope:  scope,
+	})
 
 	// Remove from queue (also cancels timeout)
 	s.DomainQueue.Remove(id)
@@ -758,13 +752,11 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 		_ = s.AuditLogger.LogDomainDeny(project, cloister, domain, reason)
 	}
 
-	// Send denied response on the request's channel
-	if req.Response != nil {
-		req.Response <- DomainResponse{
-			Status: "denied",
-			Reason: reason,
-		}
-	}
+	// Send denied response on the request's channels. Broadcasts to all waiting callers.
+	broadcastDomainResponse(req, DomainResponse{
+		Status: "denied",
+		Reason: reason,
+	})
 
 	// Remove from queue (also cancels timeout)
 	s.DomainQueue.Remove(id)
@@ -782,4 +774,18 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 		Status: "denied",
 		ID:     id,
 	})
+}
+
+// broadcastDomainResponse sends a response to all waiting channels in a DomainRequest.
+// This is used for coalesced requests where multiple callers are waiting for the same approval.
+func broadcastDomainResponse(req *DomainRequest, resp DomainResponse) {
+	for _, ch := range req.Responses {
+		if ch != nil {
+			// Non-blocking send to prevent goroutine leaks
+			select {
+			case ch <- resp:
+			default:
+			}
+		}
+	}
 }

@@ -55,7 +55,7 @@ func TestDomainApproverImpl_RequestApproval_Denied(t *testing.T) {
 	}
 
 	// Send denial
-	req.Response <- approval.DomainResponse{
+	req.Responses[0] <- approval.DomainResponse{
 		Status: "denied",
 		Reason: "test denial",
 	}
@@ -103,7 +103,7 @@ func TestDomainApproverImpl_RequestApproval_SessionScope(t *testing.T) {
 	}
 
 	// Send approval with session scope
-	req.Response <- approval.DomainResponse{
+	req.Responses[0] <- approval.DomainResponse{
 		Status: "approved",
 		Scope:  "session",
 	}
@@ -164,7 +164,7 @@ func TestDomainApproverImpl_RequestApproval_ProjectScope(t *testing.T) {
 	}
 
 	// Send approval with project scope
-	req.Response <- approval.DomainResponse{
+	req.Responses[0] <- approval.DomainResponse{
 		Status: "approved",
 		Scope:  "project",
 	}
@@ -220,7 +220,7 @@ func TestDomainApproverImpl_RequestApproval_GlobalScope(t *testing.T) {
 	}
 
 	// Send approval with global scope
-	req.Response <- approval.DomainResponse{
+	req.Responses[0] <- approval.DomainResponse{
 		Status: "approved",
 		Scope:  "global",
 	}

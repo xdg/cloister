@@ -1049,7 +1049,7 @@ func TestServer_HandlePendingDomains_WithRequests(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "example.com",
 		Timestamp: time.Date(2024, 1, 15, 14, 32, 5, 0, time.UTC),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(domainReq)
 	if err != nil {
@@ -1158,7 +1158,7 @@ func TestServer_HandleApproveDomain_SessionScope(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(domainReq)
 	if err != nil {
@@ -1225,7 +1225,7 @@ func TestServer_HandleApproveDomain_ProjectScope(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(domainReq)
 	if err != nil {
@@ -1303,7 +1303,7 @@ func TestServer_HandleApproveDomain_GlobalScope(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(domainReq)
 	if err != nil {
@@ -1378,7 +1378,7 @@ func TestServer_HandleDenyDomain_Success(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "suspicious.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(domainReq)
 	if err != nil {
@@ -1440,7 +1440,7 @@ func TestServer_HandleDenyDomain_WithReason(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "suspicious.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(domainReq)
 	if err != nil {
@@ -1541,7 +1541,7 @@ func TestServer_HandleApproveDomain_InvalidScope(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(domainReq)
 	if err != nil {
@@ -1583,7 +1583,7 @@ func TestServer_HandleApproveDomain_MissingConfigPersister(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(domainReq)
 	if err != nil {
@@ -1659,7 +1659,7 @@ func TestServer_SetDomainQueue(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "example.com",
 		Timestamp: time.Now(),
-		Response:  make(chan DomainResponse, 1),
+		Responses: []chan<- DomainResponse{make(chan DomainResponse, 1)},
 	}
 
 	_, err := domainQueue.Add(domainReq)
@@ -1703,7 +1703,7 @@ func TestServer_HandleApproveDomain_AuditLogging(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "api.example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(req)
 	if err != nil {
@@ -1776,7 +1776,7 @@ func TestServer_HandleApproveDomain_AuditLogging_SessionScope(t *testing.T) {
 		Project:   "my-api",
 		Domain:    "cdn.example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(req)
 	if err != nil {
@@ -1827,7 +1827,7 @@ func TestServer_HandleDenyDomain_AuditLogging(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "malicious.example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(req)
 	if err != nil {
@@ -1892,7 +1892,7 @@ func TestServer_HandleDenyDomain_AuditLogging_DefaultReason(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "blocked.example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(req)
 	if err != nil {
@@ -1944,7 +1944,7 @@ func TestDomainQueue_AuditLogging_Request(t *testing.T) {
 		Project:   "my-api",
 		Domain:    "api.example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	_, err := domainQueue.Add(req)
 	if err != nil {
@@ -1990,7 +1990,7 @@ func TestDomainQueue_AuditLogging_Timeout(t *testing.T) {
 		Project:   "my-api",
 		Domain:    "slow.example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	_, err := domainQueue.Add(req)
 	if err != nil {
@@ -2029,7 +2029,7 @@ func TestServer_HandleApproveDomain_NilAuditLogger(t *testing.T) {
 		Project:   "test-project",
 		Domain:    "api.example.com",
 		Timestamp: time.Now(),
-		Response:  respChan,
+		Responses: []chan<- DomainResponse{respChan},
 	}
 	id, err := domainQueue.Add(req)
 	if err != nil {

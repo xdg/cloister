@@ -324,23 +324,23 @@ During Phase 6 development, an alternative implementation (claude branch) was cr
 - [x] **Test**: Unit tests for token-based isolation, integration test with multiple tokens
 
 ### 6.10.2 Request deduplication (from claude branch)
-- [ ] **Current**: Multiple requests for same domain create separate queue entries
-- [ ] **Proposed**: Coalesce duplicate requests (same token + domain)
-- [ ] **Rationale**: Better UX - user only sees one approval request even if container retries connection
-- [ ] **Benefits**:
+- [x] **Current**: Multiple requests for same domain create separate queue entries
+- [x] **Proposed**: Coalesce duplicate requests (same token + domain)
+- [x] **Rationale**: Better UX - user only sees one approval request even if container retries connection
+- [x] **Benefits**:
   - Avoids duplicate prompts in UI
   - Reduces queue noise
   - Handles container connection retries gracefully
-- [ ] **Implementation**:
+- [x] **Implementation**:
   - Add `pending map[string]string` to `DomainQueue` tracking "token:domain" → requestID
   - In `DomainQueue.Add()`, check if "token:domain" already exists
   - If exists, return existing request ID instead of creating new entry
   - Clean up pending entry when request is removed
-- [ ] **Files to modify**:
+- [x] **Files to modify**:
   - `internal/guardian/approval/domain_queue.go` - Add pending map and deduplication logic
   - `internal/guardian/approval/domain_queue_test.go` - Add deduplication tests
-- [ ] **Edge case**: Ensure timeout cancellation works for coalesced requests
-- [ ] **Test**: Unit test for deduplication, verify both requesters receive response
+- [x] **Edge case**: Ensure timeout cancellation works for coalesced requests
+- [x] **Test**: Unit test for deduplication, verify both requesters receive response
 
 ### 6.10.3 Domain validation before approval
 - [ ] **Current**: No validation - any string can be approved as domain
