@@ -119,6 +119,32 @@ func TestMatchPattern(t *testing.T) {
 	}
 }
 
+func TestCountDomainComponents(t *testing.T) {
+	tests := []struct {
+		domain   string
+		expected int
+	}{
+		{"api.example.com", 3},
+		{"example.com", 2},
+		{"localhost", 1},
+		{"a.b.c.d.com", 5},
+		{"api.co.uk", 3},
+		{"", 0},
+		{"example.", 1},     // Trailing dot stripped
+		{"example..", 2},    // Multiple trailing dots count as component
+		{".example.com", 3}, // Leading dot counts
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.domain, func(t *testing.T) {
+			result := countDomainComponents(tc.domain)
+			if result != tc.expected {
+				t.Errorf("countDomainComponents(%q) = %d, expected %d", tc.domain, result, tc.expected)
+			}
+		})
+	}
+}
+
 func TestDomainToWildcard(t *testing.T) {
 	tests := []struct {
 		domain   string
@@ -127,11 +153,14 @@ func TestDomainToWildcard(t *testing.T) {
 		{"api.example.com", "*.example.com"},
 		{"www.google.com", "*.google.com"},
 		{"storage.googleapis.com", "*.googleapis.com"},
-		{"example.com", "*.com"}, // Just the TLD after the first label
+		{"example.com", ""}, // Only 2 components - too broad
 		{"api.sub.example.com", "*.sub.example.com"},
+		{"api.co.uk", "*.co.uk"},
 		{"localhost", ""}, // No dot, no wildcard
 		{"", ""},          // Empty
 		{"example.", ""},  // Trailing dot only
+		{"api.org", ""},   // Only 2 components - too broad
+		{"a.b.c.com", "*.b.c.com"},
 	}
 
 	for _, tc := range tests {

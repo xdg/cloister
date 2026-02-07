@@ -13,7 +13,6 @@ func TestAddDomainToProject_EmptyDomain(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	// Create a test project config
 	projectName := "test-project"
 	initialCfg := &config.ProjectConfig{
@@ -41,7 +40,6 @@ func TestAddDomainToProject_WhitespaceDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Create a test project config
 	projectName := "test-project"
@@ -81,7 +79,6 @@ func TestAddDomainToGlobal_EmptyDomain(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	persister := &ConfigPersisterImpl{}
 
 	// Try to add empty domain
@@ -99,7 +96,6 @@ func TestAddDomainToGlobal_WhitespaceDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	persister := &ConfigPersisterImpl{}
 
@@ -128,7 +124,6 @@ func TestReloadNotifier_PanicSafety(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	projectName := "test-project"
 
@@ -165,7 +160,6 @@ func TestReloadNotifier_GlobalPanicSafety(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Create persister with panicking notifier
 	persister := &ConfigPersisterImpl{

@@ -14,7 +14,6 @@ func TestAddDomainToProject_WritesAndReloads(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
 	initialApprovals := &config.Approvals{
@@ -69,7 +68,6 @@ func TestAddDomainToProject_NoDuplicate(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
 	existingDomain := "example.com"
@@ -119,7 +117,6 @@ func TestAddDomainToProject_NoReloadNotifier(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	projectName := "test-project"
 
 	// Persister with nil ReloadNotifier
@@ -148,7 +145,6 @@ func TestAddDomainToProject_CreatesApprovalFileIfMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Don't create initial approval file - it should be created automatically
 	projectName := "nonexistent-project"
@@ -187,7 +183,6 @@ func TestAddDomainToGlobal_WritesAndReloads(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Set up initial approval file with one existing domain
 	initialApprovals := &config.Approvals{
@@ -242,7 +237,6 @@ func TestAddDomainToGlobal_NoDuplicate(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	// Set up initial approval file with one existing domain
 	existingDomain := "golang.org"
 	initialApprovals := &config.Approvals{
@@ -291,7 +285,6 @@ func TestAddDomainToGlobal_NoReloadNotifier(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	// Persister with nil ReloadNotifier
 	persister := &ConfigPersisterImpl{
 		ReloadNotifier: nil,
@@ -322,7 +315,6 @@ func TestAddDomainToGlobal_CreatesApprovalFileIfMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Don't create initial approval file
 	persister := &ConfigPersisterImpl{}
@@ -359,7 +351,6 @@ func TestAddDomainToProject_MultipleAdditions(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	projectName := "test-project"
 
@@ -398,7 +389,6 @@ func TestAddPatternToProject_WritesAndReloads(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
@@ -457,7 +447,6 @@ func TestAddPatternToProject_NoDuplicate(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	// Set up initial approval file with one existing pattern
 	projectName := "test-project"
 	existingPattern := "*.example.com"
@@ -507,7 +496,6 @@ func TestAddPatternToProject_InvalidPattern(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	persister := &ConfigPersisterImpl{}
 
 	tests := []struct {
@@ -518,6 +506,9 @@ func TestAddPatternToProject_InvalidPattern(t *testing.T) {
 		{"missing asterisk prefix", "example.com"},
 		{"whitespace", "*.example .com"},
 		{"too short", "*."},
+		{"overly broad *.com", "*.com"},
+		{"overly broad *.org", "*.org"},
+		{"overly broad *.net", "*.net"},
 	}
 
 	for _, tc := range tests {
@@ -535,7 +526,6 @@ func TestAddPatternToGlobal_WritesAndReloads(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Set up initial approval file with one existing domain
 	initialApprovals := &config.Approvals{
@@ -584,7 +574,6 @@ func TestAddPatternToGlobal_NoDuplicate(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Set up initial approval file with one existing pattern
 	existingPattern := "*.googleapis.com"
@@ -635,7 +624,6 @@ func TestAddDomainToProject_StaticConfigUnchanged(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Create a static project config
 	projectName := "test-project"
@@ -693,7 +681,6 @@ func TestAddDomainToGlobal_StaticConfigUnchanged(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	// Create a static global config
 	initialCfg := &config.GlobalConfig{
 		Proxy: config.ProxyConfig{
@@ -747,7 +734,6 @@ func TestAddPatternToProject_StaticConfigUnchanged(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-
 
 	// Create a static project config
 	projectName := "test-project"
@@ -805,7 +791,6 @@ func TestAddPatternToGlobal_StaticConfigUnchanged(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	// Create a static global config
 	initialCfg := &config.GlobalConfig{
 		Proxy: config.ProxyConfig{
@@ -859,7 +844,6 @@ func TestAddDomainToProject_StripsPort(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	persister := &ConfigPersisterImpl{}
 
 	// Add domain with port (as CONNECT requests provide)
@@ -886,7 +870,6 @@ func TestAddDomainToGlobal_StripsPort(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-
 	persister := &ConfigPersisterImpl{}
 
 	// Add domain with port
@@ -902,5 +885,37 @@ func TestAddDomainToGlobal_StripsPort(t *testing.T) {
 	// Domain should be stored without port
 	if !slices.Contains(approvals.Domains, "api.example.com") {
 		t.Errorf("expected 'api.example.com' (without port), got: %v", approvals.Domains)
+	}
+}
+
+func TestValidatePatternSafety(t *testing.T) {
+	tests := []struct {
+		name      string
+		pattern   string
+		shouldErr bool
+	}{
+		{"valid 3-component suffix", "*.example.com", false},
+		{"valid 2-component suffix", "*.co.uk", false},
+		{"valid multi-level", "*.api.example.com", false},
+		{"invalid overly broad *.com", "*.com", true},
+		{"invalid overly broad *.org", "*.org", true},
+		{"invalid overly broad *.net", "*.net", true},
+		{"invalid empty", "", true},
+		{"invalid no prefix", "example.com", true},
+		{"invalid whitespace", "*.example .com", true},
+		{"invalid too short", "*.", true},
+		{"invalid single component suffix", "*.localhost", true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validatePattern(tc.pattern)
+			if tc.shouldErr && err == nil {
+				t.Errorf("validatePattern(%q) should return error", tc.pattern)
+			}
+			if !tc.shouldErr && err != nil {
+				t.Errorf("validatePattern(%q) should not return error, got: %v", tc.pattern, err)
+			}
+		})
 	}
 }

@@ -177,6 +177,88 @@
         .warning-text {
             flex: 1;
         }
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.show {
+            display: flex;
+        }
+        .modal {
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+            max-width: 500px;
+            width: 90%;
+            padding: 0;
+        }
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid #eee;
+            font-size: 1.25rem;
+            font-weight: 600;
+        }
+        .modal-body {
+            padding: 20px;
+        }
+        .modal-body p {
+            margin: 0 0 16px;
+            color: #666;
+        }
+        .modal-pattern {
+            font-family: "SF Mono", Monaco, "Courier New", monospace;
+            background: #f8f8f8;
+            padding: 12px;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #8b5cf6;
+            margin-bottom: 12px;
+        }
+        .modal-scope {
+            font-size: 0.875rem;
+            color: #666;
+            background: #f0f0f0;
+            padding: 8px 12px;
+            border-radius: 4px;
+        }
+        .modal-actions {
+            padding: 16px 20px;
+            border-top: 1px solid #eee;
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+        .modal-btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        .modal-btn-cancel {
+            background: #e5e5e5;
+            color: #333;
+        }
+        .modal-btn-cancel:hover {
+            background: #d4d4d4;
+        }
+        .modal-btn-confirm {
+            background: #8b5cf6;
+            color: #fff;
+        }
+        .modal-btn-confirm:hover {
+            background: #7c3aed;
+        }
     </style>
     <script src="/static/htmx.min.js"></script>
 </head>
@@ -209,6 +291,20 @@
             No pending domain requests
         </div>
         {{end}}
+    </div>
+    <div id="wildcard-modal" class="modal-overlay">
+        <div class="modal">
+            <div class="modal-header">Confirm Wildcard Pattern</div>
+            <div class="modal-body">
+                <p>You are about to approve a wildcard pattern that will match multiple domains:</p>
+                <div class="modal-pattern" id="modal-pattern"></div>
+                <div class="modal-scope" id="modal-scope"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="modal-btn modal-btn-cancel" onclick="closeWildcardModal()">Cancel</button>
+                <button class="modal-btn modal-btn-confirm" id="modal-confirm-btn">Confirm</button>
+            </div>
+        </div>
     </div>
     <script>
         (function() {
@@ -367,6 +463,72 @@
             eventSource.onerror = function() {
                 console.log('[cloister] SSE connection error, reconnecting...');
             };
+
+            // Wildcard confirmation modal functions
+            window.showWildcardModal = function(pattern, scope, onConfirm) {
+                var modal = document.getElementById('wildcard-modal');
+                var patternEl = document.getElementById('modal-pattern');
+                var scopeEl = document.getElementById('modal-scope');
+                var confirmBtn = document.getElementById('modal-confirm-btn');
+
+                patternEl.textContent = pattern;
+                scopeEl.textContent = 'This pattern will be saved to: ' + scope;
+
+                // Remove old listeners and add new one
+                var newConfirmBtn = confirmBtn.cloneNode(true);
+                confirmBtn.parentNode.replaceChild(newConfirmBtn, confirmBtn);
+                newConfirmBtn.addEventListener('click', function() {
+                    closeWildcardModal();
+                    onConfirm();
+                });
+
+                modal.classList.add('show');
+            };
+
+            window.closeWildcardModal = function() {
+                var modal = document.getElementById('wildcard-modal');
+                modal.classList.remove('show');
+            };
+
+            // Intercept wildcard button clicks
+            document.addEventListener('click', function(e) {
+                if (e.target.classList.contains('btn-wildcard')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    var button = e.target;
+                    var hxVals = button.getAttribute('hx-vals');
+                    if (!hxVals) return;
+
+                    try {
+                        var vals = JSON.parse(hxVals);
+                        var pattern = vals.pattern;
+                        var scope = vals.scope;
+
+                        if (pattern && scope) {
+                            showWildcardModal(pattern, scope, function() {
+                                // Manually trigger htmx POST request.
+                                // NOTE: We resolve the target element directly via closest()
+                                // rather than reading hx-target, because htmx extended selectors
+                                // like "closest .request" are not valid CSS and break htmx.ajax().
+                                var url = button.getAttribute('hx-post');
+                                var targetEl = button.closest('.request');
+                                var swap = button.getAttribute('hx-swap');
+
+                                if (typeof htmx !== 'undefined' && targetEl) {
+                                    htmx.ajax('POST', url, {
+                                        target: targetEl,
+                                        swap: swap,
+                                        values: vals
+                                    });
+                                }
+                            });
+                        }
+                    } catch (err) {
+                        console.error('[cloister] Failed to parse hx-vals:', err);
+                    }
+                }
+            }, true); // Use capture phase to intercept before htmx
         })();
     </script>
 </body>

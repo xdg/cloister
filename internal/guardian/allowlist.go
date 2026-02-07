@@ -253,10 +253,27 @@ func matchPattern(pattern, hostname string) bool {
 	return true
 }
 
+// countDomainComponents counts the number of domain components (labels) in a domain.
+// Examples: "api.example.com" -> 3, "example.com" -> 2, "localhost" -> 1
+func countDomainComponents(domain string) int {
+	if domain == "" {
+		return 0
+	}
+	domain = strings.TrimSuffix(domain, ".")
+	if domain == "" {
+		return 0
+	}
+	return strings.Count(domain, ".") + 1
+}
+
 // DomainToWildcard converts a domain like "api.example.com" to a wildcard
 // pattern like "*.example.com". Returns empty string if the domain doesn't
-// have at least two labels (e.g., "example.com" has no subdomain to wildcard).
+// have at least three components to prevent overly broad patterns like "*.com".
 func DomainToWildcard(domain string) string {
+	// Require at least 3 components to prevent overly broad patterns
+	if countDomainComponents(domain) < 3 {
+		return ""
+	}
 	// Find the first dot
 	idx := strings.Index(domain, ".")
 	if idx == -1 || idx == len(domain)-1 {

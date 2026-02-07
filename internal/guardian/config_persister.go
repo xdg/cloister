@@ -148,6 +148,12 @@ func validatePattern(pattern string) error {
 	if len(pattern) < 4 {
 		return fmt.Errorf("pattern too short: %q", pattern)
 	}
+	// Validate suffix has at least 2 components for safety
+	suffix := pattern[2:] // Skip "*."
+	suffixComponents := strings.Count(suffix, ".") + 1
+	if suffixComponents < 2 {
+		return fmt.Errorf("pattern suffix must have at least 2 components to prevent overly broad patterns: %q", pattern)
+	}
 	return nil
 }
 
