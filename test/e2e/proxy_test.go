@@ -56,6 +56,9 @@ func TestProxy_AllowedDomain(t *testing.T) {
 }
 
 // TestProxy_BlockedDomain verifies that non-allowlisted domains are blocked.
+// With unlisted_domain_behavior: "request_approval", unlisted domains are queued
+// for approval rather than immediately rejected. The request blocks until the
+// approval timeout (3s in test config) expires, then returns 403.
 func TestProxy_BlockedDomain(t *testing.T) {
 	tc := createAuthenticatedTestContainer(t, "proxy-block")
 	guardianHost := guardian.ContainerName()
@@ -70,9 +73,10 @@ func TestProxy_BlockedDomain(t *testing.T) {
 	// curl treats it as a transport error (exit 56). We use verbose output and parse
 	// the actual HTTP response line instead.
 	// Authentication is required: --proxy-user :token (empty username, token as password).
+	// --max-time is set to 15s to allow for the 3s approval timeout plus overhead.
 	output, _ := execInContainer(t, tc.Name,
 		"sh", "-c",
-		"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+" --max-time 10 https://example.com/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
+		"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+" --max-time 15 https://example.com/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
 
 	if strings.Contains(output, "not found") {
 		t.Skip("curl not available in container image")
@@ -80,6 +84,7 @@ func TestProxy_BlockedDomain(t *testing.T) {
 
 	output = strings.TrimSpace(output)
 	// Proxy should return 403 Forbidden on CONNECT for blocked domains
+	// (after approval timeout expires, since we're in request_approval mode)
 	if output != "403" {
 		t.Errorf("Expected CONNECT response 403 for blocked domain, got: %q", output)
 	}

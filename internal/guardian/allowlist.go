@@ -45,7 +45,8 @@ func NewAllowlist(domains []string) *Allowlist {
 		patterns: make([]string, 0),
 	}
 	for _, d := range domains {
-		a.domains[d] = struct{}{}
+		// Strip port if present for consistent matching with IsAllowed
+		a.domains[stripPort(d)] = struct{}{}
 	}
 	return a
 }
@@ -58,7 +59,8 @@ func NewAllowlistWithPatterns(domains, patterns []string) *Allowlist {
 		patterns: make([]string, 0, len(patterns)),
 	}
 	for _, d := range domains {
-		a.domains[d] = struct{}{}
+		// Strip port if present for consistent matching with IsAllowed
+		a.domains[stripPort(d)] = struct{}{}
 	}
 	for _, p := range patterns {
 		if IsValidPattern(p) {

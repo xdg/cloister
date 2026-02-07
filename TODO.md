@@ -197,8 +197,8 @@ Create end-to-end test that verifies the guardian container can persist approval
 
 ### 7.5.1 E2E test implementation
 
-- [ ] Create `test/e2e/domain_approval_persistence_test.go` with build tag `//go:build e2e`
-- [ ] Test flow:
+- [x] Create `test/e2e/domain_approval_persistence_test.go` with build tag `//go:build e2e`
+- [x] Test flow:
   1. Start guardian via `guardian.EnsureRunning()`
   2. Submit domain approval request via approval server API
   3. Approve with project scope via `POST /approve-domain/{id}`
@@ -207,7 +207,7 @@ Create end-to-end test that verifies the guardian container can persist approval
   6. Verify subsequent requests to same domain don't require re-approval
   7. Repeat for global scope → verify `~/.config/cloister/approvals/global.yaml`
   8. Verify static config `~/.config/cloister/config.yaml` unchanged
-- [ ] **Requirements**: Requires Docker, uses TestMain guardian instance
+- [x] **Requirements**: Requires Docker, uses TestMain guardian instance
 - [ ] **Test**: Run `make test-e2e` to verify guardian container persistence
 
 ---

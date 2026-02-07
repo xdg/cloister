@@ -19,15 +19,18 @@ import (
 
 // writeTestConfig creates a custom guardian config for e2e tests.
 // The config is based on defaults but customized for test requirements:
-// - unlisted_domain_behavior: "reject" - tests expect immediate 403, not approval flow
+// - unlisted_domain_behavior: "request_approval" - enables domain approval persistence testing
+// - approval_timeout: "3s" - short timeout so blocked-domain tests don't hang
 func writeTestConfig() error {
 	// Start with production defaults
 	cfg := config.DefaultGlobalConfig()
 
-	// Customize for tests: reject unlisted domains immediately
-	// This allows TestProxy_BlockedDomain to verify blocking behavior
-	// without waiting for the 60s approval timeout
-	cfg.Proxy.UnlistedDomainBehavior = "reject"
+	// Enable domain approval flow so persistence tests can exercise the
+	// DomainQueue -> approval -> ConfigPersister path. Using a short
+	// timeout (3s) ensures that tests waiting for an unlisted domain
+	// to be rejected (e.g., TestProxy_BlockedDomain) do not hang.
+	cfg.Proxy.UnlistedDomainBehavior = "request_approval"
+	cfg.Proxy.ApprovalTimeout = "3s"
 
 	// Write to XDG_CONFIG_HOME/cloister/config.yaml
 	// (XDG_CONFIG_HOME is already set to temp dir by TestMain)

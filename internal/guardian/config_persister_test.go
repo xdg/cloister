@@ -854,3 +854,54 @@ func TestAddPatternToGlobal_StaticConfigUnchanged(t *testing.T) {
 		t.Error("pattern '*.googleapis.com' should be present in approval file")
 	}
 }
+
+func TestAddDomainToProject_StripsPort(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
+	persister := &ConfigPersisterImpl{}
+
+	// Add domain with port (as CONNECT requests provide)
+	if err := persister.AddDomainToProject("test-project", "example.com:443"); err != nil {
+		t.Fatalf("AddDomainToProject() error = %v", err)
+	}
+
+	approvals, err := config.LoadProjectApprovals("test-project")
+	if err != nil {
+		t.Fatalf("LoadProjectApprovals() error = %v", err)
+	}
+
+	// Domain should be stored without port
+	if !slices.Contains(approvals.Domains, "example.com") {
+		t.Errorf("expected 'example.com' (without port), got: %v", approvals.Domains)
+	}
+	if slices.Contains(approvals.Domains, "example.com:443") {
+		t.Error("domain should not include port")
+	}
+}
+
+func TestAddDomainToGlobal_StripsPort(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
+	persister := &ConfigPersisterImpl{}
+
+	// Add domain with port
+	if err := persister.AddDomainToGlobal("api.example.com:443"); err != nil {
+		t.Fatalf("AddDomainToGlobal() error = %v", err)
+	}
+
+	approvals, err := config.LoadGlobalApprovals()
+	if err != nil {
+		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+	}
+
+	// Domain should be stored without port
+	if !slices.Contains(approvals.Domains, "api.example.com") {
+		t.Errorf("expected 'api.example.com' (without port), got: %v", approvals.Domains)
+	}
+}

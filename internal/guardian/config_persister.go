@@ -31,6 +31,8 @@ func (p *ConfigPersisterImpl) AddDomainToProject(project, domain string) error {
 	if err := validateDomain(domain); err != nil {
 		return err
 	}
+	// Strip port if present (CONNECT requests include port, e.g. "example.com:443")
+	domain = normalizeDomain(domain)
 
 	// Lock to prevent concurrent modifications
 	p.projectMu.Lock()
@@ -75,6 +77,8 @@ func (p *ConfigPersisterImpl) AddDomainToGlobal(domain string) error {
 	if err := validateDomain(domain); err != nil {
 		return err
 	}
+	// Strip port if present (CONNECT requests include port, e.g. "example.com:443")
+	domain = normalizeDomain(domain)
 
 	// Lock to prevent concurrent modifications
 	p.globalMu.Lock()
@@ -120,6 +124,13 @@ func validateDomain(domain string) error {
 		return fmt.Errorf("domain cannot contain whitespace: %q", domain)
 	}
 	return nil
+}
+
+// normalizeDomain strips the port from a domain if present.
+// CONNECT requests include port (e.g., "example.com:443") but allowlist
+// entries should store bare hostnames for consistent matching.
+func normalizeDomain(domain string) string {
+	return stripPort(domain)
 }
 
 // validatePattern checks if a pattern string is valid for use in the allowlist.
