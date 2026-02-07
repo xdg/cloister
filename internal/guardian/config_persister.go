@@ -22,9 +22,9 @@ type ConfigPersisterImpl struct {
 	globalMu sync.Mutex
 }
 
-// AddDomainToProject adds a domain to a project's allowlist if not already present.
-// It loads the project config, checks for duplicates, appends the domain if needed,
-// and writes the updated config back to disk with autoCreate=true.
+// AddDomainToProject adds a domain to a project's approval file if not already present.
+// It loads the project approvals, checks for duplicates, appends the domain if needed,
+// and writes the updated approvals back to disk.
 // The ReloadNotifier callback is invoked after successful write if not nil.
 func (p *ConfigPersisterImpl) AddDomainToProject(project, domain string) error {
 	// Validate domain before processing
@@ -36,26 +36,26 @@ func (p *ConfigPersisterImpl) AddDomainToProject(project, domain string) error {
 	p.projectMu.Lock()
 	defer p.projectMu.Unlock()
 
-	// Load existing project config
-	cfg, err := config.LoadProjectConfig(project)
+	// Load existing project approvals
+	approvals, err := config.LoadProjectApprovals(project)
 	if err != nil {
-		return fmt.Errorf("load project config: %w", err)
+		return fmt.Errorf("load project approvals: %w", err)
 	}
 
-	// Check if domain already exists in allowlist
-	for _, entry := range cfg.Proxy.Allow {
-		if entry.Domain == domain {
+	// Check if domain already exists in approvals
+	for _, d := range approvals.Domains {
+		if d == domain {
 			// Domain already present, no need to add
 			return nil
 		}
 	}
 
 	// Append new domain
-	cfg.Proxy.Allow = append(cfg.Proxy.Allow, config.AllowEntry{Domain: domain})
+	approvals.Domains = append(approvals.Domains, domain)
 
-	// Write updated config with autoCreate=true (overwrite)
-	if err := config.WriteProjectConfig(project, cfg, true); err != nil {
-		return fmt.Errorf("write project config: %w", err)
+	// Write updated approvals
+	if err := config.WriteProjectApprovals(project, approvals); err != nil {
+		return fmt.Errorf("write project approvals: %w", err)
 	}
 
 	// Notify proxy to reload its allowlist cache (panic-safe)
@@ -66,9 +66,9 @@ func (p *ConfigPersisterImpl) AddDomainToProject(project, domain string) error {
 	return nil
 }
 
-// AddDomainToGlobal adds a domain to the global allowlist if not already present.
-// It loads the global config, checks for duplicates, appends the domain if needed,
-// and writes the updated config back to disk.
+// AddDomainToGlobal adds a domain to the global approval file if not already present.
+// It loads the global approvals, checks for duplicates, appends the domain if needed,
+// and writes the updated approvals back to disk.
 // The ReloadNotifier callback is invoked after successful write if not nil.
 func (p *ConfigPersisterImpl) AddDomainToGlobal(domain string) error {
 	// Validate domain before processing
@@ -80,26 +80,26 @@ func (p *ConfigPersisterImpl) AddDomainToGlobal(domain string) error {
 	p.globalMu.Lock()
 	defer p.globalMu.Unlock()
 
-	// Load existing global config
-	cfg, err := config.LoadGlobalConfig()
+	// Load existing global approvals
+	approvals, err := config.LoadGlobalApprovals()
 	if err != nil {
-		return fmt.Errorf("load global config: %w", err)
+		return fmt.Errorf("load global approvals: %w", err)
 	}
 
-	// Check if domain already exists in allowlist
-	for _, entry := range cfg.Proxy.Allow {
-		if entry.Domain == domain {
+	// Check if domain already exists in approvals
+	for _, d := range approvals.Domains {
+		if d == domain {
 			// Domain already present, no need to add
 			return nil
 		}
 	}
 
 	// Append new domain
-	cfg.Proxy.Allow = append(cfg.Proxy.Allow, config.AllowEntry{Domain: domain})
+	approvals.Domains = append(approvals.Domains, domain)
 
-	// Write updated config (always overwrites)
-	if err := config.WriteGlobalConfig(cfg); err != nil {
-		return fmt.Errorf("write global config: %w", err)
+	// Write updated approvals
+	if err := config.WriteGlobalApprovals(approvals); err != nil {
+		return fmt.Errorf("write global approvals: %w", err)
 	}
 
 	// Notify proxy to reload its allowlist cache (panic-safe)
@@ -140,9 +140,9 @@ func validatePattern(pattern string) error {
 	return nil
 }
 
-// AddPatternToProject adds a wildcard pattern to a project's allowlist if not already present.
-// It loads the project config, checks for duplicates, appends the pattern if needed,
-// and writes the updated config back to disk with autoCreate=true.
+// AddPatternToProject adds a wildcard pattern to a project's approval file if not already present.
+// It loads the project approvals, checks for duplicates, appends the pattern if needed,
+// and writes the updated approvals back to disk.
 // The ReloadNotifier callback is invoked after successful write if not nil.
 func (p *ConfigPersisterImpl) AddPatternToProject(project, pattern string) error {
 	// Validate pattern before processing
@@ -154,26 +154,26 @@ func (p *ConfigPersisterImpl) AddPatternToProject(project, pattern string) error
 	p.projectMu.Lock()
 	defer p.projectMu.Unlock()
 
-	// Load existing project config
-	cfg, err := config.LoadProjectConfig(project)
+	// Load existing project approvals
+	approvals, err := config.LoadProjectApprovals(project)
 	if err != nil {
-		return fmt.Errorf("load project config: %w", err)
+		return fmt.Errorf("load project approvals: %w", err)
 	}
 
-	// Check if pattern already exists in allowlist
-	for _, entry := range cfg.Proxy.Allow {
-		if entry.Pattern == pattern {
+	// Check if pattern already exists in approvals
+	for _, existing := range approvals.Patterns {
+		if existing == pattern {
 			// Pattern already present, no need to add
 			return nil
 		}
 	}
 
 	// Append new pattern
-	cfg.Proxy.Allow = append(cfg.Proxy.Allow, config.AllowEntry{Pattern: pattern})
+	approvals.Patterns = append(approvals.Patterns, pattern)
 
-	// Write updated config with autoCreate=true (overwrite)
-	if err := config.WriteProjectConfig(project, cfg, true); err != nil {
-		return fmt.Errorf("write project config: %w", err)
+	// Write updated approvals
+	if err := config.WriteProjectApprovals(project, approvals); err != nil {
+		return fmt.Errorf("write project approvals: %w", err)
 	}
 
 	// Notify proxy to reload its allowlist cache (panic-safe)
@@ -184,9 +184,9 @@ func (p *ConfigPersisterImpl) AddPatternToProject(project, pattern string) error
 	return nil
 }
 
-// AddPatternToGlobal adds a wildcard pattern to the global allowlist if not already present.
-// It loads the global config, checks for duplicates, appends the pattern if needed,
-// and writes the updated config back to disk.
+// AddPatternToGlobal adds a wildcard pattern to the global approval file if not already present.
+// It loads the global approvals, checks for duplicates, appends the pattern if needed,
+// and writes the updated approvals back to disk.
 // The ReloadNotifier callback is invoked after successful write if not nil.
 func (p *ConfigPersisterImpl) AddPatternToGlobal(pattern string) error {
 	// Validate pattern before processing
@@ -198,26 +198,26 @@ func (p *ConfigPersisterImpl) AddPatternToGlobal(pattern string) error {
 	p.globalMu.Lock()
 	defer p.globalMu.Unlock()
 
-	// Load existing global config
-	cfg, err := config.LoadGlobalConfig()
+	// Load existing global approvals
+	approvals, err := config.LoadGlobalApprovals()
 	if err != nil {
-		return fmt.Errorf("load global config: %w", err)
+		return fmt.Errorf("load global approvals: %w", err)
 	}
 
-	// Check if pattern already exists in allowlist
-	for _, entry := range cfg.Proxy.Allow {
-		if entry.Pattern == pattern {
+	// Check if pattern already exists in approvals
+	for _, existing := range approvals.Patterns {
+		if existing == pattern {
 			// Pattern already present, no need to add
 			return nil
 		}
 	}
 
 	// Append new pattern
-	cfg.Proxy.Allow = append(cfg.Proxy.Allow, config.AllowEntry{Pattern: pattern})
+	approvals.Patterns = append(approvals.Patterns, pattern)
 
-	// Write updated config (always overwrites)
-	if err := config.WriteGlobalConfig(cfg); err != nil {
-		return fmt.Errorf("write global config: %w", err)
+	// Write updated approvals
+	if err := config.WriteGlobalApprovals(approvals); err != nil {
+		return fmt.Errorf("write global approvals: %w", err)
 	}
 
 	// Notify proxy to reload its allowlist cache (panic-safe)

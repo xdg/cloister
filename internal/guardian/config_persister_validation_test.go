@@ -1,6 +1,7 @@
 package guardian
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -12,6 +13,7 @@ func TestAddDomainToProject_EmptyDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
 
 	// Create a test project config
 	projectName := "test-project"
@@ -40,6 +42,7 @@ func TestAddDomainToProject_WhitespaceDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
 
 	// Create a test project config
 	projectName := "test-project"
@@ -78,6 +81,7 @@ func TestAddDomainToGlobal_EmptyDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
 
 	persister := &ConfigPersisterImpl{}
 
@@ -96,6 +100,7 @@ func TestAddDomainToGlobal_WhitespaceDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
 
 	persister := &ConfigPersisterImpl{}
 
@@ -124,16 +129,9 @@ func TestReloadNotifier_PanicSafety(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
 
-	// Create a test project config
 	projectName := "test-project"
-	initialCfg := &config.ProjectConfig{
-		Remote: "git@github.com:example/repo.git",
-		Root:   "/test/path",
-	}
-	if err := config.WriteProjectConfig(projectName, initialCfg, false); err != nil {
-		t.Fatalf("WriteProjectConfig() error = %v", err)
-	}
 
 	// Create persister with panicking notifier
 	persister := &ConfigPersisterImpl{
@@ -149,17 +147,17 @@ func TestReloadNotifier_PanicSafety(t *testing.T) {
 	}
 
 	// Verify domain was still added despite the panic
-	cfg, err := config.LoadProjectConfig(projectName)
+	approvals, err := config.LoadProjectApprovals(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectConfig() error = %v", err)
+		t.Fatalf("LoadProjectApprovals() error = %v", err)
 	}
 
-	if len(cfg.Proxy.Allow) != 1 {
-		t.Errorf("cfg.Proxy.Allow length = %d, want 1", len(cfg.Proxy.Allow))
+	if len(approvals.Domains) != 1 {
+		t.Errorf("approvals.Domains length = %d, want 1", len(approvals.Domains))
 	}
 
-	if cfg.Proxy.Allow[0].Domain != "example.com" {
-		t.Errorf("cfg.Proxy.Allow[0].Domain = %q, want 'example.com'", cfg.Proxy.Allow[0].Domain)
+	if approvals.Domains[0] != "example.com" {
+		t.Errorf("approvals.Domains[0] = %q, want 'example.com'", approvals.Domains[0])
 	}
 }
 
@@ -168,6 +166,7 @@ func TestReloadNotifier_GlobalPanicSafety(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
 
 	// Create persister with panicking notifier
 	persister := &ConfigPersisterImpl{
@@ -183,20 +182,20 @@ func TestReloadNotifier_GlobalPanicSafety(t *testing.T) {
 	}
 
 	// Verify domain was still added despite the panic
-	cfg, err := config.LoadGlobalConfig()
+	approvals, err := config.LoadGlobalApprovals()
 	if err != nil {
-		t.Fatalf("LoadGlobalConfig() error = %v", err)
+		t.Fatalf("LoadGlobalApprovals() error = %v", err)
 	}
 
 	// Check that example.com was added
 	found := false
-	for _, entry := range cfg.Proxy.Allow {
-		if entry.Domain == "example.com" {
+	for _, d := range approvals.Domains {
+		if d == "example.com" {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Error("example.com should be present in allowlist despite panic")
+		t.Error("example.com should be present in approvals despite panic")
 	}
 }

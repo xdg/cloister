@@ -103,32 +103,32 @@ Modify `internal/guardian/config_persister.go` to write to approval files instea
 
 ### 7.2.1 Change all persistence methods
 
-- [ ] Modify `AddDomainToProject(project, domain string) error`:
+- [x] Modify `AddDomainToProject(project, domain string) error`:
   - Load existing approvals via `LoadProjectApprovals(project)`
   - Check for duplicates in `approvals.Domains`
   - Append domain to `approvals.Domains`
   - Write via `WriteProjectApprovals(project, approvals)`
   - Call `ReloadNotifier` if not nil
-- [ ] Modify `AddDomainToGlobal(domain string) error`:
+- [x] Modify `AddDomainToGlobal(domain string) error`:
   - Load existing approvals via `LoadGlobalApprovals()`
   - Check for duplicates in `approvals.Domains`
   - Append domain to `approvals.Domains`
   - Write via `WriteGlobalApprovals(approvals)`
   - Call `ReloadNotifier` if not nil
-- [ ] Modify `AddPatternToProject(project, pattern string) error`:
+- [x] Modify `AddPatternToProject(project, pattern string) error`:
   - Load existing approvals via `LoadProjectApprovals(project)`
   - Check for duplicates in `approvals.Patterns`
   - Append pattern to `approvals.Patterns`
   - Write via `WriteProjectApprovals(project, approvals)`
   - Call `ReloadNotifier` if not nil
-- [ ] Modify `AddPatternToGlobal(pattern string) error`:
+- [x] Modify `AddPatternToGlobal(pattern string) error`:
   - Load existing approvals via `LoadGlobalApprovals()`
   - Check for duplicates in `approvals.Patterns`
   - Append pattern to `approvals.Patterns`
   - Write via `WriteGlobalApprovals(approvals)`
   - Call `ReloadNotifier` if not nil
-- [ ] **Test**: Update `config_persister_test.go` to verify approval files written (not config files)
-- [ ] **Test**: Verify static config files remain unchanged after persistence operations
+- [x] **Test**: Update `config_persister_test.go` to verify approval files written (not config files)
+- [x] **Test**: Verify static config files remain unchanged after persistence operations
 
 ---
 
