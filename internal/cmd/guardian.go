@@ -459,8 +459,22 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		ReloadNotifier: func() {
 			// Clear and reload allowlist cache when config is updated
 			clog.Debug("config updated, reloading allowlist cache")
+
+			// Reload global approvals and rebuild global allowlist
+			newGlobalApprovals, err := config.LoadGlobalApprovals()
+			if err != nil {
+				clog.Warn("failed to reload global approvals: %v", err)
+				newGlobalApprovals = &config.Approvals{}
+			}
+			globalApprovals = newGlobalApprovals
+			globalAllow := cfg.Proxy.Allow
+			if len(globalApprovals.Domains) > 0 || len(globalApprovals.Patterns) > 0 {
+				globalAllow = append(globalAllow, approvalsToAllowEntries(globalApprovals)...)
+			}
+			allowlistCache.SetGlobal(guardian.NewAllowlistFromConfig(globalAllow))
+
+			// Clear and reload all project allowlists
 			allowlistCache.Clear()
-			// Reload all project allowlists
 			for _, info := range registry.List() {
 				if info.ProjectName != "" {
 					allowlist := loadProjectAllowlist(info.ProjectName)
