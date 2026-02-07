@@ -729,64 +729,6 @@ func TestTemplates_DomainResultDenied(t *testing.T) {
 	}
 }
 
-func TestServer_StaticHtmxServed(t *testing.T) {
-	queue := NewQueue()
-	server := NewServer(queue, nil)
-	server.Addr = "127.0.0.1:0" // Use random port
-
-	if err := server.Start(); err != nil {
-		t.Fatalf("Start failed: %v", err)
-	}
-	defer func() { _ = server.Stop(context.Background()) }()
-
-	baseURL := "http://" + server.ListenAddr()
-
-	// Test GET /static/htmx.min.js
-	resp, err := http.Get(baseURL + "/static/htmx.min.js")
-	if err != nil {
-		t.Fatalf("request to /static/htmx.min.js failed: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("GET /static/htmx.min.js expected status %d, got %d", http.StatusOK, resp.StatusCode)
-	}
-
-	// Verify Content-Type is application/javascript or text/javascript
-	contentType := resp.Header.Get("Content-Type")
-	if !strings.Contains(contentType, "javascript") {
-		t.Errorf("expected Content-Type to contain 'javascript', got %q", contentType)
-	}
-
-	// Verify the response body contains htmx code
-	body := make([]byte, 100)
-	n, _ := resp.Body.Read(body)
-	if n == 0 {
-		t.Error("expected non-empty response body for htmx.min.js")
-	}
-	if !strings.Contains(string(body[:n]), "htmx") {
-		t.Error("expected response body to contain 'htmx'")
-	}
-}
-
-func TestServer_IndexIncludesHtmxScript(t *testing.T) {
-	queue := NewQueue()
-	server := NewServer(queue, nil)
-
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	rr := httptest.NewRecorder()
-
-	server.handleIndex(rr, req)
-
-	if rr.Code != http.StatusOK {
-		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
-	}
-
-	body := rr.Body.String()
-	if !strings.Contains(body, `<script src="/static/htmx.min.js"></script>`) {
-		t.Error("expected index.html to include htmx script tag")
-	}
-}
 
 // Tests for audit logging integration
 

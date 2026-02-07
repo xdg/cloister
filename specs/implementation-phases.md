@@ -92,7 +92,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 
 **Delivers:**
 - Request server (:9998) in guardian container
-- Approval server (:9999) bound to localhost with htmx web UI
+- Approval server (:9999) bound to localhost with web UI
 - Host executor process communicating via TCP (host.docker.internal)
 - Guardian↔executor shared secret (ephemeral, not persisted)
 - `hostexec` wrapper script in container

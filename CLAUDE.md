@@ -56,8 +56,8 @@ This is a greenfield Go project. Primary components:
 2. Default container image — Ubuntu 24.04 with Go/Node/Python/AI CLIs
 
 **Tech choices:**
-- Approval web UI uses [htmx](https://htmx.org/) (~14kb) with SSE for real-time updates
-- All assets (HTML templates, htmx, CSS) embedded via `go:embed` for single-binary distribution
+- Approval web UI uses vanilla JavaScript with SSE for real-time updates
+- All assets (HTML templates, CSS) embedded via `go:embed` for single-binary distribution
 
 ## Testing
 

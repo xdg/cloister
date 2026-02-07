@@ -260,7 +260,6 @@
             background: #7c3aed;
         }
     </style>
-    <script src="/static/htmx.min.js"></script>
 </head>
 <body>
     <h1>Cloister Approval Queue</h1>
@@ -412,9 +411,6 @@
                     list.insertAdjacentHTML('beforeend', html);
                 }
 
-                if (typeof htmx !== 'undefined') {
-                    htmx.process(document.getElementById(listId));
-                }
             }
 
             function removeFromList(listId, emptyId, emptyText, requestId) {
@@ -490,45 +486,48 @@
                 modal.classList.remove('show');
             };
 
-            // Intercept wildcard button clicks
+            // Post action and swap the result HTML into the request card
+            function postAction(btn) {
+                btn.disabled = true;
+                var url = btn.getAttribute('data-action');
+                var vals = btn.getAttribute('data-vals');
+                var request = btn.closest('.request');
+
+                var opts = { method: 'POST', headers: { 'Accept': 'text/html' } };
+                if (vals) {
+                    opts.headers['Content-Type'] = 'application/json';
+                    opts.body = vals;
+                }
+
+                fetch(url, opts)
+                    .then(function(resp) { return resp.text(); })
+                    .then(function(html) { request.outerHTML = html; })
+                    .catch(function() { btn.disabled = false; });
+            }
+
+            // Event delegation for all action buttons
             document.addEventListener('click', function(e) {
-                if (e.target.classList.contains('btn-wildcard')) {
+                var btn = e.target.closest('button[data-action]');
+                if (!btn) return;
+
+                // Wildcard buttons get a confirmation modal first
+                if (btn.classList.contains('btn-wildcard')) {
                     e.preventDefault();
-                    e.stopPropagation();
-
-                    var button = e.target;
-                    var hxVals = button.getAttribute('hx-vals');
-                    if (!hxVals) return;
-
                     try {
-                        var vals = JSON.parse(hxVals);
-                        var pattern = vals.pattern;
-                        var scope = vals.scope;
-
-                        if (pattern && scope) {
-                            showWildcardModal(pattern, scope, function() {
-                                // Manually trigger htmx POST request.
-                                // NOTE: We resolve the target element directly via closest()
-                                // rather than reading hx-target, because htmx extended selectors
-                                // like "closest .request" are not valid CSS and break htmx.ajax().
-                                var url = button.getAttribute('hx-post');
-                                var targetEl = button.closest('.request');
-                                var swap = button.getAttribute('hx-swap');
-
-                                if (typeof htmx !== 'undefined' && targetEl) {
-                                    htmx.ajax('POST', url, {
-                                        target: targetEl,
-                                        swap: swap,
-                                        values: vals
-                                    });
-                                }
+                        var vals = JSON.parse(btn.getAttribute('data-vals'));
+                        if (vals.pattern && vals.scope) {
+                            showWildcardModal(vals.pattern, vals.scope, function() {
+                                postAction(btn);
                             });
                         }
                     } catch (err) {
-                        console.error('[cloister] Failed to parse hx-vals:', err);
+                        console.error('[cloister] Failed to parse data-vals:', err);
                     }
+                    return;
                 }
-            }, true); // Use capture phase to intercept before htmx
+
+                postAction(btn);
+            });
         })();
     </script>
 </body>

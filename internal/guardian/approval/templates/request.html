@@ -10,8 +10,8 @@
     </div>
     <div class="request-cmd">{{.Cmd}}</div>
     <div class="request-actions">
-        <button class="btn btn-approve" hx-post="/approve/{{.ID}}" hx-swap="outerHTML" hx-target="closest .request">Approve</button>
-        <button class="btn btn-deny" hx-post="/deny/{{.ID}}" hx-swap="outerHTML" hx-target="closest .request">Deny</button>
+        <button class="btn btn-approve" data-action="/approve/{{.ID}}">Approve</button>
+        <button class="btn btn-deny" data-action="/deny/{{.ID}}">Deny</button>
     </div>
 </li>
 {{end}}

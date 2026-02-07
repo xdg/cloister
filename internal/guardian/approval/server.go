@@ -9,10 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"html/template"
-	"io/fs"
 	"net"
 	"net/http"
 	"os/user"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,9 +21,6 @@ import (
 
 //go:embed templates/*.html
 var templateFS embed.FS
-
-//go:embed static/*
-var staticFS embed.FS
 
 // templates holds the parsed HTML templates for the approval UI.
 var templates *template.Template
@@ -140,8 +137,6 @@ func (s *Server) Start() error {
 	mux.HandleFunc("GET /pending-domains", s.handlePendingDomains)
 	mux.HandleFunc("POST /approve-domain/{id}", s.handleApproveDomain)
 	mux.HandleFunc("POST /deny-domain/{id}", s.handleDenyDomain)
-	staticSubFS, _ := fs.Sub(staticFS, "static")
-	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(staticSubFS))))
 
 	s.listener = listener
 	s.server = &http.Server{
@@ -429,8 +424,7 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check if this is an htmx request
-	if r.Header.Get("HX-Request") == "true" {
+	if strings.Contains(r.Header.Get("Accept"), "text/html") {
 		s.writeResultHTML(w, id, "approved", cmd)
 		return
 	}
@@ -501,8 +495,7 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Check if this is an htmx request
-	if r.Header.Get("HX-Request") == "true" {
+	if strings.Contains(r.Header.Get("Accept"), "text/html") {
 		s.writeResultHTML(w, id, "denied", cmd)
 		return
 	}
@@ -530,7 +523,7 @@ func (s *Server) writeError(w http.ResponseWriter, status int, message string) {
 	s.writeJSON(w, status, errorResponse{Error: message})
 }
 
-// writeResultHTML renders the result template for htmx responses.
+// writeResultHTML renders the result template for HTML responses.
 func (s *Server) writeResultHTML(w http.ResponseWriter, id, status, cmd string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := resultData{
@@ -543,7 +536,7 @@ func (s *Server) writeResultHTML(w http.ResponseWriter, id, status, cmd string) 
 	}
 }
 
-// writeDomainResultHTML renders the domain_result template for htmx responses.
+// writeDomainResultHTML renders the domain_result template for HTML responses.
 func (s *Server) writeDomainResultHTML(w http.ResponseWriter, id, status, domain, scope, reason string, isPattern bool, persistenceError string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := domainResultData{
@@ -626,25 +619,15 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse scope from request body.
-	// htmx sends form-encoded data; API clients send JSON.
+	// Parse scope from JSON request body.
 	var scope, pattern string
-	if r.Header.Get("HX-Request") == "true" {
-		if err := r.ParseForm(); err != nil {
-			s.writeError(w, http.StatusBadRequest, "invalid form data")
-			return
-		}
-		scope = r.FormValue("scope")
-		pattern = r.FormValue("pattern")
-	} else {
-		var approveReq approveDomainRequest
-		if err := json.NewDecoder(r.Body).Decode(&approveReq); err != nil {
-			s.writeError(w, http.StatusBadRequest, "invalid request body")
-			return
-		}
-		scope = approveReq.Scope
-		pattern = approveReq.Pattern
+	var approveReq approveDomainRequest
+	if err := json.NewDecoder(r.Body).Decode(&approveReq); err != nil {
+		s.writeError(w, http.StatusBadRequest, "invalid request body")
+		return
 	}
+	scope = approveReq.Scope
+	pattern = approveReq.Pattern
 	if scope != "session" && scope != "project" && scope != "global" {
 		s.writeError(w, http.StatusBadRequest, "scope must be session, project, or global")
 		return
@@ -734,8 +717,7 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	broadcastDomainResponse(req, resp)
 
-	// Check if this is an htmx request
-	if r.Header.Get("HX-Request") == "true" {
+	if strings.Contains(r.Header.Get("Accept"), "text/html") {
 		displayValue := domain
 		if isPattern && persistenceError == "" {
 			displayValue = pattern
@@ -813,8 +795,7 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 		Reason: reason,
 	})
 
-	// Check if this is an htmx request
-	if r.Header.Get("HX-Request") == "true" {
+	if strings.Contains(r.Header.Get("Accept"), "text/html") {
 		s.writeDomainResultHTML(w, id, "denied", req.Domain, "", reason, false, "")
 		return
 	}
