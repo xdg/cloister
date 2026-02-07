@@ -162,17 +162,17 @@ Merge approval files with static config when loading allowlists in the guardian.
 
 ### 7.4.1 Guardian startup modifications
 
-- [ ] Modify `internal/cmd/guardian.go` in `runGuardianProxy()`:
+- [x] Modify `internal/cmd/guardian.go` in `runGuardianProxy()`:
   - After loading global config, load global approvals via `config.LoadGlobalApprovals()`
   - Create helper `approvalsToAllowEntries(approvals *config.Approvals) []config.AllowEntry`
   - Merge static allowlist + approval entries: `append(cfg.Proxy.Allow, approvalsToAllowEntries(globalApprovals)...)`
   - Update log message: "loaded global allowlist: %d static + %d approved = %d total"
-- [ ] Modify `loadProjectAllowlist` function:
+- [x] Modify `loadProjectAllowlist` function:
   - After loading project config, load project approvals via `config.LoadProjectApprovals(projectName)`
   - Merge: global config + project config + global approvals + project approvals
   - Use `config.MergeAllowlists()` with all four sources
   - Update log message to show total domain count
-- [ ] Implement helper function:
+- [x] Implement helper function:
   ```go
   func approvalsToAllowEntries(approvals *config.Approvals) []config.AllowEntry {
       entries := make([]config.AllowEntry, 0, len(approvals.Domains)+len(approvals.Patterns))
@@ -185,9 +185,9 @@ Merge approval files with static config when loading allowlists in the guardian.
       return entries
   }
   ```
-- [ ] **Reload behavior**: When `ReloadNotifier` is called (approval written), allowlist cache is cleared and reloaded with new approvals
-- [ ] **Test**: Unit test for `approvalsToAllowEntries` helper
-- [ ] **Test**: Verify allowlist merging with various combinations of static config and approvals
+- [x] **Reload behavior**: When `ReloadNotifier` is called (approval written), allowlist cache is cleared and reloaded with new approvals
+- [x] **Test**: Unit test for `approvalsToAllowEntries` helper
+- [x] **Test**: Verify allowlist merging with various combinations of static config and approvals
 
 ---
 

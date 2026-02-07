@@ -258,8 +258,22 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		clog.Warn("failed to load config, using defaults: %v", err)
 		cfg = config.DefaultGlobalConfig()
 	}
-	globalAllowlist := guardian.NewAllowlistFromConfig(cfg.Proxy.Allow)
-	clog.Info("loaded global allowlist with %d domains", len(globalAllowlist.Domains()))
+
+	// Load global approvals and merge with static config
+	globalApprovals, err := config.LoadGlobalApprovals()
+	if err != nil {
+		clog.Warn("failed to load global approvals: %v", err)
+		globalApprovals = &config.Approvals{}
+	}
+	globalAllow := cfg.Proxy.Allow
+	if len(globalApprovals.Domains) > 0 || len(globalApprovals.Patterns) > 0 {
+		globalAllow = append(globalAllow, approvalsToAllowEntries(globalApprovals)...)
+	}
+	globalAllowlist := guardian.NewAllowlistFromConfig(globalAllow)
+	staticCount := len(cfg.Proxy.Allow)
+	approvedCount := len(globalApprovals.Domains) + len(globalApprovals.Patterns)
+	clog.Info("loaded global allowlist: %d static + %d approved = %d total",
+		staticCount, approvedCount, len(globalAllow))
 
 	// Create allowlist cache for per-project allowlists
 	allowlistCache := guardian.NewAllowlistCache(globalAllowlist)
@@ -283,13 +297,31 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			clog.Warn("failed to load project config for %s: %v", projectName, err)
 			return nil
 		}
-		if len(projectCfg.Proxy.Allow) == 0 {
+
+		// Load project approvals
+		projectApprovals, err := config.LoadProjectApprovals(projectName)
+		if err != nil {
+			clog.Warn("failed to load project approvals for %s: %v", projectName, err)
+			projectApprovals = &config.Approvals{}
+		}
+
+		// Check if there's anything project-specific to merge
+		hasProjectConfig := len(projectCfg.Proxy.Allow) > 0
+		hasProjectApprovals := len(projectApprovals.Domains) > 0 || len(projectApprovals.Patterns) > 0
+		if !hasProjectConfig && !hasProjectApprovals {
 			return nil
 		}
-		// Merge global + project allowlists
+
+		// Merge: global config + project config + global approvals + project approvals
 		merged := config.MergeAllowlists(cfg.Proxy.Allow, projectCfg.Proxy.Allow)
+		if len(globalApprovals.Domains) > 0 || len(globalApprovals.Patterns) > 0 {
+			merged = append(merged, approvalsToAllowEntries(globalApprovals)...)
+		}
+		if hasProjectApprovals {
+			merged = append(merged, approvalsToAllowEntries(projectApprovals)...)
+		}
 		allowlist := guardian.NewAllowlistFromConfig(merged)
-		clog.Info("loaded allowlist for project %s (%d domains)", projectName, len(allowlist.Domains()))
+		clog.Info("loaded allowlist for project %s (%d entries)", projectName, len(allowlist.Domains()))
 		return allowlist
 	}
 
@@ -304,7 +336,21 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}
 		// Update the cached global config for project merging
 		cfg = newCfg
-		newGlobal := guardian.NewAllowlistFromConfig(newCfg.Proxy.Allow)
+
+		// Reload global approvals
+		newGlobalApprovals, err := config.LoadGlobalApprovals()
+		if err != nil {
+			clog.Warn("failed to reload global approvals: %v", err)
+			newGlobalApprovals = &config.Approvals{}
+		}
+		globalApprovals = newGlobalApprovals
+
+		// Build new global allowlist with approvals
+		globalAllow := newCfg.Proxy.Allow
+		if len(globalApprovals.Domains) > 0 || len(globalApprovals.Patterns) > 0 {
+			globalAllow = append(globalAllow, approvalsToAllowEntries(globalApprovals)...)
+		}
+		newGlobal := guardian.NewAllowlistFromConfig(globalAllow)
 		allowlistCache.SetGlobal(newGlobal)
 		// Clear project cache so they get reloaded with new global
 		allowlistCache.Clear()
@@ -638,6 +684,18 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%d days, %d hours", days, hours)
 	}
 	return fmt.Sprintf("%d days", days)
+}
+
+// approvalsToAllowEntries converts an Approvals struct to AllowEntry slice.
+func approvalsToAllowEntries(approvals *config.Approvals) []config.AllowEntry {
+	entries := make([]config.AllowEntry, 0, len(approvals.Domains)+len(approvals.Patterns))
+	for _, d := range approvals.Domains {
+		entries = append(entries, config.AllowEntry{Domain: d})
+	}
+	for _, p := range approvals.Patterns {
+		entries = append(entries, config.AllowEntry{Pattern: p})
+	}
+	return entries
 }
 
 // extractPatterns extracts pattern strings from a slice of CommandPattern.
