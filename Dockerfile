@@ -92,6 +92,9 @@ RUN set -eux; \
       -o /usr/local/bin/yq; \
     chmod +x /usr/local/bin/yq
 
+# golangci-lint (Go linter)
+RUN curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b /usr/local/bin
+
 # Create unprivileged user (UID 1000) with passwordless sudo
 # Remove existing user with UID 1000 if present (ubuntu base image has 'ubuntu' user)
 RUN apt-get update && apt-get install -y sudo \
