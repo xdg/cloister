@@ -1,7 +1,6 @@
 package guardian
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,7 +12,7 @@ func TestAddDomainToProject_EmptyDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Create a test project config
 	projectName := "test-project"
@@ -42,7 +41,7 @@ func TestAddDomainToProject_WhitespaceDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Create a test project config
 	projectName := "test-project"
@@ -81,7 +80,7 @@ func TestAddDomainToGlobal_EmptyDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	persister := &ConfigPersisterImpl{}
 
@@ -100,7 +99,7 @@ func TestAddDomainToGlobal_WhitespaceDomain(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	persister := &ConfigPersisterImpl{}
 
@@ -129,7 +128,7 @@ func TestReloadNotifier_PanicSafety(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	projectName := "test-project"
 
@@ -166,7 +165,7 @@ func TestReloadNotifier_GlobalPanicSafety(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Create persister with panicking notifier
 	persister := &ConfigPersisterImpl{

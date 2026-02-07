@@ -2,7 +2,6 @@ package guardian
 
 import (
 	"os"
-	"path/filepath"
 	"slices"
 	"testing"
 
@@ -14,7 +13,7 @@ func TestAddDomainToProject_WritesAndReloads(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
@@ -69,7 +68,7 @@ func TestAddDomainToProject_NoDuplicate(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
@@ -119,7 +118,7 @@ func TestAddDomainToProject_NoReloadNotifier(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	projectName := "test-project"
 
@@ -149,7 +148,7 @@ func TestAddDomainToProject_CreatesApprovalFileIfMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Don't create initial approval file - it should be created automatically
 	projectName := "nonexistent-project"
@@ -188,7 +187,7 @@ func TestAddDomainToGlobal_WritesAndReloads(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Set up initial approval file with one existing domain
 	initialApprovals := &config.Approvals{
@@ -242,7 +241,7 @@ func TestAddDomainToGlobal_NoDuplicate(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Set up initial approval file with one existing domain
 	existingDomain := "golang.org"
@@ -291,7 +290,7 @@ func TestAddDomainToGlobal_NoReloadNotifier(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Persister with nil ReloadNotifier
 	persister := &ConfigPersisterImpl{
@@ -323,7 +322,7 @@ func TestAddDomainToGlobal_CreatesApprovalFileIfMissing(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Don't create initial approval file
 	persister := &ConfigPersisterImpl{}
@@ -360,7 +359,7 @@ func TestAddDomainToProject_MultipleAdditions(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	projectName := "test-project"
 
@@ -399,7 +398,7 @@ func TestAddPatternToProject_WritesAndReloads(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
@@ -457,7 +456,7 @@ func TestAddPatternToProject_NoDuplicate(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Set up initial approval file with one existing pattern
 	projectName := "test-project"
@@ -507,7 +506,7 @@ func TestAddPatternToProject_InvalidPattern(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	persister := &ConfigPersisterImpl{}
 
@@ -536,7 +535,7 @@ func TestAddPatternToGlobal_WritesAndReloads(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Set up initial approval file with one existing domain
 	initialApprovals := &config.Approvals{
@@ -585,7 +584,7 @@ func TestAddPatternToGlobal_NoDuplicate(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Set up initial approval file with one existing pattern
 	existingPattern := "*.googleapis.com"
@@ -636,7 +635,7 @@ func TestAddDomainToProject_StaticConfigUnchanged(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Create a static project config
 	projectName := "test-project"
@@ -693,7 +692,7 @@ func TestAddDomainToGlobal_StaticConfigUnchanged(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Create a static global config
 	initialCfg := &config.GlobalConfig{
@@ -748,7 +747,7 @@ func TestAddPatternToProject_StaticConfigUnchanged(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Create a static project config
 	projectName := "test-project"
@@ -805,7 +804,7 @@ func TestAddPatternToGlobal_StaticConfigUnchanged(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	// Create a static global config
 	initialCfg := &config.GlobalConfig{
@@ -859,7 +858,7 @@ func TestAddDomainToProject_StripsPort(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	persister := &ConfigPersisterImpl{}
 
@@ -886,7 +885,7 @@ func TestAddDomainToGlobal_StripsPort(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+
 
 	persister := &ConfigPersisterImpl{}
 

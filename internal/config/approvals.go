@@ -9,6 +9,11 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// NOTE: In the guardian container, XDG_CONFIG_HOME=/etc so ConfigDir()
+// returns /etc/cloister/. The host's approval directory is mounted rw
+// at /etc/cloister/approvals (overlaying the ro config mount), so
+// ApprovalDir() resolves correctly in both host and container contexts.
+
 // Approvals represents approved domains and patterns persisted separately
 // from static config files. These are written by the guardian when users
 // click "Save to Project" or "Save to Global" in the approval web UI.
@@ -18,12 +23,8 @@ type Approvals struct {
 }
 
 // ApprovalDir returns the approval persistence directory path.
-// If the CLOISTER_APPROVAL_DIR environment variable is set (container context),
-// it uses that value directly. Otherwise, it falls back to ConfigDir() + "approvals".
+// This is always ConfigDir() + "approvals" (e.g. ~/.config/cloister/approvals).
 func ApprovalDir() string {
-	if dir := os.Getenv("CLOISTER_APPROVAL_DIR"); dir != "" {
-		return dir
-	}
 	return ConfigDir() + "approvals"
 }
 

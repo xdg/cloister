@@ -175,8 +175,8 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 	}
 
 	// Verify the approval file was created on disk.
-	// The guardian container writes to CLOISTER_APPROVAL_DIR which is mounted
-	// from the host's approval directory (under XDG_CONFIG_HOME).
+	// The guardian container writes to the approval dir, which is mounted rw
+	// at /etc/cloister/approvals (overlaying the ro config mount).
 	projectApprovalPath := config.ProjectApprovalPath("test-project")
 	approvals, err := config.LoadProjectApprovals("test-project")
 	if err != nil {

@@ -7,7 +7,6 @@ import (
 )
 
 func TestApprovalDir_Default(t *testing.T) {
-	t.Setenv("CLOISTER_APPROVAL_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", "/test/config")
 
 	dir := ApprovalDir()
@@ -18,19 +17,7 @@ func TestApprovalDir_Default(t *testing.T) {
 	}
 }
 
-func TestApprovalDir_EnvOverride(t *testing.T) {
-	t.Setenv("CLOISTER_APPROVAL_DIR", "/container/approvals")
-
-	dir := ApprovalDir()
-
-	want := "/container/approvals"
-	if dir != want {
-		t.Errorf("ApprovalDir() = %q, want %q", dir, want)
-	}
-}
-
 func TestGlobalApprovalPath(t *testing.T) {
-	t.Setenv("CLOISTER_APPROVAL_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", "/test/config")
 
 	path := GlobalApprovalPath()
@@ -42,7 +29,6 @@ func TestGlobalApprovalPath(t *testing.T) {
 }
 
 func TestProjectApprovalPath(t *testing.T) {
-	t.Setenv("CLOISTER_APPROVAL_DIR", "")
 	t.Setenv("XDG_CONFIG_HOME", "/test/config")
 
 	path := ProjectApprovalPath("my-project")
@@ -54,8 +40,7 @@ func TestProjectApprovalPath(t *testing.T) {
 }
 
 func TestLoadGlobalApprovals_Missing(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	approvals, err := LoadGlobalApprovals()
 	if err != nil {
@@ -74,8 +59,7 @@ func TestLoadGlobalApprovals_Missing(t *testing.T) {
 }
 
 func TestLoadProjectApprovals_Missing(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	approvals, err := LoadProjectApprovals("nonexistent")
 	if err != nil {
@@ -94,9 +78,8 @@ func TestLoadProjectApprovals_Missing(t *testing.T) {
 }
 
 func TestLoadGlobalApprovals_InvalidYAML(t *testing.T) {
-	tmpDir := t.TempDir()
-	approvalDir := filepath.Join(tmpDir, "approvals")
-	t.Setenv("CLOISTER_APPROVAL_DIR", approvalDir)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	approvalDir := ApprovalDir()
 
 	if err := os.MkdirAll(approvalDir, 0700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
@@ -114,10 +97,8 @@ func TestLoadGlobalApprovals_InvalidYAML(t *testing.T) {
 }
 
 func TestLoadProjectApprovals_InvalidYAML(t *testing.T) {
-	tmpDir := t.TempDir()
-	approvalDir := filepath.Join(tmpDir, "approvals")
-	projectsDir := filepath.Join(approvalDir, "projects")
-	t.Setenv("CLOISTER_APPROVAL_DIR", approvalDir)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	projectsDir := filepath.Join(ApprovalDir(), "projects")
 
 	if err := os.MkdirAll(projectsDir, 0700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
@@ -135,9 +116,8 @@ func TestLoadProjectApprovals_InvalidYAML(t *testing.T) {
 }
 
 func TestLoadGlobalApprovals_UnknownField(t *testing.T) {
-	tmpDir := t.TempDir()
-	approvalDir := filepath.Join(tmpDir, "approvals")
-	t.Setenv("CLOISTER_APPROVAL_DIR", approvalDir)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	approvalDir := ApprovalDir()
 
 	if err := os.MkdirAll(approvalDir, 0700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
@@ -155,8 +135,7 @@ func TestLoadGlobalApprovals_UnknownField(t *testing.T) {
 }
 
 func TestWriteGlobalApprovals_RoundTrip(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	original := &Approvals{
 		Domains:  []string{"example.com", "test.org"},
@@ -192,8 +171,7 @@ func TestWriteGlobalApprovals_RoundTrip(t *testing.T) {
 }
 
 func TestWriteProjectApprovals_RoundTrip(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	original := &Approvals{
 		Domains:  []string{"project-specific.com"},
@@ -218,9 +196,8 @@ func TestWriteProjectApprovals_RoundTrip(t *testing.T) {
 }
 
 func TestWriteGlobalApprovals_CreatesDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	approvalDir := filepath.Join(tmpDir, "approvals")
-	t.Setenv("CLOISTER_APPROVAL_DIR", approvalDir)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	approvalDir := ApprovalDir()
 
 	// Verify directory does not exist
 	if _, err := os.Stat(approvalDir); !os.IsNotExist(err) {
@@ -247,10 +224,8 @@ func TestWriteGlobalApprovals_CreatesDir(t *testing.T) {
 }
 
 func TestWriteProjectApprovals_CreatesDir(t *testing.T) {
-	tmpDir := t.TempDir()
-	approvalDir := filepath.Join(tmpDir, "approvals")
-	projectsDir := filepath.Join(approvalDir, "projects")
-	t.Setenv("CLOISTER_APPROVAL_DIR", approvalDir)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	projectsDir := filepath.Join(ApprovalDir(), "projects")
 
 	// Verify directory does not exist
 	if _, err := os.Stat(projectsDir); !os.IsNotExist(err) {
@@ -277,8 +252,7 @@ func TestWriteProjectApprovals_CreatesDir(t *testing.T) {
 }
 
 func TestWriteGlobalApprovals_FilePermissions(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	approvals := &Approvals{Domains: []string{"example.com"}}
 	if err := WriteGlobalApprovals(approvals); err != nil {
@@ -297,8 +271,7 @@ func TestWriteGlobalApprovals_FilePermissions(t *testing.T) {
 }
 
 func TestWriteGlobalApprovals_Overwrites(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	// Write initial approvals
 	initial := &Approvals{Domains: []string{"old.com"}}
@@ -330,8 +303,7 @@ func TestWriteGlobalApprovals_Overwrites(t *testing.T) {
 }
 
 func TestWriteGlobalApprovals_EmptyApprovals(t *testing.T) {
-	tmpDir := t.TempDir()
-	t.Setenv("CLOISTER_APPROVAL_DIR", filepath.Join(tmpDir, "approvals"))
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	// Write empty approvals
 	if err := WriteGlobalApprovals(&Approvals{}); err != nil {

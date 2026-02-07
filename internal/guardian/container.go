@@ -85,7 +85,8 @@ const (
 	ContainerConfigDir = "/etc/cloister"
 
 	// ContainerApprovalDir is the path inside the guardian container where approvals are mounted.
-	ContainerApprovalDir = "/var/lib/cloister/approvals"
+	// This overlays the ro config mount at ContainerConfigDir, allowing rw access for approvals.
+	ContainerApprovalDir = ContainerConfigDir + "/approvals"
 )
 
 // ErrGuardianNotRunning indicates the guardian container is not running.
@@ -112,12 +113,6 @@ func HostTokenDir() (string, error) {
 // This is ~/.config/cloister.
 func HostConfigDir() (string, error) {
 	return hostCloisterPath("")
-}
-
-// HostApprovalDir returns the approval directory path on the host.
-// This is ~/.config/cloister/approvals.
-func HostApprovalDir() (string, error) {
-	return hostCloisterPath("approvals")
 }
 
 // ErrGuardianAlreadyRunning indicates the guardian container is already running.
@@ -229,13 +224,8 @@ func StartWithOptions(opts StartOptions) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Get the host approval directory for mounting
-	hostApprovalDir, err := HostApprovalDir()
-	if err != nil {
-		return fmt.Errorf("failed to get approval directory: %w", err)
-	}
-
-	// Ensure approval directory exists (creates with 0700 permissions)
+	// Approval dir is a subdirectory of config dir, mounted rw to overlay the ro config mount
+	hostApprovalDir := hostConfigDir + "/approvals"
 	if err := os.MkdirAll(hostApprovalDir, 0700); err != nil {
 		return fmt.Errorf("failed to create approval directory: %w", err)
 	}
@@ -271,7 +261,6 @@ func StartWithOptions(opts StartOptions) error {
 		"-v", hostTokenDir + ":" + ContainerTokenDir + ":ro",
 		"-v", hostConfigDir + ":" + ContainerConfigDir + ":ro",
 		"-v", hostApprovalDir + ":" + ContainerApprovalDir,
-		"-e", "CLOISTER_APPROVAL_DIR=" + ContainerApprovalDir,
 	}
 
 	// Add executor TCP port if provided (for host.docker.internal connection)
