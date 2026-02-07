@@ -36,7 +36,7 @@ VERBOSE_FLAG = $(if $(VERBOSE),-v)
 D2_SOURCES := $(wildcard specs/diagrams/*.d2)
 D2_SVGS := $(D2_SOURCES:.d2=.svg)
 
-.PHONY: docker docker-commit-tag install test test-race test-integration test-e2e test-all fmt lint clean diagrams clean-diagrams
+.PHONY: docker docker-no-cache docker-commit-tag install test test-race test-integration test-e2e test-all fmt lint clean diagrams clean-diagrams
 
 # Go targets
 $(BINARY): $(GO_FILES) $(GO_MOD_FILES)
@@ -46,6 +46,9 @@ build: $(BINARY)
 
 docker:
 	docker build --build-arg GO_VERSION=$(GO_VERSION) $(if $(VERSION),--build-arg VERSION=$(VERSION)) -t cloister:$(DOCKER_TAG) .
+
+docker-no-cache:
+	docker build --no-cache --build-arg GO_VERSION=$(GO_VERSION) $(if $(VERSION),--build-arg VERSION=$(VERSION)) -t cloister:$(DOCKER_TAG) .
 
 docker-commit-tag:
 	docker build --build-arg GO_VERSION=$(GO_VERSION) -t $(TEST_IMAGE) .
