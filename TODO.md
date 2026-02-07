@@ -53,47 +53,47 @@ Create `internal/config/approvals.go` with functions for reading/writing approva
 
 ### 7.1.1 Approval directory structure
 
-- [ ] **Directory layout**:
+- [x] **Directory layout**:
   ```
   ~/.config/cloister/approvals/
   ├── global.yaml                   # Global approved domains/patterns
   └── projects/
       └── <project>.yaml            # Project approved domains/patterns
   ```
-- [ ] **Precedent**: Similar to existing `~/.config/cloister/tokens/` directory
-- [ ] **Benefits**: Guardian can write approvals without access to static config files
+- [x] **Precedent**: Similar to existing `~/.config/cloister/tokens/` directory
+- [x] **Benefits**: Guardian can write approvals without access to static config files
 
 ### 7.1.2 Config package additions
 
-- [ ] Create `internal/config/approvals.go`
-- [ ] Define `Approvals` struct:
+- [x] Create `internal/config/approvals.go`
+- [x] Define `Approvals` struct:
   ```go
   type Approvals struct {
       Domains  []string `yaml:"domains,omitempty"`
       Patterns []string `yaml:"patterns,omitempty"`
   }
   ```
-- [ ] Implement `ApprovalDir() string`:
+- [x] Implement `ApprovalDir() string`:
   - Check `CLOISTER_APPROVAL_DIR` env var first (container context)
   - Fall back to `ConfigDir() + "approvals"` (host context)
-- [ ] Implement `GlobalApprovalPath() string` → `ApprovalDir() + "/global.yaml"`
-- [ ] Implement `ProjectApprovalPath(project string) string` → `ApprovalDir() + "/projects/" + project + ".yaml"`
-- [ ] Implement `LoadGlobalApprovals() (*Approvals, error)`:
+- [x] Implement `GlobalApprovalPath() string` → `ApprovalDir() + "/global.yaml"`
+- [x] Implement `ProjectApprovalPath(project string) string` → `ApprovalDir() + "/projects/" + project + ".yaml"`
+- [x] Implement `LoadGlobalApprovals() (*Approvals, error)`:
   - Return empty `Approvals{}` if file doesn't exist (not error)
   - Return error if file exists but has invalid YAML
-- [ ] Implement `LoadProjectApprovals(project string) (*Approvals, error)`:
+- [x] Implement `LoadProjectApprovals(project string) (*Approvals, error)`:
   - Return empty `Approvals{}` if file doesn't exist (not error)
   - Return error if file exists but has invalid YAML
-- [ ] Implement `WriteGlobalApprovals(approvals *Approvals) error`:
+- [x] Implement `WriteGlobalApprovals(approvals *Approvals) error`:
   - Create directory if missing (with 0700 permissions)
   - Write YAML atomically (temp file + rename)
-- [ ] Implement `WriteProjectApprovals(project string, approvals *Approvals) error`:
+- [x] Implement `WriteProjectApprovals(project string, approvals *Approvals) error`:
   - Create `approvals/projects/` directory if missing (with 0700 permissions)
   - Write YAML atomically (temp file + rename)
-- [ ] **Test**: Round-trip tests with XDG_CONFIG_HOME override to t.TempDir()
-- [ ] **Test**: Directory creation (approvals/, approvals/projects/)
-- [ ] **Test**: Empty file handling (return empty Approvals{}, not error)
-- [ ] **Test**: Invalid YAML handling (return error)
+- [x] **Test**: Round-trip tests with XDG_CONFIG_HOME override to t.TempDir()
+- [x] **Test**: Directory creation (approvals/, approvals/projects/)
+- [x] **Test**: Empty file handling (return empty Approvals{}, not error)
+- [x] **Test**: Invalid YAML handling (return error)
 
 ---
 
