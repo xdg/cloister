@@ -212,140 +212,160 @@
     </div>
     <script>
         (function() {
-            // Request notification permission on page load
-            if ('Notification' in window && Notification.permission === 'default') {
-                Notification.requestPermission();
+            var BASE_TITLE = 'Cloister Approval Queue';
+            var pendingCount = 0;
+
+            // Count initial pending requests from server-rendered HTML
+            function initPendingCount() {
+                var lists = document.querySelectorAll('.request-list');
+                lists.forEach(function(list) {
+                    pendingCount += list.querySelectorAll('.request').length;
+                });
+                updateTitle();
             }
 
-            var eventSource = new EventSource('/events');
+            function updateTitle() {
+                document.title = pendingCount > 0
+                    ? '(' + pendingCount + ') ' + BASE_TITLE
+                    : BASE_TITLE;
+            }
 
-            eventSource.addEventListener('request-added', function(e) {
-                var emptyDiv = document.getElementById('queue-empty');
-                var list = document.getElementById('request-list');
+            // Audio alert via Web Audio API (no file needed)
+            var audioCtx = null;
+            function playAlert() {
+                try {
+                    if (!audioCtx) {
+                        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    // Two-tone chime: short rising pair
+                    [0, 0.15].forEach(function(offset, i) {
+                        var osc = audioCtx.createOscillator();
+                        var gain = audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.frequency.value = i === 0 ? 660 : 880;
+                        gain.gain.setValueAtTime(0.25, audioCtx.currentTime + offset);
+                        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + offset + 0.15);
+                        osc.start(audioCtx.currentTime + offset);
+                        osc.stop(audioCtx.currentTime + offset + 0.15);
+                    });
+                } catch (e) {
+                    // AudioContext not available (e.g., autoplay policy before user gesture)
+                }
+            }
 
-                // If the queue was empty, replace with a list
+            // Notify: title badge + audio + browser Notification (best-effort)
+            function notifyRequest(title, body) {
+                pendingCount++;
+                updateTitle();
+                playAlert();
+
+                // Browser Notification (best-effort, with diagnostics)
+                if (!('Notification' in window)) {
+                    console.warn('[cloister] Notification API not available');
+                    return;
+                }
+                console.log('[cloister] Notification.permission:', Notification.permission);
+                if (Notification.permission !== 'granted') {
+                    if (Notification.permission === 'default') {
+                        Notification.requestPermission();
+                    }
+                    return;
+                }
+                try {
+                    var n = new Notification(title, {
+                        body: body,
+                        requireInteraction: true
+                    });
+                    n.onclick = function() { window.focus(); n.close(); };
+                    n.onerror = function(e) { console.error('[cloister] Notification error event:', e); };
+                    console.log('[cloister] Notification created successfully');
+                } catch (e) {
+                    console.error('[cloister] Notification constructor threw:', e);
+                }
+            }
+
+            function onRequestResolved() {
+                pendingCount = Math.max(0, pendingCount - 1);
+                updateTitle();
+            }
+
+            // Extract display info from SSE-rendered HTML
+            function extractInfo(html) {
+                var temp = document.createElement('div');
+                temp.innerHTML = html;
+                return {
+                    cloister: temp.querySelector('.request-meta strong')?.textContent || 'Unknown',
+                    detail: temp.querySelector('.request-cmd')?.textContent || ''
+                };
+            }
+
+            // --- DOM helpers for adding/removing request cards ---
+
+            function addToList(listId, emptyId, html) {
+                var emptyDiv = document.getElementById(emptyId);
+                var list = document.getElementById(listId);
+
                 if (emptyDiv) {
                     var ul = document.createElement('ul');
                     ul.className = 'request-list';
-                    ul.id = 'request-list';
-                    ul.innerHTML = e.data;
+                    ul.id = listId;
+                    ul.innerHTML = html;
                     emptyDiv.parentNode.replaceChild(ul, emptyDiv);
                 } else if (list) {
-                    // Append to existing list
-                    list.insertAdjacentHTML('beforeend', e.data);
+                    list.insertAdjacentHTML('beforeend', html);
                 }
 
-                // Re-initialize htmx for the new content
                 if (typeof htmx !== 'undefined') {
-                    htmx.process(document.getElementById('request-list'));
+                    htmx.process(document.getElementById(listId));
+                }
+            }
+
+            function removeFromList(listId, emptyId, emptyText, requestId) {
+                var el = document.getElementById('request-' + requestId);
+                if (el) el.remove();
+
+                var list = document.getElementById(listId);
+                if (list && list.children.length === 0) {
+                    var emptyDiv = document.createElement('div');
+                    emptyDiv.className = 'queue-empty';
+                    emptyDiv.id = emptyId;
+                    emptyDiv.textContent = emptyText;
+                    list.parentNode.replaceChild(emptyDiv, list);
                 }
 
-                // Show browser notification if permission granted
-                if ('Notification' in window &&
-                    Notification.permission === 'granted') {
+                onRequestResolved();
+            }
 
-                    // Extract request info from the rendered HTML
-                    var temp = document.createElement('div');
-                    temp.innerHTML = e.data;
-                    var cloister = temp.querySelector('.request-meta strong')?.textContent || 'Unknown';
-                    var cmd = temp.querySelector('.request-cmd')?.textContent || '';
+            // --- SSE event handling ---
 
-                    var notification = new Notification('Cloister: Approval Requested', {
-                        body: cloister + ': ' + cmd.substring(0, 80),
-                        tag: 'cloister-request',  // Collapse multiple into one
-                        requireInteraction: false
-                    });
+            initPendingCount();
+            var eventSource = new EventSource('/events');
 
-                    notification.onclick = function() {
-                        window.focus();
-                        notification.close();
-                    };
-                }
+            eventSource.addEventListener('request-added', function(e) {
+                addToList('request-list', 'queue-empty', e.data);
+                var info = extractInfo(e.data);
+                notifyRequest('Cloister: Approval Requested', info.cloister + ': ' + info.detail.substring(0, 80));
             });
 
             eventSource.addEventListener('request-removed', function(e) {
                 var data = JSON.parse(e.data);
-                var requestEl = document.getElementById('request-' + data.id);
-                if (requestEl) {
-                    requestEl.remove();
-                }
-
-                // If list is now empty, show the empty message
-                var list = document.getElementById('request-list');
-                if (list && list.children.length === 0) {
-                    var emptyDiv = document.createElement('div');
-                    emptyDiv.className = 'queue-empty';
-                    emptyDiv.id = 'queue-empty';
-                    emptyDiv.textContent = 'No pending requests';
-                    list.parentNode.replaceChild(emptyDiv, list);
-                }
+                removeFromList('request-list', 'queue-empty', 'No pending requests', data.id);
             });
 
             eventSource.addEventListener('domain-request-added', function(e) {
-                var emptyDiv = document.getElementById('domain-queue-empty');
-                var list = document.getElementById('domain-request-list');
-
-                // If the queue was empty, replace with a list
-                if (emptyDiv) {
-                    var ul = document.createElement('ul');
-                    ul.className = 'request-list';
-                    ul.id = 'domain-request-list';
-                    ul.innerHTML = e.data;
-                    emptyDiv.parentNode.replaceChild(ul, emptyDiv);
-                } else if (list) {
-                    // Append to existing list
-                    list.insertAdjacentHTML('beforeend', e.data);
-                }
-
-                // Re-initialize htmx for the new content
-                if (typeof htmx !== 'undefined') {
-                    htmx.process(document.getElementById('domain-request-list'));
-                }
-
-                // Show browser notification if permission granted
-                if ('Notification' in window &&
-                    Notification.permission === 'granted') {
-
-                    // Extract request info from the rendered HTML
-                    var temp = document.createElement('div');
-                    temp.innerHTML = e.data;
-                    var cloister = temp.querySelector('.request-meta strong')?.textContent || 'Unknown';
-                    var domain = temp.querySelector('.request-cmd')?.textContent || '';
-
-                    var notification = new Notification('Cloister: Domain Approval Requested', {
-                        body: cloister + ': ' + domain,
-                        tag: 'cloister-domain-request',  // Collapse multiple into one
-                        requireInteraction: false
-                    });
-
-                    notification.onclick = function() {
-                        window.focus();
-                        notification.close();
-                    };
-                }
+                addToList('domain-request-list', 'domain-queue-empty', e.data);
+                var info = extractInfo(e.data);
+                notifyRequest('Cloister: Domain Approval Requested', info.cloister + ': ' + info.detail);
             });
 
             eventSource.addEventListener('domain-request-removed', function(e) {
                 var data = JSON.parse(e.data);
-                var requestEl = document.getElementById('request-' + data.id);
-                if (requestEl) {
-                    requestEl.remove();
-                }
-
-                // If list is now empty, show the empty message
-                var list = document.getElementById('domain-request-list');
-                if (list && list.children.length === 0) {
-                    var emptyDiv = document.createElement('div');
-                    emptyDiv.className = 'queue-empty';
-                    emptyDiv.id = 'domain-queue-empty';
-                    emptyDiv.textContent = 'No pending domain requests';
-                    list.parentNode.replaceChild(emptyDiv, list);
-                }
+                removeFromList('domain-request-list', 'domain-queue-empty', 'No pending domain requests', data.id);
             });
 
-            eventSource.onerror = function(e) {
-                // Connection lost, try to reconnect (EventSource does this automatically)
-                console.log('SSE connection error, reconnecting...');
+            eventSource.onerror = function() {
+                console.log('[cloister] SSE connection error, reconnecting...');
             };
         })();
     </script>

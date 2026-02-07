@@ -624,14 +624,25 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse scope from request body
-	var approveReq approveDomainRequest
-	if err := json.NewDecoder(r.Body).Decode(&approveReq); err != nil {
-		s.writeError(w, http.StatusBadRequest, "invalid request body")
-		return
+	// Parse scope from request body.
+	// htmx sends form-encoded data; API clients send JSON.
+	var scope, pattern string
+	if r.Header.Get("HX-Request") == "true" {
+		if err := r.ParseForm(); err != nil {
+			s.writeError(w, http.StatusBadRequest, "invalid form data")
+			return
+		}
+		scope = r.FormValue("scope")
+		pattern = r.FormValue("pattern")
+	} else {
+		var approveReq approveDomainRequest
+		if err := json.NewDecoder(r.Body).Decode(&approveReq); err != nil {
+			s.writeError(w, http.StatusBadRequest, "invalid request body")
+			return
+		}
+		scope = approveReq.Scope
+		pattern = approveReq.Pattern
 	}
-
-	scope := approveReq.Scope
 	if scope != "session" && scope != "project" && scope != "global" {
 		s.writeError(w, http.StatusBadRequest, "scope must be session, project, or global")
 		return
@@ -653,7 +664,6 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	domain := req.Domain
 	project := req.Project
 	cloister := req.Cloister
-	pattern := approveReq.Pattern
 	isPattern := pattern != ""
 
 	// Determine what to persist: exact domain or wildcard pattern
