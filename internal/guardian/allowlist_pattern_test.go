@@ -244,6 +244,7 @@ func TestAllowlist_IsAllowed_WithPatterns(t *testing.T) {
 			host:     "exact.domain.com",
 			expected: true,
 		},
+
 	}
 
 	for _, tc := range tests {

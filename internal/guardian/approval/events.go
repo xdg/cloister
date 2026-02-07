@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -197,6 +198,10 @@ func countDomainComponents(domain string) int {
 // pattern like "*.example.com". Returns empty string if the domain doesn't
 // have at least three components to prevent overly broad patterns like "*.com".
 func domainToWildcard(domain string) string {
+	// Strip port if present (CONNECT requests include port, e.g. "api.example.com:443")
+	if host, _, err := net.SplitHostPort(domain); err == nil {
+		domain = host
+	}
 	// Require at least 3 components to prevent overly broad patterns
 	if countDomainComponents(domain) < 3 {
 		return ""

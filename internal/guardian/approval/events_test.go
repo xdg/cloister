@@ -476,6 +476,31 @@ func TestEventHub_BroadcastDomainRequestRemoved(t *testing.T) {
 	}
 }
 
+// TestDomainToWildcard_StripsPort verifies that domainToWildcard strips the
+// port before constructing the wildcard. CONNECT requests include port
+// (e.g. "api.example.com:443"), and the wildcard should be "*.example.com"
+// not "*.example.com:443".
+func TestDomainToWildcard_StripsPort(t *testing.T) {
+	tests := []struct {
+		domain   string
+		expected string
+	}{
+		{"api.example.com:443", "*.example.com"},
+		{"cdn.example.com:8443", "*.example.com"},
+		{"api.example.com", "*.example.com"},   // no port, unchanged behavior
+		{"example.com:443", ""},                 // too few components even without port
+		{"a.b.example.com:443", "*.b.example.com"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.domain, func(t *testing.T) {
+			got := domainToWildcard(tc.domain)
+			if got != tc.expected {
+				t.Errorf("domainToWildcard(%q) = %q, want %q", tc.domain, got, tc.expected)
+			}
+		})
+	}
+}
+
 func TestFormatSSE_DomainEvents(t *testing.T) {
 	tests := []struct {
 		name     string
