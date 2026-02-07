@@ -165,7 +165,7 @@ func CleanupStaleState() error {
 	if state != nil && !IsDaemonRunning(state) {
 		// Remove stale socket file
 		if state.SocketPath != "" {
-			os.Remove(state.SocketPath)
+			_ = os.Remove(state.SocketPath)
 		}
 		// Remove stale state file
 		return RemoveDaemonState()

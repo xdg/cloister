@@ -118,7 +118,7 @@ func (s *SocketServer) Start() error {
 
 		// Set socket permissions to 0600 (owner read/write only)
 		if err := os.Chmod(s.socketPath, 0600); err != nil {
-			listener.Close()
+			_ = listener.Close()
 			return err
 		}
 	}
@@ -154,7 +154,7 @@ func (s *SocketServer) Stop() error {
 
 	// Remove socket file (only for Unix socket mode)
 	if !isTCP {
-		os.Remove(s.socketPath)
+		_ = os.Remove(s.socketPath)
 	}
 
 	return err
@@ -215,7 +215,7 @@ func (s *SocketServer) acceptLoop() {
 // and writes a JSON response.
 func (s *SocketServer) handleConnection(conn net.Conn) {
 	defer s.wg.Done()
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Read request (newline-delimited JSON)
 	reader := bufio.NewReader(conn)

@@ -13,7 +13,7 @@ func TestStore_SaveLoadRemove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, err := NewStore(tmpDir)
 	if err != nil {
@@ -91,7 +91,7 @@ func TestStore_LoadEmptyDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	store, err := NewStore(tmpDir)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestStore_DirectoryPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	storeDir := filepath.Join(tmpDir, "tokens")
 	_, err = NewStore(storeDir)

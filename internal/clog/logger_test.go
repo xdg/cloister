@@ -140,7 +140,7 @@ func TestOpenLogFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("OpenLogFile() error = %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// Write something
 	_, err = f.WriteString("test log entry\n")
@@ -149,18 +149,18 @@ func TestOpenLogFile(t *testing.T) {
 	}
 
 	// Close and reopen to test append mode
-	f.Close()
+	_ = f.Close()
 	f, err = OpenLogFile(path)
 	if err != nil {
 		t.Fatalf("OpenLogFile() reopen error = %v", err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	_, err = f.WriteString("second entry\n")
 	if err != nil {
 		t.Fatalf("WriteString() error = %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	// Read back
 	content, err := os.ReadFile(path)

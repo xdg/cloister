@@ -68,7 +68,7 @@ func (c *Client) doRequest(method, path string, body any, result any, acceptedSt
 	if err != nil {
 		return fmt.Errorf("failed to send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Check status
 	statusOK := false

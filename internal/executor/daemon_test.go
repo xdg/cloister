@@ -129,7 +129,7 @@ func TestCleanupStaleState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create fake socket: %v", err)
 	}
-	f.Close()
+	_ = f.Close()
 
 	// Save the stale state
 	if err := executor.SaveDaemonState(state); err != nil {

@@ -290,7 +290,7 @@ func TestServer_HandleEvents_ReceivesEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request to /events failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
@@ -351,7 +351,7 @@ func TestServer_HandleEvents_ClientDisconnect(t *testing.T) {
 			// Try to read from body to keep connection open
 			buf := make([]byte, 1)
 			_, _ = resp.Body.Read(buf)
-			resp.Body.Close()
+			_ = resp.Body.Close()
 		}
 		close(done)
 	}()

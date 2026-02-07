@@ -58,7 +58,7 @@ func (c *Client) Execute(req executor.ExecuteRequest) (*executor.ExecuteResponse
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to executor (%s): %w", c.address, err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Build the socket request with authentication
 	socketReq := executor.SocketRequest{

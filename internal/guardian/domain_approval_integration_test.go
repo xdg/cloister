@@ -2,6 +2,7 @@ package guardian
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -97,7 +98,7 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	if err := approvalServer.Start(); err != nil {
 		t.Fatalf("failed to start approval server: %v", err)
 	}
-	defer approvalServer.Stop(nil)
+	defer func() { _ = approvalServer.Stop(context.TODO()) }()
 
 	baseURL := "http://" + approvalServer.ListenAddr()
 
@@ -147,7 +148,7 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to POST approve: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -242,7 +243,7 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	if err := approvalServer.Start(); err != nil {
 		t.Fatalf("failed to start approval server: %v", err)
 	}
-	defer approvalServer.Stop(nil)
+	defer func() { _ = approvalServer.Stop(context.TODO()) }()
 
 	baseURL := "http://" + approvalServer.ListenAddr()
 
@@ -281,7 +282,7 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to POST approve: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -345,7 +346,7 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 	if err := approvalServer.Start(); err != nil {
 		t.Fatalf("failed to start approval server: %v", err)
 	}
-	defer approvalServer.Stop(nil)
+	defer func() { _ = approvalServer.Stop(context.TODO()) }()
 
 	baseURL := "http://" + approvalServer.ListenAddr()
 
@@ -384,7 +385,7 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to POST deny: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -467,7 +468,7 @@ func TestDomainApprovalIntegration_GetPendingDomains(t *testing.T) {
 	if err := approvalServer.Start(); err != nil {
 		t.Fatalf("failed to start approval server: %v", err)
 	}
-	defer approvalServer.Stop(nil)
+	defer func() { _ = approvalServer.Stop(context.TODO()) }()
 
 	baseURL := "http://" + approvalServer.ListenAddr()
 
@@ -488,7 +489,7 @@ func TestDomainApprovalIntegration_GetPendingDomains(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to GET pending-domains: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

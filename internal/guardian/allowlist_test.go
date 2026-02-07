@@ -278,7 +278,7 @@ func TestProxyServer_AllowlistEnforcement(t *testing.T) {
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode != tc.expectedStatus {
 				body := make([]byte, 1024)
@@ -320,7 +320,7 @@ func TestProxyServer_NilAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("expected status 403 with nil allowlist, got %d", resp.StatusCode)

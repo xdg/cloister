@@ -24,7 +24,7 @@ func TestManager_Start_Stop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	cfg := &Config{
 		Project:     projectName,
@@ -89,7 +89,7 @@ func TestManager_Start_AlreadyExists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	cfg := &Config{
 		Project:     projectName,
@@ -147,7 +147,7 @@ func TestManager_Start_VerifySecuritySettings(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	cfg := &Config{
 		Project:     projectName,
@@ -248,7 +248,7 @@ func TestManager_ContainerStatus_Running(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	cfg := &Config{
 		Project:     projectName,
@@ -286,7 +286,7 @@ func TestManager_ContainerStatus_Stopped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	cfg := &Config{
 		Project:     projectName,
@@ -324,7 +324,7 @@ func TestManager_ContainerStatus_SingleDockerCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	cfg := &Config{
 		Project:     projectName,

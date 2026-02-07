@@ -433,7 +433,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Bad Gateway - failed to connect to upstream: %v", err), http.StatusBadGateway)
 		return
 	}
-	defer upstreamConn.Close()
+	defer func() { _ = upstreamConn.Close() }()
 
 	// Hijack the client connection to get raw TCP access.
 	hijacker, ok := w.(http.Hijacker)
@@ -447,7 +447,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Internal Server Error - failed to hijack connection: %v", err), http.StatusInternalServerError)
 		return
 	}
-	defer clientConn.Close()
+	defer func() { _ = clientConn.Close() }()
 
 	// Send 200 Connection Established to the client.
 	// This tells the client the tunnel is ready and it can begin TLS handshake.

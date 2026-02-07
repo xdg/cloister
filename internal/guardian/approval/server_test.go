@@ -413,7 +413,7 @@ func TestServer_ViaHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request to / failed: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("GET / expected status %d, got %d", http.StatusOK, resp.StatusCode)
 	}
@@ -423,7 +423,7 @@ func TestServer_ViaHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request to /pending failed: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("GET /pending expected status %d, got %d", http.StatusOK, resp.StatusCode)
 	}
@@ -433,7 +433,7 @@ func TestServer_ViaHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request to /approve/nonexistent failed: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("POST /approve/nonexistent expected status %d, got %d", http.StatusNotFound, resp.StatusCode)
 	}
@@ -443,7 +443,7 @@ func TestServer_ViaHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request to /deny/nonexistent failed: %v", err)
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Errorf("POST /deny/nonexistent expected status %d, got %d", http.StatusNotFound, resp.StatusCode)
 	}
@@ -746,7 +746,7 @@ func TestServer_StaticHtmxServed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request to /static/htmx.min.js failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("GET /static/htmx.min.js expected status %d, got %d", http.StatusOK, resp.StatusCode)

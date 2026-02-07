@@ -23,7 +23,7 @@ func shortTempDir(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
 
@@ -217,7 +217,7 @@ func TestSocketServerValidRequest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send request
 	req := SocketRequest{
@@ -274,7 +274,7 @@ func TestSocketServerInvalidSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send request with wrong secret
 	req := SocketRequest{
@@ -323,7 +323,7 @@ func TestSocketServerInvalidJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send invalid JSON
 	if _, err := conn.Write([]byte("not valid json\n")); err != nil {
@@ -369,7 +369,7 @@ func TestSocketServerMultipleConnections(t *testing.T) {
 				done <- false
 				return
 			}
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			req := SocketRequest{
 				Secret: "test-secret",
@@ -480,7 +480,7 @@ func TestSocketServerGracefulShutdown(t *testing.T) {
 		t.Fatal("Stop did not complete within timeout")
 	}
 
-	conn.Close()
+	_ = conn.Close()
 }
 
 // TestSocketServerSocketPath verifies SocketPath returns the configured path.

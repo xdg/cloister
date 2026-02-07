@@ -51,7 +51,7 @@ func TestConfigure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Configure() error = %v", err)
 	}
-	defer Close()
+	defer func() { _ = Close() }()
 
 	Info("test message")
 

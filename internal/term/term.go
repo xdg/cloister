@@ -74,7 +74,7 @@ func Print(a ...any) {
 	if silent {
 		return
 	}
-	fmt.Fprint(stdout, a...)
+	_, _ = fmt.Fprint(stdout, a...)
 }
 
 // Printf formats according to a format specifier and writes to stdout.
@@ -85,7 +85,7 @@ func Printf(format string, a ...any) {
 	if silent {
 		return
 	}
-	fmt.Fprintf(stdout, format, a...)
+	_, _ = fmt.Fprintf(stdout, format, a...)
 }
 
 // Println formats and writes to stdout with a trailing newline.
@@ -96,7 +96,7 @@ func Println(a ...any) {
 	if silent {
 		return
 	}
-	fmt.Fprintln(stdout, a...)
+	_, _ = fmt.Fprintln(stdout, a...)
 }
 
 // Warn writes a warning message to stderr with "Warning: " prefix.
@@ -105,7 +105,7 @@ func Warn(format string, a ...any) {
 	mu.Lock()
 	defer mu.Unlock()
 	msg := fmt.Sprintf(format, a...)
-	fmt.Fprintf(stderr, "Warning: %s\n", msg)
+	_, _ = fmt.Fprintf(stderr, "Warning: %s\n", msg)
 }
 
 // Error writes an error message to stderr with "Error: " prefix.
@@ -114,7 +114,7 @@ func Error(format string, a ...any) {
 	mu.Lock()
 	defer mu.Unlock()
 	msg := fmt.Sprintf(format, a...)
-	fmt.Fprintf(stderr, "Error: %s\n", msg)
+	_, _ = fmt.Fprintf(stderr, "Error: %s\n", msg)
 }
 
 // Stdout returns the current stdout writer.

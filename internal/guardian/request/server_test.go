@@ -259,7 +259,7 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, resp.StatusCode)
@@ -766,7 +766,7 @@ func TestServer_HandleRequest_GETReturns405(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// Go's net/http returns 405 Method Not Allowed for unmatched methods
 	if resp.StatusCode != http.StatusMethodNotAllowed {

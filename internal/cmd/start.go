@@ -133,7 +133,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("%w\n\nHint: Port 9997 may be in use. Check if another guardian is running:\n  docker ps -a --filter name=cloister-guardian", err)
 			}
 			if strings.Contains(errStr, "No such image") || strings.Contains(errStr, "Unable to find image") {
-				return fmt.Errorf("%w\n\nHint: The cloister image may not be built. Try:\n  docker build -t cloister:latest .", err)
+				return fmt.Errorf("%w\n\nhint: run 'docker build -t cloister:latest .' to build the image", err)
 			}
 			// Generic guardian failure message
 			return fmt.Errorf("%w\n\nHint: Check guardian status with:\n  cloister guardian status\n  docker logs cloister-guardian", err)

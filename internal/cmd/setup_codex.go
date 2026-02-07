@@ -25,10 +25,6 @@ The key is stored in cloister's config file (~/.config/cloister/config.yaml).`,
 	RunE: runSetupCodex,
 }
 
-// setupCodexPrompter is the prompter used by setup codex.
-// It can be overridden for testing.
-var setupCodexPrompter prompt.Prompter
-
 // setupCodexCredentialReader is the credential reader used by setup codex.
 // It can be overridden for testing.
 var setupCodexCredentialReader prompt.CredentialReader
@@ -121,7 +117,7 @@ func runSetupCodex(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("failed to get confirmation: %w", err)
 		}
 		if !replace {
-			fmt.Fprintln(cmd.OutOrStdout(), "Setup canceled. Existing credentials unchanged.")
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), "Setup canceled. Existing credentials unchanged.")
 			return nil
 		}
 	}
@@ -139,7 +135,7 @@ func runSetupCodex(cmd *cobra.Command, args []string) error {
 	}
 
 	// Display the result
-	fmt.Fprintf(cmd.OutOrStdout(), "Full-auto mode: %v\n", fullAuto)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Full-auto mode: %v\n", fullAuto)
 
 	// Save to config
 	if err := saveCodexCredentialsToConfig(cmd, apiKey, fullAuto); err != nil {
@@ -153,7 +149,7 @@ func runSetupCodex(cmd *cobra.Command, args []string) error {
 func handleCodexAPIKeyInput(cmd *cobra.Command) (string, error) {
 	reader := getSetupCodexCredentialReader(cmd)
 
-	fmt.Fprintln(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	apiKey, err := reader.ReadCredential("Paste your OpenAI API key (from platform.openai.com/api-keys): ")
 	if err != nil {
 		return "", fmt.Errorf("failed to read API key: %w", err)
@@ -164,7 +160,7 @@ func handleCodexAPIKeyInput(cmd *cobra.Command) (string, error) {
 		return "", fmt.Errorf("API key cannot be empty")
 	}
 
-	fmt.Fprintln(cmd.OutOrStdout(), "API key received.")
+	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "API key received.")
 
 	return apiKey, nil
 }
@@ -174,7 +170,7 @@ func handleCodexAPIKeyInput(cmd *cobra.Command) (string, error) {
 func handleFullAutoPrompt(cmd *cobra.Command) (bool, error) {
 	yesNo := getSetupCodexYesNoPrompter(cmd)
 
-	fmt.Fprintln(cmd.OutOrStdout())
+	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 	fullAuto, err := yesNo.PromptYesNo("Enable full-auto mode? (skips approval prompts, recommended inside cloister) [Y/n]: ", true)
 	if err != nil {
 		return false, fmt.Errorf("failed to get full-auto setting: %w", err)
@@ -222,7 +218,7 @@ func saveCodexCredentialsToConfig(cmd *cobra.Command, apiKey string, fullAuto bo
 
 	// Print success message
 	configPath := getConfigPath()
-	fmt.Fprintf(cmd.OutOrStdout(), "\nConfiguration saved to: %s\n", configPath)
+	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nConfiguration saved to: %s\n", configPath)
 
 	return nil
 }

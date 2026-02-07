@@ -183,8 +183,8 @@ func TestRealExecutorContextCancelled(t *testing.T) {
 // the inherited environment is preserved.
 func TestRealExecutorPreserveInheritedEnv(t *testing.T) {
 	// Set a test env var that should be inherited
-	os.Setenv("EXECUTOR_TEST_INHERITED", "inherited_value")
-	defer os.Unsetenv("EXECUTOR_TEST_INHERITED")
+	_ = os.Setenv("EXECUTOR_TEST_INHERITED", "inherited_value")
+	defer func() { _ = os.Unsetenv("EXECUTOR_TEST_INHERITED") }()
 
 	executor := NewRealExecutor()
 	req := ExecuteRequest{

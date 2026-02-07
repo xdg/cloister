@@ -277,7 +277,7 @@ func TestProjectName_FallbackToDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Initialize git repo
 	if _, err := runGit(tmpDir, "init"); err != nil {
@@ -392,7 +392,7 @@ func TestDetectProject_NoRemote(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Initialize git repo
 	if _, err := runGit(tmpDir, "init"); err != nil {
@@ -450,7 +450,7 @@ func TestDetectProject_NotGitRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	_, err = DetectProject(tmpDir)
 	if err == nil {
@@ -488,7 +488,7 @@ func TestGetRemoteURL(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
-		defer os.RemoveAll(tmpDir)
+		defer func() { _ = os.RemoveAll(tmpDir) }()
 
 		// Initialize git repo
 		if _, err := runGit(tmpDir, "init"); err != nil {
@@ -510,7 +510,7 @@ func TestGetRemoteURL(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to create temp dir: %v", err)
 		}
-		defer os.RemoveAll(tmpDir)
+		defer func() { _ = os.RemoveAll(tmpDir) }()
 
 		remote := GetRemoteURL(tmpDir)
 		// Should return empty string (not an error)

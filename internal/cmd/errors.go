@@ -26,7 +26,7 @@ func NewExitCodeError(code int) *ExitCodeError {
 
 // dockerNotRunningError returns a user-friendly error when Docker is not running.
 func dockerNotRunningError() error {
-	return fmt.Errorf("Docker is not running; please start Docker and try again")
+	return fmt.Errorf("docker is not running; please start Docker and try again")
 }
 
 // gitDetectionError handles common git detection errors with user-friendly messages.

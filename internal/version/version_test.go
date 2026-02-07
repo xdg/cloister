@@ -7,7 +7,7 @@ import (
 
 func TestDefaultImage_VersionBased(t *testing.T) {
 	// Ensure env var doesn't interfere
-	os.Unsetenv(ImageEnvVar)
+	_ = os.Unsetenv(ImageEnvVar)
 
 	tests := []struct {
 		name     string
@@ -70,9 +70,9 @@ func TestDefaultImage_EnvVarOverride(t *testing.T) {
 	defer func() {
 		Version = originalVersion
 		if originalEnv == "" {
-			os.Unsetenv(ImageEnvVar)
+			_ = os.Unsetenv(ImageEnvVar)
 		} else {
-			os.Setenv(ImageEnvVar, originalEnv)
+			_ = os.Setenv(ImageEnvVar, originalEnv)
 		}
 	}()
 
@@ -106,9 +106,9 @@ func TestDefaultImage_EnvVarOverride(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			Version = tt.version
 			if tt.envValue == "" {
-				os.Unsetenv(ImageEnvVar)
+				_ = os.Unsetenv(ImageEnvVar)
 			} else {
-				os.Setenv(ImageEnvVar, tt.envValue)
+				_ = os.Setenv(ImageEnvVar, tt.envValue)
 			}
 
 			got := DefaultImage()

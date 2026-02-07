@@ -62,7 +62,7 @@ func TestDockerNotRunningError(t *testing.T) {
 	}
 
 	msg := err.Error()
-	if !strings.Contains(msg, "Docker is not running") {
+	if !strings.Contains(msg, "docker is not running") {
 		t.Errorf("expected error to mention Docker not running, got: %s", msg)
 	}
 	if !strings.Contains(msg, "please start Docker") {

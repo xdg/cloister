@@ -47,7 +47,7 @@ func (p *StdinPrompter) Prompt(prompt string, options []string, defaultIdx int) 
 	}
 
 	// Display the prompt
-	fmt.Fprintln(p.Out, prompt)
+	_, _ = fmt.Fprintln(p.Out, prompt)
 
 	// Display numbered options (1-indexed for user)
 	for i, opt := range options {
@@ -55,11 +55,11 @@ func (p *StdinPrompter) Prompt(prompt string, options []string, defaultIdx int) 
 		if i == defaultIdx {
 			suffix = " (default)"
 		}
-		fmt.Fprintf(p.Out, "  %d. %s%s\n", i+1, opt, suffix)
+		_, _ = fmt.Fprintf(p.Out, "  %d. %s%s\n", i+1, opt, suffix)
 	}
 
 	// Prompt for input
-	fmt.Fprintf(p.Out, "Enter selection [%d]: ", defaultIdx+1)
+	_, _ = fmt.Fprintf(p.Out, "Enter selection [%d]: ", defaultIdx+1)
 
 	// Read user input
 	reader := bufio.NewReader(p.In)
@@ -169,7 +169,7 @@ func NewTerminalCredentialReader(in *os.File, out io.Writer) *TerminalCredential
 
 // ReadCredential displays the prompt and reads input with echoing disabled.
 func (r *TerminalCredentialReader) ReadCredential(prompt string) (string, error) {
-	fmt.Fprint(r.Out, prompt)
+	_, _ = fmt.Fprint(r.Out, prompt)
 
 	// Read password with terminal echo disabled
 	credential, err := term.ReadPassword(int(r.In.Fd()))
@@ -178,7 +178,7 @@ func (r *TerminalCredentialReader) ReadCredential(prompt string) (string, error)
 	}
 
 	// Print newline since ReadPassword doesn't echo it
-	fmt.Fprintln(r.Out)
+	_, _ = fmt.Fprintln(r.Out)
 
 	return string(credential), nil
 }
@@ -249,7 +249,7 @@ func NewStdinYesNoPrompter(r io.Reader, w io.Writer) *StdinYesNoPrompter {
 // Accepts "y", "Y", "yes", "YES" as true; "n", "N", "no", "NO" as false.
 // Empty input returns defaultYes.
 func (p *StdinYesNoPrompter) PromptYesNo(prompt string, defaultYes bool) (bool, error) {
-	fmt.Fprint(p.Out, prompt)
+	_, _ = fmt.Fprint(p.Out, prompt)
 
 	reader := bufio.NewReader(p.In)
 	line, err := reader.ReadString('\n')

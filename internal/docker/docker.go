@@ -320,7 +320,7 @@ func WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid st
 	if err != nil {
 		return fmt.Errorf("failed to create temp dir: %w", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Get the filename and destination directory
 	fileName := filepath.Base(destPath)
@@ -393,10 +393,10 @@ func WriteFileToContainer(containerName, destPath, content string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
-	defer os.Remove(tmpFile.Name())
+	defer func() { _ = os.Remove(tmpFile.Name()) }()
 
 	if _, err := tmpFile.WriteString(content); err != nil {
-		tmpFile.Close()
+		_ = tmpFile.Close()
 		return fmt.Errorf("failed to write temp file: %w", err)
 	}
 	if err := tmpFile.Close(); err != nil {

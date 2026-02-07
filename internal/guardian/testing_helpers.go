@@ -49,7 +49,7 @@ func startMockUpstream(t *testing.T, handler func(net.Conn)) (string, func()) {
 			wg.Add(1)
 			go func(c net.Conn) {
 				defer wg.Done()
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				handler(c)
 			}(conn)
 		}
@@ -57,7 +57,7 @@ func startMockUpstream(t *testing.T, handler func(net.Conn)) (string, func()) {
 
 	cleanup := func() {
 		close(done)
-		listener.Close()
+		_ = listener.Close()
 		wg.Wait()
 	}
 

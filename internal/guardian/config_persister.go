@@ -243,10 +243,7 @@ func (p *ConfigPersisterImpl) AddPatternToGlobal(pattern string) error {
 // If the notifier panics, the panic is caught and discarded.
 func safeNotify(notifier func()) {
 	defer func() {
-		if r := recover(); r != nil {
-			// Silently discard panic from notifier callback
-			// This prevents a misbehaving callback from crashing the guardian
-		}
+		_ = recover() // Silently discard panic from notifier callback
 	}()
 	notifier()
 }

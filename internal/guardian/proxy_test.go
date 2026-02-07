@@ -131,7 +131,7 @@ func TestProxyServer_ConnectMethod(t *testing.T) {
 		if err != nil {
 			t.Fatalf("request failed: %v", err)
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 
 		if resp.StatusCode != http.StatusOK {
 			t.Errorf("expected status 200, got %d", resp.StatusCode)
@@ -175,7 +175,7 @@ func TestProxyServer_NonConnectMethods(t *testing.T) {
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 
 			if resp.StatusCode != http.StatusMethodNotAllowed {
 				t.Errorf("expected status 405, got %d", resp.StatusCode)
@@ -254,7 +254,7 @@ func TestProxyServer_TunnelEstablishment(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to connect to proxy: %v", err)
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Send CONNECT request
 		connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamAddr, upstreamAddr)
@@ -309,7 +309,7 @@ func TestProxyServer_TunnelEstablishment(t *testing.T) {
 		if err != nil {
 			t.Fatalf("failed to connect to proxy: %v", err)
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Establish tunnel
 		connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamAddr, upstreamAddr)
@@ -363,7 +363,7 @@ func TestProxyServer_TunnelBlockedDomain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Try to CONNECT to a non-allowed domain
 	connectReq := "CONNECT example.com:443 HTTP/1.1\r\nHost: example.com:443\r\n\r\n"
@@ -403,7 +403,7 @@ func TestProxyServer_TunnelUpstreamConnectionFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Try to CONNECT to a port that's definitely not listening
 	connectReq := "CONNECT 127.0.0.1:59999 HTTP/1.1\r\nHost: 127.0.0.1:59999\r\n\r\n"
@@ -430,7 +430,7 @@ func TestProxyServer_TunnelConnectionTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to start slow upstream: %v", err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 
 	slowAddr := listener.Addr().String()
 	slowHost, _, _ := net.SplitHostPort(slowAddr)
@@ -514,10 +514,10 @@ func TestProxyServer_TunnelIdleTimeout(t *testing.T) {
 		// dstRead/dstWrite is the "destination" connection (server side)
 		srcRead, srcWrite := net.Pipe()
 		dstRead, dstWrite := net.Pipe()
-		defer srcRead.Close()
-		defer srcWrite.Close()
-		defer dstRead.Close()
-		defer dstWrite.Close()
+		defer func() { _ = srcRead.Close() }()
+		defer func() { _ = srcWrite.Close() }()
+		defer func() { _ = dstRead.Close() }()
+		defer func() { _ = dstWrite.Close() }()
 
 		// Use a very short timeout for testing
 		shortTimeout := 100 * time.Millisecond
@@ -541,10 +541,10 @@ func TestProxyServer_TunnelIdleTimeout(t *testing.T) {
 	t.Run("copyWithIdleTimeout resets on activity", func(t *testing.T) {
 		srcRead, srcWrite := net.Pipe()
 		dstRead, dstWrite := net.Pipe()
-		defer srcRead.Close()
-		defer srcWrite.Close()
-		defer dstRead.Close()
-		defer dstWrite.Close()
+		defer func() { _ = srcRead.Close() }()
+		defer func() { _ = srcWrite.Close() }()
+		defer func() { _ = dstRead.Close() }()
+		defer func() { _ = dstWrite.Close() }()
 
 		shortTimeout := 100 * time.Millisecond
 
@@ -594,7 +594,7 @@ func TestProxyServer_TunnelCleanShutdown(t *testing.T) {
 			return
 		}
 		_, _ = conn.Write(buf[:n])
-		conn.Close()
+		_ = conn.Close()
 		mu.Lock()
 		upstreamClosed = true
 		mu.Unlock()
@@ -621,7 +621,7 @@ func TestProxyServer_TunnelCleanShutdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Establish tunnel
 	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamAddr, upstreamAddr)
@@ -759,7 +759,7 @@ func TestProxyServer_Authentication(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to connect to proxy: %v", err)
 			}
-			defer conn.Close()
+			defer func() { _ = conn.Close() }()
 
 			// Build CONNECT request with optional auth header
 			var reqBuilder strings.Builder
@@ -863,7 +863,7 @@ func TestProxyServer_NoTokenValidatorAllowsAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamAddr, upstreamAddr)
 	_, err = conn.Write([]byte(connectReq))
@@ -918,7 +918,7 @@ func TestProxyServer_AuthWithTunnelData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send authenticated CONNECT request
 	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:my-secret-token"))
@@ -1059,7 +1059,7 @@ func TestProxyServer_ConfigDerivedAllowlist(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// CONNECT to allowed host
 	connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamAddr, upstreamAddr)
@@ -1218,7 +1218,7 @@ func TestProxyServer_PerProjectAllowlist(t *testing.T) {
 		if err != nil {
 			return 0, err
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:"+token))
 		connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: %s\r\n\r\n",
@@ -1320,7 +1320,7 @@ func TestProxyServer_DomainApproval_NilApproverRejects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Try to connect to unlisted domain
 	connectReq := "CONNECT unlisted.com:443 HTTP/1.1\r\nHost: unlisted.com:443\r\n\r\n"
@@ -1390,7 +1390,7 @@ func TestProxyServer_DomainApproval_ApprovalAllowsConnection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send CONNECT request with auth
 	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
@@ -1449,7 +1449,7 @@ func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send CONNECT request with auth
 	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
@@ -1527,7 +1527,7 @@ func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send CONNECT request with auth
 	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
@@ -1602,7 +1602,7 @@ func TestProxyServer_DomainApproval_TokenParsedOnce(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send CONNECT request with auth
 	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
@@ -1651,7 +1651,7 @@ func TestProxyServer_DomainApproval_EmptyHostRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send CONNECT request with empty host
 	connectReq := "CONNECT HTTP/1.1\r\n\r\n"

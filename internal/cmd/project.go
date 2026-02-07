@@ -98,7 +98,7 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(term.Stdout(), 0, 0, 2, ' ', 0)
 
 	// Print header
-	fmt.Fprintln(w, "NAME\tROOT\tREMOTE\tLAST USED")
+	_, _ = fmt.Fprintln(w, "NAME\tROOT\tREMOTE\tLAST USED")
 
 	// Print each project
 	for _, p := range projects {
@@ -114,7 +114,7 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 			lastUsed = p.LastUsed.Format("2006-01-02 15:04")
 		}
 
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
 			p.Name,
 			p.Root,
 			remote,
@@ -122,7 +122,7 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	w.Flush()
+	_ = w.Flush()
 	return nil
 }
 

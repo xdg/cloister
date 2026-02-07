@@ -678,7 +678,8 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	requestedScope := scope
 
 	// Persist to config if needed
-	if scope == "project" {
+	switch scope {
+	case "project":
 		var err error
 		if isPattern {
 			err = s.ConfigPersister.AddPatternToProject(req.Project, pattern)
@@ -691,7 +692,7 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 			scope = "session"
 			isPattern = false // Session scope doesn't persist patterns
 		}
-	} else if scope == "global" {
+	case "global":
 		var err error
 		if isPattern {
 			err = s.ConfigPersister.AddPatternToGlobal(pattern)

@@ -61,13 +61,13 @@ func runList(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(term.Stdout(), 0, 0, 2, ' ', 0)
 
 	// Print header
-	fmt.Fprintln(w, "NAME\tPROJECT\tBRANCH\tUPTIME\tSTATUS")
+	_, _ = fmt.Fprintln(w, "NAME\tPROJECT\tBRANCH\tUPTIME\tSTATUS")
 
 	// Print each cloister
 	for _, c := range cloisters {
 		cloisterName := container.ContainerNameToCloisterName(c.Name)
 		project, branch := parseCloisterName(cloisterName)
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			cloisterName,
 			project,
 			branch,
@@ -76,7 +76,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	w.Flush()
+	_ = w.Flush()
 	return nil
 }
 

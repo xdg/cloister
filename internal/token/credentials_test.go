@@ -87,7 +87,7 @@ func TestCredentialEnvVars_EmptyWhenNoneSet(t *testing.T) {
 func getEnvAndUnset(t *testing.T, key string) string {
 	t.Helper()
 	value, _ := os.LookupEnv(key)
-	os.Unsetenv(key)
+	_ = os.Unsetenv(key)
 	return value
 }
 
@@ -96,9 +96,9 @@ func getEnvAndUnset(t *testing.T, key string) string {
 func restoreEnv(t *testing.T, key, origValue string) {
 	t.Helper()
 	if origValue == "" {
-		os.Unsetenv(key)
+		_ = os.Unsetenv(key)
 	} else {
-		os.Setenv(key, origValue)
+		_ = os.Setenv(key, origValue)
 	}
 }
 

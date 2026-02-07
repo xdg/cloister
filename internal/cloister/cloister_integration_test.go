@@ -34,7 +34,7 @@ func TestCloisterLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
-		t.Cleanup(func() { os.RemoveAll(tmpDir) })
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 		opts := StartOptions{
 			ProjectPath: tmpDir,
@@ -105,7 +105,7 @@ func TestCloisterLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
-		t.Cleanup(func() { os.RemoveAll(tmpDir) })
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 		opts := StartOptions{
 			ProjectPath: tmpDir,
@@ -183,7 +183,7 @@ func TestCloisterLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
-		t.Cleanup(func() { os.RemoveAll(tmpDir) })
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 		opts := StartOptions{
 			ProjectPath: tmpDir,
@@ -230,7 +230,7 @@ func TestCloisterLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
-		t.Cleanup(func() { os.RemoveAll(tmpDir) })
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 		opts := StartOptions{
 			ProjectPath: tmpDir,
@@ -283,7 +283,7 @@ func TestCloisterLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create temp dir: %v", err)
 		}
-		t.Cleanup(func() { os.RemoveAll(tmpDir) })
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 		opts := StartOptions{
 			ProjectPath: tmpDir,
@@ -386,7 +386,7 @@ func TestCopyToContainerWithOwner(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	// Create a .claude directory with some test files
 	srcClaudeDir := filepath.Join(tmpDir, ".claude")
@@ -455,7 +455,7 @@ func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create mock home: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(mockHome) })
+	t.Cleanup(func() { _ = os.RemoveAll(mockHome) })
 
 	// Create mock ~/.claude with test files
 	mockClaudeDir := filepath.Join(mockHome, ".claude")
@@ -487,7 +487,7 @@ func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(tmpDir) })
+	t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
 
 	// Create container using docker create directly (not through cloister.Start)
 	// to avoid needing the guardian. Uses cloister-default which has /home/cloister.

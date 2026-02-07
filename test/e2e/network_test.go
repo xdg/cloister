@@ -164,7 +164,7 @@ func TestNetworkIsolation_HostCannotReachRequestServer(t *testing.T) {
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/request", request.DefaultRequestPort))
 	if err == nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		t.Error("Expected connection to localhost:9998 to fail (port should not be exposed to host)")
 	}
 	// Connection refused or timeout is expected
@@ -181,7 +181,7 @@ func TestNetworkIsolation_HostCanReachAPIServer(t *testing.T) {
 		t.Errorf("Expected connection to %s to succeed: %v", apiAddr, err)
 		return
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	// GET /tokens should return 200 (empty list is fine)
 	if resp.StatusCode != http.StatusOK {

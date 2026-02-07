@@ -189,7 +189,7 @@ func TestGuardian_Lifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to connect to executor at %s: %v", addr, err)
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Build request
 		// Token validation is handled by the guardian before forwarding to executor

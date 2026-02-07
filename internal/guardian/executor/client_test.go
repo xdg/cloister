@@ -22,7 +22,7 @@ func shortTempDir(t *testing.T) string {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	t.Cleanup(func() { os.RemoveAll(dir) })
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
 	return dir
 }
 
@@ -44,7 +44,7 @@ func newMockServer(t *testing.T) *mockServer {
 	}
 
 	t.Cleanup(func() {
-		listener.Close()
+		_ = listener.Close()
 	})
 
 	return &mockServer{
@@ -63,7 +63,7 @@ func TestClientExecuteSuccess(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Read request
 		reader := bufio.NewReader(conn)
@@ -166,7 +166,7 @@ func TestClientExecuteInvalidResponse(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Read request
 		reader := bufio.NewReader(conn)
@@ -204,7 +204,7 @@ func TestClientExecuteSocketError(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Read request
 		reader := bufio.NewReader(conn)
@@ -253,7 +253,7 @@ func TestClientExecuteWithEnvAndTimeout(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Read request
 		reader := bufio.NewReader(conn)
@@ -328,7 +328,7 @@ func TestClientExecuteReadError(t *testing.T) {
 		_, _ = reader.ReadBytes('\n')
 
 		// Close connection without sending response
-		conn.Close()
+		_ = conn.Close()
 	}()
 
 	client := NewClient(mock.sockPath, "test-secret")
@@ -361,7 +361,7 @@ func TestClientWireFormat(t *testing.T) {
 		if err != nil {
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 
 		// Read raw request
 		reader := bufio.NewReader(conn)
