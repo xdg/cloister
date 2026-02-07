@@ -285,9 +285,15 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	// Set up per-project allowlist support
 	proxy.AllowlistCache = allowlistCache
-	proxy.TokenLookup = func(token string) (string, bool) {
+	proxy.TokenLookup = func(token string) (guardian.TokenLookupResult, bool) {
 		info, ok := registry.Lookup(token)
-		return info.ProjectName, ok
+		if !ok {
+			return guardian.TokenLookupResult{}, false
+		}
+		return guardian.TokenLookupResult{
+			ProjectName:  info.ProjectName,
+			CloisterName: info.CloisterName,
+		}, true
 	}
 
 	// Create project allowlist loader that merges project config with global

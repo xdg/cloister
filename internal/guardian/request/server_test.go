@@ -15,16 +15,13 @@ import (
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
+	"github.com/xdg/cloister/internal/testutil"
 )
 
 // noProxyClient returns an HTTP client that doesn't use any proxy.
-// This is needed in tests to avoid using the cloister guardian proxy.
+// Delegates to testutil.NoProxyClient for the canonical implementation.
 func noProxyClient() *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			Proxy: nil,
-		},
-	}
+	return testutil.NoProxyClient()
 }
 
 func TestNewServer(t *testing.T) {

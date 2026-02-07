@@ -1183,14 +1183,14 @@ func TestProxyServer_PerProjectAllowlist(t *testing.T) {
 	cache.SetProject("project-b", NewAllowlist([]string{"project-b-domain.com"}))
 
 	// Token lookup function
-	tokenLookup := func(token string) (string, bool) {
+	tokenLookup := func(token string) (TokenLookupResult, bool) {
 		switch token {
 		case "token-a":
-			return "project-a", true
+			return TokenLookupResult{ProjectName: "project-a"}, true
 		case "token-b":
-			return "project-b", true
+			return TokenLookupResult{ProjectName: "project-b"}, true
 		default:
-			return "", false
+			return TokenLookupResult{}, false
 		}
 	}
 
@@ -1367,11 +1367,11 @@ func TestProxyServer_DomainApproval_ApprovalAllowsConnection(t *testing.T) {
 	cache := NewAllowlistCache(globalAllowlist)
 	cache.SetProject("test-project", NewAllowlist([]string{}))
 	p.AllowlistCache = cache
-	p.TokenLookup = func(token string) (string, bool) {
+	p.TokenLookup = func(token string) (TokenLookupResult, bool) {
 		if token == "test-token" {
-			return "test-project", true
+			return TokenLookupResult{ProjectName: "test-project"}, true
 		}
-		return "", false
+		return TokenLookupResult{}, false
 	}
 	p.TokenValidator = newMockTokenValidator("test-token")
 
@@ -1426,11 +1426,11 @@ func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
 	cache := NewAllowlistCache(globalAllowlist)
 	cache.SetProject("test-project", NewAllowlist([]string{}))
 	p.AllowlistCache = cache
-	p.TokenLookup = func(token string) (string, bool) {
+	p.TokenLookup = func(token string) (TokenLookupResult, bool) {
 		if token == "test-token" {
-			return "test-project", true
+			return TokenLookupResult{ProjectName: "test-project"}, true
 		}
-		return "", false
+		return TokenLookupResult{}, false
 	}
 	p.TokenValidator = newMockTokenValidator("test-token")
 
@@ -1504,11 +1504,11 @@ func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
 	cache := NewAllowlistCache(globalAllowlist)
 	cache.SetProject("test-project", NewAllowlist([]string{}))
 	p.AllowlistCache = cache
-	p.TokenLookup = func(token string) (string, bool) {
+	p.TokenLookup = func(token string) (TokenLookupResult, bool) {
 		if token == "test-token" {
-			return "test-project", true
+			return TokenLookupResult{ProjectName: "test-project"}, true
 		}
-		return "", false
+		return TokenLookupResult{}, false
 	}
 	p.TokenValidator = newMockTokenValidator("test-token")
 
@@ -1554,9 +1554,9 @@ func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
 	}
 }
 
-func TestProxyServer_DomainApproval_TokenParsedOnce(t *testing.T) {
-	// Test that token is only parsed once during approval flow
-	parseCount := 0
+func TestProxyServer_DomainApproval_SingleTokenLookup(t *testing.T) {
+	// Test that TokenLookup is only called once per request (via resolveRequest)
+	lookupCount := 0
 	var mu sync.Mutex
 
 	p := NewProxyServer(":0")
@@ -1576,14 +1576,14 @@ func TestProxyServer_DomainApproval_TokenParsedOnce(t *testing.T) {
 	cache := NewAllowlistCache(globalAllowlist)
 	cache.SetProject("test-project", NewAllowlist([]string{}))
 	p.AllowlistCache = cache
-	p.TokenLookup = func(token string) (string, bool) {
+	p.TokenLookup = func(token string) (TokenLookupResult, bool) {
 		mu.Lock()
-		parseCount++
+		lookupCount++
 		mu.Unlock()
 		if token == "test-token" {
-			return "test-project", true
+			return TokenLookupResult{ProjectName: "test-project"}, true
 		}
-		return "", false
+		return TokenLookupResult{}, false
 	}
 	p.TokenValidator = newMockTokenValidator("test-token")
 
@@ -1619,15 +1619,13 @@ func TestProxyServer_DomainApproval_TokenParsedOnce(t *testing.T) {
 		t.Fatalf("failed to read status line: %v", err)
 	}
 
-	// Verify token was parsed exactly twice:
-	// 1. In authenticate() for TokenValidator.Validate
-	// 2. In extractProjectName() for project lookup
+	// Verify TokenLookup was called exactly once (in resolveRequest)
 	mu.Lock()
-	count := parseCount
+	count := lookupCount
 	mu.Unlock()
 
-	if count != 2 {
-		t.Errorf("expected token to be parsed exactly 2 times, but was parsed %d times", count)
+	if count != 1 {
+		t.Errorf("expected TokenLookup to be called exactly 1 time, but was called %d times", count)
 	}
 }
 

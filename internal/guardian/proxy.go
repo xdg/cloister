@@ -370,17 +370,8 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// r.Host contains the target host:port for CONNECT requests
 	host := r.Host
 
-	// Get the allowlist to use for this request
-	allowlist := p.getAllowlistForRequest(r)
-
-	// Ensure we have an allowlist - fall back to global if nil
-	if allowlist == nil {
-		allowlist = p.Allowlist
-	}
-
-	// Extract token and project name once for reuse
-	token := p.extractToken(r)
-	projectName := p.extractProjectName(r)
+	// Resolve allowlist, project, cloister, and token from the request in a single lookup
+	allowlist, projectName, cloisterName, token := p.resolveRequest(r)
 
 	// Check static allowlist FIRST, before session or approval logic
 	staticAllowed := allowlist != nil && allowlist.IsAllowed(host)
@@ -408,7 +399,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 			// Request approval (blocks until response)
 			// Note: DomainApprover still uses project name for the approval queue/UI display
-			result, err := p.DomainApprover.RequestApproval(projectName, "", host, token)
+			result, err := p.DomainApprover.RequestApproval(projectName, cloisterName, host, token)
 			if err != nil || !result.Approved {
 				http.Error(w, "Forbidden - domain not approved", http.StatusForbidden)
 				return
@@ -485,34 +476,6 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	wg.Wait()
 }
 
-// extractToken extracts the authentication token from the request.
-// Returns empty string if token cannot be extracted.
-func (p *ProxyServer) extractToken(r *http.Request) string {
-	token, ok := p.parseBasicAuth(r.Header.Get("Proxy-Authorization"))
-	if !ok {
-		return ""
-	}
-	return token
-}
-
-// extractProjectName extracts the project name from the request token.
-// Returns empty string if project cannot be determined.
-func (p *ProxyServer) extractProjectName(r *http.Request) string {
-	if p.TokenLookup == nil {
-		return ""
-	}
-
-	// Extract token from Proxy-Authorization header
-	token := p.extractToken(r)
-	if token == "" {
-		return ""
-	}
-
-	// Look up project for token
-	project, _ := p.TokenLookup(token)
-	return project
-}
-
 // copyWithIdleTimeout copies from src to dst, resetting the deadline on each read.
 // This implements an idle timeout - the connection is closed if no data is transferred
 // for the specified duration.
@@ -538,33 +501,36 @@ func copyWithIdleTimeout(dst net.Conn, src net.Conn, idleTimeout time.Duration) 
 	}
 }
 
-// getAllowlistForRequest determines the correct allowlist to use for a request.
-// It first tries to use per-project allowlists if configured, falling back to the global allowlist.
-func (p *ProxyServer) getAllowlistForRequest(r *http.Request) *Allowlist {
-	clog.Debug("getAllowlistForRequest: AllowlistCache=%v, TokenLookup=%v", p.AllowlistCache != nil, p.TokenLookup != nil)
+// resolveRequest determines the allowlist, project name, cloister name, and token for a request.
+// It extracts the token from the Proxy-Authorization header and performs a single lookup.
+// Falls back to the global allowlist with empty project/cloister if lookup is unavailable.
+func (p *ProxyServer) resolveRequest(r *http.Request) (allowlist *Allowlist, projectName string, cloisterName string, token string) {
+	clog.Debug("resolveRequest: AllowlistCache=%v, TokenLookup=%v", p.AllowlistCache != nil, p.TokenLookup != nil)
+
+	// Extract token from request header (needed for session allowlist regardless)
+	authHeader := r.Header.Get("Proxy-Authorization")
+	if authHeader != "" {
+		if t, ok := p.parseBasicAuth(authHeader); ok {
+			token = t
+		}
+	}
+
 	// If no per-project support is configured, use global allowlist
 	if p.AllowlistCache == nil || p.TokenLookup == nil {
-		clog.Debug("getAllowlistForRequest: returning p.Allowlist (global)")
-		return p.Allowlist
+		clog.Debug("resolveRequest: returning p.Allowlist (global)")
+		return p.Allowlist, "", "", token
 	}
 
-	// Extract token from request
-	authHeader := r.Header.Get("Proxy-Authorization")
-	if authHeader == "" {
-		return p.Allowlist
+	if token == "" {
+		return p.Allowlist, "", "", ""
 	}
 
-	token, ok := p.parseBasicAuth(authHeader)
-	if !ok {
-		return p.Allowlist
-	}
-
-	// Look up project for token
-	projectName, valid := p.TokenLookup(token)
-	if !valid || projectName == "" {
-		return p.Allowlist
+	// Single token lookup for project and cloister
+	result, valid := p.TokenLookup(token)
+	if !valid || result.ProjectName == "" {
+		return p.Allowlist, "", "", token
 	}
 
 	// Get project-specific allowlist
-	return p.AllowlistCache.GetProject(projectName)
+	return p.AllowlistCache.GetProject(result.ProjectName), result.ProjectName, result.CloisterName, token
 }

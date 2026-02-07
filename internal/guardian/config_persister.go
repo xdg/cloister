@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 )
 
@@ -249,7 +250,9 @@ func (p *ConfigPersisterImpl) AddPatternToGlobal(pattern string) error {
 // If the notifier panics, the panic is caught and discarded.
 func safeNotify(notifier func()) {
 	defer func() {
-		_ = recover() // Silently discard panic from notifier callback
+		if r := recover(); r != nil {
+			clog.Warn("ReloadNotifier panicked: %v", r)
+		}
 	}()
 	notifier()
 }

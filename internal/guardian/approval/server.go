@@ -69,10 +69,11 @@ type Server struct {
 	// AuditLogger logs hostexec events. If nil, no audit logging is performed.
 	AuditLogger *audit.Logger
 
-	server   *http.Server
-	listener net.Listener
-	mu       sync.Mutex
-	running  bool
+	server       *http.Server
+	listener     net.Listener
+	mu           sync.Mutex
+	running      bool
+	userIdentity string
 }
 
 // NewServer creates a new approval server.
@@ -85,10 +86,11 @@ func NewServer(queue *Queue, auditLogger *audit.Logger) *Server {
 	// Wire the event hub to the queue so it can broadcast SSE events
 	queue.SetEventHub(events)
 	return &Server{
-		Addr:        fmt.Sprintf(":%d", DefaultApprovalPort),
-		Queue:       queue,
-		Events:      events,
-		AuditLogger: auditLogger,
+		Addr:         fmt.Sprintf(":%d", DefaultApprovalPort),
+		Queue:        queue,
+		Events:       events,
+		AuditLogger:  auditLogger,
+		userIdentity: getUserIdentity(),
 	}
 }
 
@@ -409,8 +411,14 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 
 	// Log APPROVE event
 	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogApprove(project, branch, cloister, cmd, getUserIdentity())
+		_ = s.AuditLogger.LogApprove(project, branch, cloister, cmd, s.userIdentity)
 	}
+
+	// Remove from queue FIRST (cancels timeout goroutine to prevent race)
+	s.Queue.Remove(id)
+
+	// Broadcast removal event to SSE clients before unblocking the proxy
+	s.Events.BroadcastRequestRemoved(id)
 
 	// Send approved response on the request's channel.
 	// The request handler is blocked waiting on this channel and will
@@ -420,12 +428,6 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 			Status: "approved",
 		}
 	}
-
-	// Remove from queue (also cancels timeout)
-	s.Queue.Remove(id)
-
-	// Broadcast removal event to SSE clients
-	s.Events.BroadcastRequestRemoved(id)
 
 	// Check if this is an htmx request
 	if r.Header.Get("HX-Request") == "true" {
@@ -477,13 +479,19 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 
 	reason := denyReq.Reason
 	if reason == "" {
-		reason = fmt.Sprintf("Denied by %s", getUserIdentity())
+		reason = fmt.Sprintf("Denied by %s", s.userIdentity)
 	}
 
 	// Log DENY event
 	if s.AuditLogger != nil {
 		_ = s.AuditLogger.LogDeny(project, branch, cloister, cmd, reason)
 	}
+
+	// Remove from queue FIRST (cancels timeout goroutine to prevent race)
+	s.Queue.Remove(id)
+
+	// Broadcast removal event to SSE clients before unblocking the proxy
+	s.Events.BroadcastRequestRemoved(id)
 
 	// Send denied response on the request's channel
 	if req.Response != nil {
@@ -492,12 +500,6 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 			Reason: reason,
 		}
 	}
-
-	// Remove from queue (also cancels timeout)
-	s.Queue.Remove(id)
-
-	// Broadcast removal event to SSE clients
-	s.Events.BroadcastRequestRemoved(id)
 
 	// Check if this is an htmx request
 	if r.Header.Get("HX-Request") == "true" {
@@ -709,11 +711,17 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Log DOMAIN_APPROVE event (with actual scope used, not requested scope)
 	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogDomainApprove(project, cloister, persistValue, scope, getUserIdentity())
+		_ = s.AuditLogger.LogDomainApprove(project, cloister, persistValue, scope, s.userIdentity)
 	}
 
-	// Send approved response on the request's channels BEFORE removing from queue
-	// to prevent race conditions. Broadcasts to all waiting callers (coalesced requests).
+	// Remove from queue FIRST (cancels timeout goroutine to prevent race)
+	s.DomainQueue.Remove(id)
+
+	// Broadcast removal event to SSE clients before unblocking the proxy
+	s.Events.BroadcastDomainRequestRemoved(id)
+
+	// Send approved response on the request's channels.
+	// Broadcasts to all waiting callers (coalesced requests).
 	resp := DomainResponse{
 		Status:           "approved",
 		Scope:            scope,
@@ -725,12 +733,6 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 		resp.Pattern = ""
 	}
 	broadcastDomainResponse(req, resp)
-
-	// Remove from queue (also cancels timeout)
-	s.DomainQueue.Remove(id)
-
-	// Broadcast removal event to SSE clients
-	s.Events.BroadcastDomainRequestRemoved(id)
 
 	// Check if this is an htmx request
 	if r.Header.Get("HX-Request") == "true" {
@@ -791,7 +793,7 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 
 	reason := denyReq.Reason
 	if reason == "" {
-		reason = fmt.Sprintf("Denied by %s", getUserIdentity())
+		reason = fmt.Sprintf("Denied by %s", s.userIdentity)
 	}
 
 	// Log DOMAIN_DENY event
@@ -799,17 +801,17 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 		_ = s.AuditLogger.LogDomainDeny(project, cloister, domain, reason)
 	}
 
+	// Remove from queue FIRST (cancels timeout goroutine to prevent race)
+	s.DomainQueue.Remove(id)
+
+	// Broadcast removal event to SSE clients before unblocking the proxy
+	s.Events.BroadcastDomainRequestRemoved(id)
+
 	// Send denied response on the request's channels. Broadcasts to all waiting callers.
 	broadcastDomainResponse(req, DomainResponse{
 		Status: "denied",
 		Reason: reason,
 	})
-
-	// Remove from queue (also cancels timeout)
-	s.DomainQueue.Remove(id)
-
-	// Broadcast removal event to SSE clients
-	s.Events.BroadcastDomainRequestRemoved(id)
 
 	// Check if this is an htmx request
 	if r.Header.Get("HX-Request") == "true" {

@@ -68,7 +68,7 @@ test-integration: $(BINARY) docker-commit-tag
 test-e2e: $(BINARY) docker-commit-tag
 	CLOISTER_IMAGE=$(TEST_IMAGE) go test -tags=e2e $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 ./test/e2e/...
 
-test-all: test-integration test-e2e
+test-all: test-race test-integration test-e2e
 
 fmt:
 	goimports -w .

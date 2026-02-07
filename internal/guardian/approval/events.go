@@ -215,7 +215,7 @@ func domainToWildcard(domain string) string {
 func (h *EventHub) BroadcastDomainRequestRemoved(id string) {
 	data, _ := json.Marshal(RemovedEventData{ID: id})
 	h.Broadcast(Event{
-		Type: "domain-request-removed",
+		Type: EventDomainRequestRemoved,
 		Data: string(data),
 	})
 }

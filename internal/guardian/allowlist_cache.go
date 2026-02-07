@@ -6,9 +6,15 @@ import (
 	"sync"
 )
 
-// TokenLookupFunc looks up token info and returns the project name.
-// It returns the project name and true if the token is valid, empty string and false otherwise.
-type TokenLookupFunc func(token string) (projectName string, valid bool)
+// TokenLookupResult holds the result of a token lookup.
+type TokenLookupResult struct {
+	ProjectName  string
+	CloisterName string
+}
+
+// TokenLookupFunc looks up token info and returns project and cloister names.
+// It returns the result and true if the token is valid, zero value and false otherwise.
+type TokenLookupFunc func(token string) (TokenLookupResult, bool)
 
 // ProjectAllowlistLoader loads and returns the allowlist for a project.
 // It should merge the project config with the global config.

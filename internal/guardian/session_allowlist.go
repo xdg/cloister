@@ -61,7 +61,7 @@ func (s *MemorySessionAllowlist) Add(token, domain string) error {
 	if s.tokens[token] == nil {
 		s.tokens[token] = make(map[string]struct{})
 	}
-	s.tokens[token][domain] = struct{}{}
+	s.tokens[token][stripPort(domain)] = struct{}{}
 	return nil
 }
 
@@ -75,7 +75,7 @@ func (s *MemorySessionAllowlist) IsAllowed(token, domain string) bool {
 	if !ok {
 		return false
 	}
-	_, allowed := domainSet[domain]
+	_, allowed := domainSet[stripPort(domain)]
 	return allowed
 }
 

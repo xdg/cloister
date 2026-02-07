@@ -11,6 +11,8 @@ import (
 // noProxyClient returns an HTTP client that doesn't use the proxy.
 // This is necessary for tests running inside the cloister container where
 // HTTP_PROXY is set to the guardian proxy.
+// Note: Cannot use testutil.NoProxyClient here due to import cycle
+// (guardian → testutil → guardian).
 func noProxyClient() *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{

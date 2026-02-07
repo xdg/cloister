@@ -2185,8 +2185,14 @@ func TestDomainQueue_AuditLogging_Timeout(t *testing.T) {
 		t.Fatalf("failed to add domain request: %v", err)
 	}
 
-	// Wait for timeout
-	time.Sleep(50 * time.Millisecond)
+	// Wait for the timeout response — this synchronizes with the timeout goroutine
+	// which writes audit logs before sending on respChan, so reading here guarantees
+	// the audit writes have completed (no race on auditBuf).
+	select {
+	case <-respChan:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for domain timeout response")
+	}
 
 	// Verify audit logs
 	auditOutput := auditBuf.String()
