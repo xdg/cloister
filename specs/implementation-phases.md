@@ -127,7 +127,10 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 
 ---
 
-## Phase 6: Domain Approval Flow
+## Phases 6 & 7: Domain Approval Flow
+
+Phase 6 represents the approval portion.  Phase 7 represents the persistence
+portion.
 
 **Goal:** Unlisted domains can be approved interactively with persistence options.
 
@@ -146,7 +149,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 
 ---
 
-## Phase 7: Polish
+## Phase 8: Polish
 
 **Goal:** Production-ready UX and observability.
 
@@ -232,9 +235,9 @@ Phase 3 (Claude) ←──┬── Phase 4 (hostexec)
     ↓               │
 Phase 5 (Worktrees) │
     ↓               ↓
-Phase 6 (Domain Approval)
+Phases 6 & 7 (Domain Approval)
     ↓
-Phase 7 (Polish)
+Phase 8 (Polish)
     ↓
 Future (Devcontainer)
 ```
