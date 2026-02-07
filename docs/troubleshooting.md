@@ -117,6 +117,8 @@ The container tried to reach a domain that isn't allowed.
      unlisted_domain_behavior: request_approval
    ```
 
+4. Domains approved via the web UI are stored in `~/.config/cloister/approvals/` and merged automatically with static config. Check these files if a previously-approved domain stops working.
+
 ### "Connection refused" inside container
 
 Proxy isn't reachable.

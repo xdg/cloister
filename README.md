@@ -143,6 +143,7 @@ Cloister uses a layered configuration system:
 
 1. **Global config** (`~/.config/cloister/config.yaml`) — Default allowlist, timeouts, logging
 2. **Project config** (`~/.config/cloister/projects/<name>.yaml`) — Per-project allowlist additions
+3. **Approved domains** (`~/.config/cloister/approvals/`) — Web UI domain approvals (persisted separately from static config)
 
 The default configuration includes allowlists for:
 - AI provider APIs (Anthropic, OpenAI, Google)

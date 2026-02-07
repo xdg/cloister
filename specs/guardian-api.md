@@ -330,11 +330,11 @@ Connection: keep-alive
 
 Serves static assets (CSS, JavaScript) for the web UI. These assets are embedded in the binary via `go:embed`.
 
-### GET /pending-domains (Planned)
+### GET /pending-domains
 
-List pending domain approval requests. *Not yet implemented.*
+List pending domain approval requests.
 
-**Response (planned):**
+**Response:**
 ```json
 {
     "requests": [
@@ -350,11 +350,11 @@ List pending domain approval requests. *Not yet implemented.*
 }
 ```
 
-### POST /approve-domain/{id} (Planned)
+### POST /approve-domain/{id}
 
-Approve a pending domain request with specified scope. *Not yet implemented.*
+Approve a pending domain request with specified scope.
 
-**Request (planned):**
+**Request:**
 ```json
 {
     "scope": "project"
@@ -363,12 +363,12 @@ Approve a pending domain request with specified scope. *Not yet implemented.*
 
 Scope options:
 - `"session"` — Allow for this cloister session only (in-memory, expires on stop)
-- `"project"` — Save to `~/.config/cloister/projects/<name>.yaml`
-- `"global"` — Save to `~/.config/cloister/config.yaml`
+- `"project"` — Save to `~/.config/cloister/approvals/projects/<name>.yaml`
+- `"global"` — Save to `~/.config/cloister/approvals/global.yaml`
 
-### POST /deny-domain/{id} (Planned)
+### POST /deny-domain/{id}
 
-Deny a pending domain request. *Not yet implemented.*
+Deny a pending domain request.
 
 ### GET /logs?cloister={name} (Planned)
 

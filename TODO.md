@@ -224,54 +224,54 @@ This also means static config is human-authored and machine-readable, while appr
 
 ### 7.6.1 specs/cloister-spec.md
 
-- [ ] Update "Domain approval flow" section (lines ~228-238):
+- [x] Update "Domain approval flow" section (lines ~228-238):
   - "Save to project" persists to `~/.config/cloister/approvals/projects/<name>.yaml` (not `projects/<name>.yaml`)
   - "Save to global" persists to `~/.config/cloister/approvals/global.yaml` (not `config.yaml`)
-- [ ] Update "File Structure" diagram (lines ~266-294):
+- [x] Update "File Structure" diagram (lines ~266-294):
   - Add `approvals/` directory with `global.yaml` and `projects/` subdirectory
   - Add comment distinguishing static config (human-authored, RO mount) from approvals (machine-authored, RW mount)
-- [ ] Update "Configuration" section (lines ~308-312):
+- [x] Update "Configuration" section (lines ~308-312):
   - Mention approvals directory as third config source
   - Explain merge order: global config + project config + global approvals + project approvals
 
 ### 7.6.2 specs/guardian-api.md
 
-- [ ] Update `POST /approve-domain/{id}` scope options (lines ~362-367):
+- [x] Update `POST /approve-domain/{id}` scope options (lines ~362-367):
   - `"project"` saves to `~/.config/cloister/approvals/projects/<name>.yaml` (not `projects/<name>.yaml`)
   - `"global"` saves to `~/.config/cloister/approvals/global.yaml` (not `config.yaml`)
 
 ### 7.6.3 docs/configuration.md
 
-- [ ] Add `approvals/` directory to "Configuration File Locations" table
-- [ ] Add new section "Approved Domains" explaining:
+- [x] Add `approvals/` directory to "Configuration File Locations" table
+- [x] Add new section "Approved Domains" explaining:
   - Domains approved via the web UI are stored separately from static config
   - Why: guardian write access is scoped to approval files only (security)
   - Merge behavior: static config + approval files are combined at load time
   - How to consolidate: move entries from approval files into static config, then delete the approval file
-- [ ] Add example showing the approval file format
+- [x] Add example showing the approval file format
 
 ### 7.6.4 README.md
 
-- [ ] Update "Configuration" section (lines ~142-145):
+- [x] Update "Configuration" section (lines ~142-145):
   - Add `approvals/` directory as third bullet
   - Brief explanation: "Web UI domain approvals (persisted separately from static config)"
 
 ### 7.6.5 CLAUDE.md
 
-- [ ] Update `internal/config` package description:
+- [x] Update `internal/config` package description:
   - Mention approval file I/O alongside config parsing
-- [ ] Update `internal/guardian` package description:
+- [x] Update `internal/guardian` package description:
   - Mention per-project allowlist caching now includes approval files
 
 ### 7.6.6 specs/implementation-phases.md
 
-- [ ] Update Phase 6 & 7 description to mention the approval persistence split
-- [ ] Update Phase 7 verification bullets:
+- [x] Update Phase 6 & 7 description to mention the approval persistence split
+- [x] Update Phase 7 verification bullets:
   - "Save to project" and "Save to global" persist to approval files, not static config files
 
 ### 7.6.7 docs/troubleshooting.md
 
-- [ ] Update "Domain not in allowlist" section (lines ~96-118):
+- [x] Update "Domain not in allowlist" section (lines ~96-118):
   - Existing guidance (manually adding to config files) is still valid for static config
   - Add note: domains approved via web UI are stored in `~/.config/cloister/approvals/` and are merged automatically
 
@@ -279,24 +279,24 @@ This also means static config is human-authored and machine-readable, while appr
 
 These files reference `~/.config/cloister/` but only in contexts unaffected by the approval split (agent credentials, comparison docs, operational details). Verify no stale references:
 
-- [ ] `specs/agent-configuration.md` — only references `config.yaml` for agent credentials (correct, no change)
-- [ ] `specs/comparison-leash.md` — config hierarchy mention (verify still accurate)
-- [ ] `specs/comparison-claude-sandbox.md` — config location mention (verify still accurate)
-- [ ] `docs/credentials.md` — credential storage in `config.yaml` (correct, no change)
-- [ ] `docs/getting-started.md` — no config structure references
-- [ ] `docs/command-reference.md` — no config structure references
-- [ ] `docs/working-with-cloisters.md` — no config structure references
-- [ ] `docs/host-commands.md` — config references are about hostexec patterns (correct, no change)
-- [ ] `specs/container-image.md` — no config structure references
-- [ ] `specs/devcontainer-integration.md` — no config structure references
-- [ ] `specs/brand-guidelines.md` — no config structure references
-- [ ] `specs/cli-workflows.md` — no config structure references
-- [ ] `specs/config-reference.md` — documents static config schema (correct, but consider adding approval file schema)
+- [x] `specs/agent-configuration.md` — only references `config.yaml` for agent credentials (correct, no change)
+- [x] `specs/comparison-leash.md` — config hierarchy mention (verify still accurate)
+- [x] `specs/comparison-claude-sandbox.md` — config location mention (verify still accurate)
+- [x] `docs/credentials.md` — credential storage in `config.yaml` (correct, no change)
+- [x] `docs/getting-started.md` — no config structure references
+- [x] `docs/command-reference.md` — no config structure references
+- [x] `docs/working-with-cloisters.md` — no config structure references
+- [x] `docs/host-commands.md` — config references are about hostexec patterns (correct, no change)
+- [x] `specs/container-image.md` — no config structure references
+- [x] `specs/devcontainer-integration.md` — no config structure references
+- [x] `specs/brand-guidelines.md` — no config structure references
+- [x] `specs/cli-workflows.md` — no config structure references
+- [x] `specs/config-reference.md` — documents static config schema (correct, but consider adding approval file schema)
 
 ### 7.6.9 Optional: Update specs/config-reference.md
 
-- [ ] Add "Approval File Schema" section documenting the `Approvals` struct format
-- [ ] Explain relationship between approval files and static config (merge behavior, consolidation)
+- [x] Add "Approval File Schema" section documenting the `Approvals` struct format
+- [x] Explain relationship between approval files and static config (merge behavior, consolidation)
 
 ---
 

@@ -231,8 +231,8 @@ See [guardian-api.md](guardian-api.md) for full endpoint documentation.
 3. Proxy holds connection open, waiting for approval
 4. Human sees request in approval UI with options:
    - **Allow (session)** — in-memory only, expires when cloister stops
-   - **Save to project** — persists to `~/.config/cloister/projects/<name>.yaml`
-   - **Save to global** — persists to `~/.config/cloister/config.yaml`
+   - **Save to project** — persists to `~/.config/cloister/approvals/projects/<name>.yaml`
+   - **Save to global** — persists to `~/.config/cloister/approvals/global.yaml`
    - **Deny** — reject this request
 5. If approved: domain added to allowlist, request forwarded
 6. If denied or timeout: return 403 with JSON error body
@@ -265,14 +265,19 @@ cloister guardian stop            # Stop guardian
 
 ```
 ~/.config/cloister/
-├── config.yaml                # Global configuration
-├── projects/                  # Per-project configuration
+├── config.yaml                # Global configuration (human-authored, RO mount)
+├── projects/                  # Per-project configuration (human-authored, RO mount)
 │   ├── my-api.yaml
 │   ├── frontend.yaml
 │   └── shared-lib.yaml
-└── tokens/                    # Active cloister tokens (survives guardian restart)
-    ├── cloister-my-api        # Token file with cloister metadata (JSON)
-    └── cloister-frontend
+├── approvals/                 # Domain approvals from web UI (machine-authored, RW mount)
+│   ├── global.yaml            # Globally approved domains/patterns
+│   └── projects/
+│       ├── my-api.yaml        # Project-specific approved domains/patterns
+│       └── frontend.yaml
+├── tokens/                    # Active cloister tokens (survives guardian restart)
+│   ├── cloister-my-api        # Token file with cloister metadata (JSON)
+│   └── cloister-frontend
 
 ~/.local/share/cloister/
 ├── executor.json              # Executor daemon state (PID, port, secret)
@@ -308,6 +313,9 @@ See [devcontainer-integration.md](devcontainer-integration.md) for configuration
 Configuration is stored in `~/.config/cloister/`:
 - `config.yaml` — Global settings (proxy allowlist, approval patterns, agent configs)
 - `projects/<name>.yaml` — Per-project overrides (additional allowlists, refs)
+- `approvals/` — Domain approvals from web UI (merged with static config at load time)
+
+Allowlists are built from: global config + project config + global approvals + project approvals.
 
 See [config-reference.md](config-reference.md) for full schema documentation.
 

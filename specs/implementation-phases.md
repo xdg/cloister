@@ -138,12 +138,14 @@ portion.
 - Proxy holds connection for unlisted domains (60s timeout)
 - Approval UI shows pending domain requests
 - Approval scopes: session (memory only), project (persisted), global (persisted)
+- Approval persistence to isolated `~/.config/cloister/approvals/` directory (not static config)
 - Deny option for requests
 
 **Verification:**
 - Request to unlisted domain → appears in approval UI
 - "Allow (session)" → request succeeds, subsequent requests auto-allowed until stop
-- "Save to project" → persisted to project config, survives restart
+- "Save to project" → persisted to approval file, survives restart, static config unchanged
+- "Save to global" → persisted to approval file, survives restart, static config unchanged
 - "Deny" → request fails with 403
 - Timeout → request fails with 403
 

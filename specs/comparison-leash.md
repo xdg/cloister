@@ -241,6 +241,7 @@ hostexec:
 - **Config hierarchy**:
   - `~/.config/cloister/config.yaml` (global)
   - `~/.config/cloister/projects/<name>.yaml` (per-project)
+  - `~/.config/cloister/approvals/` (web UI domain approvals)
   - `.cloister.yaml` in repo (bootstrap template, never read at runtime)
 
 ---

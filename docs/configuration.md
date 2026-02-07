@@ -8,6 +8,8 @@ Cloister uses YAML configuration files to control network allowlists, hostexec p
 |------|---------|
 | `~/.config/cloister/config.yaml` | Global defaults |
 | `~/.config/cloister/projects/<name>.yaml` | Per-project overrides |
+| `~/.config/cloister/approvals/global.yaml` | Globally approved domains (from web UI) |
+| `~/.config/cloister/approvals/projects/<name>.yaml` | Per-project approved domains (from web UI) |
 
 ## Global Configuration
 
@@ -95,6 +97,31 @@ proxy:
     # Each domain needs its own entry
     - domain: api.example.com
 ```
+
+### Approved Domains
+
+Domains approved via the web UI are stored separately from static config files:
+
+```
+~/.config/cloister/approvals/
+├── global.yaml                # Globally approved domains
+└── projects/
+    └── my-api.yaml            # Per-project approved domains
+```
+
+This separation ensures the guardian container only has write access to approval data, not your static configuration. At load time, static config and approval files are merged automatically.
+
+**Approval file format:**
+```yaml
+# Example: ~/.config/cloister/approvals/projects/my-api.yaml
+domains:
+  - docs.example.com
+  - internal-api.company.com
+patterns:
+  - "*.cdn.example.com"
+```
+
+To consolidate approvals into static config, move entries from an approval file into the corresponding config file (e.g., from `approvals/global.yaml` into `config.yaml`), then delete the approval file.
 
 ### Unlisted Domain Behavior
 

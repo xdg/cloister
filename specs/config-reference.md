@@ -208,6 +208,31 @@ commands:
 
 ---
 
+## Approval File Schema
+
+Domains approved via the web UI are stored in a separate `approvals/` directory, not in the static config files above. This ensures the guardian container has write access only to approval data.
+
+```yaml
+# ~/.config/cloister/approvals/global.yaml
+# or
+# ~/.config/cloister/approvals/projects/<name>.yaml
+
+# Exact domains approved via the web UI
+domains:
+  - docs.example.com
+  - internal-api.company.com
+
+# Wildcard patterns approved via the web UI
+patterns:
+  - "*.cdn.example.com"
+```
+
+At load time, approval files are merged with static config: global config + project config + global approvals + project approvals. Deduplication is handled automatically.
+
+To consolidate accumulated approvals into static config, move entries from an approval file into the corresponding config file (e.g., from `approvals/global.yaml` into `config.yaml`), then delete the approval file. This is optional — both sources are merged at load time.
+
+---
+
 ## Audit Log Format
 
 Unified log for proxy and approval events, tagged by project, branch, and cloister.
