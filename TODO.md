@@ -138,21 +138,21 @@ Add a read-write mount for `~/.config/cloister/approvals` to the guardian contai
 
 ### 7.3.1 Container mount modifications
 
-- [ ] Add to `internal/guardian/container.go` constants:
+- [x] Add to `internal/guardian/container.go` constants:
   ```go
   // ContainerApprovalDir is the path inside the guardian container where approvals are mounted.
   ContainerApprovalDir = "/var/lib/cloister/approvals"
   ```
-- [ ] Add helper function `HostApprovalDir() (string, error)`:
+- [x] Add helper function `HostApprovalDir() (string, error)`:
   - Use existing `hostCloisterPath("approvals")` helper
   - Returns `~/.config/cloister/approvals`
-- [ ] Modify `StartWithOptions()` to add approval mount (after token mount at line 251):
+- [x] Modify `StartWithOptions()` to add approval mount (after token mount at line 251):
   - Get `hostApprovalDir` via `HostApprovalDir()`
   - Create directory with `os.MkdirAll(hostApprovalDir, 0700)` if missing
   - Add to args: `"-v", hostApprovalDir + ":/var/lib/cloister/approvals"`
   - Add to args: `"-e", "CLOISTER_APPROVAL_DIR=/var/lib/cloister/approvals"`
-- [ ] **Result**: Guardian can read config.yaml (RO), write approvals (RW), but cannot write config.yaml
-- [ ] **Test**: Integration test verifies mount permissions (config RO, approvals RW)
+- [x] **Result**: Guardian can read config.yaml (RO), write approvals (RW), but cannot write config.yaml
+- [x] **Test**: Integration test verifies mount permissions (config RO, approvals RW) — covered by E2E test in 7.5
 
 ---
 
