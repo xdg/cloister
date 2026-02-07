@@ -208,7 +208,7 @@ Create end-to-end test that verifies the guardian container can persist approval
   7. Repeat for global scope → verify `~/.config/cloister/approvals/global.yaml`
   8. Verify static config `~/.config/cloister/config.yaml` unchanged
 - [x] **Requirements**: Requires Docker, uses TestMain guardian instance
-- [ ] **Test**: Run `make test-e2e` to verify guardian container persistence
+- [x] **Test**: Run `make test-e2e` to verify guardian container persistence
 
 ---
 
