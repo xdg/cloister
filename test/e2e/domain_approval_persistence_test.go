@@ -108,6 +108,23 @@ func approveDomain(t *testing.T, port int, requestID, scope string) {
 	}
 }
 
+// denyDomain sends a denial for a pending domain request.
+func denyDomain(t *testing.T, port int, requestID, scope string, wildcard bool) {
+	t.Helper()
+	client := &http.Client{Timeout: 5 * time.Second}
+	url := fmt.Sprintf("http://127.0.0.1:%d/deny-domain/%s", port, requestID)
+	body := fmt.Sprintf(`{"scope": %q, "wildcard": %v}`, scope, wildcard)
+	resp, err := client.Post(url, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("Failed to deny domain: %v", err)
+	}
+	defer resp.Body.Close() //nolint:errcheck // test helper, always followed by ReadAll
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("Deny domain returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+}
+
 // TestDomainApprovalPersistence_ProjectScope verifies that approving a domain
 // with "project" scope persists to the project approval file on disk.
 //

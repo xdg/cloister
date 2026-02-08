@@ -271,12 +271,12 @@ Verify end-to-end workflows and update remaining documentation.
 
 ### 5.1 End-to-end workflow tests
 
-- [ ] **Test**: E2E - Deny domain with scope="global", verify future requests blocked
-- [ ] **Test**: E2E - Deny domain with scope="session", stop cloister, verify denial forgotten
-- [ ] **Test**: E2E - Approve domain with scope="once", verify subsequent requests re-prompt
-- [ ] **Test**: E2E - Deny with wildcard, verify all subdomains blocked
-- [ ] **Test**: E2E - Domain in both allowlist and denylist, verify blocked (deny wins)
-- [ ] **Test**: E2E - Load decisions from file on guardian startup, verify applied correctly
+- [x] **Test**: E2E - Deny domain with scope="global", verify future requests blocked
+- [x] **Test**: E2E - Deny domain with scope="session", stop cloister, verify denial forgotten
+- [x] **Test**: E2E - Approve domain with scope="once", verify subsequent requests re-prompt
+- [x] **Test**: E2E - Deny with wildcard, verify all subdomains blocked
+- [x] **Test**: E2E - Domain in both allowlist and denylist, verify blocked (deny wins)
+- [x] **Test**: E2E - Load decisions from file on guardian startup, verify applied correctly
 
 ### 5.2 Update CLI help text and examples
 
