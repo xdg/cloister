@@ -37,9 +37,12 @@ var guardianCmd = &cobra.Command{
 access for cloister containers.
 
 The guardian runs as a separate container and provides:
-- HTTP CONNECT proxy with domain allowlist
+- HTTP CONNECT proxy with domain allowlist/denylist
 - Per-cloister token authentication
-- Host command execution approval (future)`,
+- Host command execution approval via web UI
+
+Domain allowlist and denylist decisions are persisted in ~/.config/cloister/decisions/
+using global.yaml for global decisions and projects/<name>.yaml for per-project decisions.`,
 }
 
 var guardianStartCmd = &cobra.Command{

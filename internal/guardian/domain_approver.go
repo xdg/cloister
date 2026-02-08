@@ -120,16 +120,19 @@ func NewDomainApprover(queue *approval.DomainQueue, sessionAllowlist SessionAllo
 // RequestApproval submits a domain approval request and blocks until the human
 // responds with approval/denial or the request times out.
 //
-// The token parameter is used for session allowlist updates (token-based isolation),
-// while project is used for the approval queue/UI display.
+// The token parameter is used for session allowlist/denylist updates (token-based
+// isolation), while project is used for the approval queue/UI display.
 //
-// On "session" scope approval:
-//   - Adds domain to SessionAllowlist using token (token-based isolation)
-//   - Adds domain to the project's cached Allowlist for current guardian session
+// On approval:
+//   - "session" scope: adds domain to SessionAllowlist and project's cached Allowlist
+//   - "project"/"global" scope: ConfigPersister handles persistence; AllowlistCache
+//     is invalidated/reloaded by the guardian's config reloader
 //
-// On "project" or "global" scope approval:
-//   - ConfigPersister handles persistence from the server handler
-//   - AllowlistCache is invalidated/reloaded by the guardian's config reloader
+// On denial:
+//   - "once" scope: no persistence, immediate rejection only
+//   - "session" scope: adds domain (or wildcard pattern) to SessionDenylist
+//   - "project"/"global" scope: persists to decisions file via persistDenial
+//   - All denial scopes log an audit event (project, cloister, domain, scope, pattern)
 //
 // Returns an error if the queue add operation fails, otherwise returns the
 // approval result (approved/denied/timeout).
@@ -243,6 +246,8 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 }
 
 // persistDenial writes a denial to the project or global decisions file.
+// If isPattern is true, the target is added to DeniedPatterns; otherwise to
+// DeniedDomains. Duplicate entries are skipped via appendUnique.
 func (d *DomainApproverImpl) persistDenial(scope, project, target string, isPattern bool) error {
 	switch scope {
 	case "project":

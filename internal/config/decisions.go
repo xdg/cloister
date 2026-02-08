@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/xdg/cloister/internal/clog"
 	"gopkg.in/yaml.v3"
 )
 
@@ -14,9 +15,13 @@ import (
 // at /etc/cloister/decisions (overlaying the ro config mount), so
 // DecisionDir() resolves correctly in both host and container contexts.
 
-// Decisions represents approved and denied domains and patterns persisted
-// separately from static config files. These are written by the guardian when
-// users click "Save to Project" or "Save to Global" in the web UI.
+// Decisions represents approved and denied domains and patterns persisted in
+// the decisions directory (~/.config/cloister/decisions/), separately from
+// static config files. These are written by the guardian when users approve or
+// deny domains via the web UI, with scope options (once, session, project, global).
+// The Domains/Patterns fields record allowed entries; DeniedDomains/DeniedPatterns
+// record denied entries. Denied entries take precedence over allowed entries
+// during proxy evaluation.
 type Decisions struct {
 	Domains        []string `yaml:"domains,omitempty"`
 	Patterns       []string `yaml:"patterns,omitempty"`
@@ -88,6 +93,37 @@ func WriteProjectDecisions(project string, decisions *Decisions) error {
 		return fmt.Errorf("create decision projects dir: %w", err)
 	}
 	return writeDecisionsAtomic(ProjectDecisionPath(project), decisions)
+}
+
+// MigrateDecisionDir checks if the old approvals/ directory exists and the new
+// decisions/ directory does not. If so, it renames approvals/ to decisions/
+// to migrate existing data. Returns true if migration occurred.
+func MigrateDecisionDir() (bool, error) {
+	oldDir := ConfigDir() + "approvals"
+	newDir := DecisionDir() // ConfigDir() + "decisions"
+
+	// Check if old directory exists
+	if _, err := os.Stat(oldDir); os.IsNotExist(err) {
+		return false, nil // Nothing to migrate
+	} else if err != nil {
+		return false, fmt.Errorf("check old approvals dir: %w", err)
+	}
+
+	// Check if new directory already exists
+	if _, err := os.Stat(newDir); err == nil {
+		clog.Warn("both approvals/ and decisions/ exist; skipping migration — remove approvals/ manually")
+		return false, nil // Both exist — don't clobber
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Errorf("check decisions dir: %w", err)
+	}
+
+	// Rename old to new
+	if err := os.Rename(oldDir, newDir); err != nil {
+		return false, fmt.Errorf("migrate approvals to decisions: %w", err)
+	}
+
+	clog.Info("migrated approvals/ to decisions/ directory")
+	return true, nil
 }
 
 func writeDecisionsAtomic(path string, decisions *Decisions) error {

@@ -280,24 +280,24 @@ Verify end-to-end workflows and update remaining documentation.
 
 ### 5.2 Update CLI help text and examples
 
-- [ ] Update `internal/cmd/guardian.go` help text to reference "decisions" directory
-- [ ] Update example commands in CLI output
+- [x] Update `internal/cmd/guardian.go` help text to reference "decisions" directory
+- [x] Update example commands in CLI output
 - [ ] **Test**: Manual - `cloister guardian --help` shows updated text
 
 ### 5.3 Update internal documentation comments
 
-- [ ] Update package comments in `internal/config/decisions.go`
-- [ ] Update function comments in `internal/guardian/domain_approver.go`
-- [ ] Update comments in `internal/guardian/proxy.go` for evaluation order
+- [x] Update package comments in `internal/config/decisions.go`
+- [x] Update function comments in `internal/guardian/domain_approver.go`
+- [x] Update comments in `internal/guardian/proxy.go` for evaluation order
 - [ ] **Test**: Manual - `go doc` output shows updated terminology
 
 ### 5.4 Migration path for existing users
 
-- [ ] Add check in `DecisionDir()` to detect if old `approvals/` directory exists
-- [ ] If `approvals/` exists and `decisions/` does not, automatically migrate (rename directory)
-- [ ] Log migration: "Migrated approvals/ to decisions/ directory"
-- [ ] **Test**: Integration test - create `approvals/` directory, start guardian, verify migrated to `decisions/`
-- [ ] **Test**: Integration test - verify contents preserved during migration
+- [x] Add check in `DecisionDir()` to detect if old `approvals/` directory exists
+- [x] If `approvals/` exists and `decisions/` does not, automatically migrate (rename directory)
+- [x] Log migration: "Migrated approvals/ to decisions/ directory"
+- [x] **Test**: Integration test - create `approvals/` directory, start guardian, verify migrated to `decisions/`
+- [x] **Test**: Integration test - verify contents preserved during migration
 
 ---
 

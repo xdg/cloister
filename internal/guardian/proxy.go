@@ -376,10 +376,18 @@ func isTimeoutError(err error) bool {
 	return false
 }
 
-// handleConnect processes CONNECT requests.
-// It checks denylists, allowlists, and establishes a bidirectional tunnel to the upstream server.
-// Evaluation order: static denylist > session denylist > static allowlist > session allowlist > human approval.
-// Returns 403 Forbidden for denied/non-allowed domains, 502 Bad Gateway for connection failures.
+// handleConnect processes CONNECT requests by evaluating the domain against
+// deny/allow rules in strict precedence order, then tunneling if permitted.
+//
+// Evaluation order (first match wins):
+//  1. Static denylist (denied_domains/denied_patterns from decisions files)
+//  2. Session denylist (ephemeral per-token denials from current session)
+//  3. Static allowlist (config allow entries + approved domains/patterns from decisions files)
+//  4. Session allowlist (ephemeral per-token approvals from current session)
+//  5. Human approval via web UI (or immediate 403 if no DomainApprover configured)
+//
+// Returns 403 Forbidden for denied/non-allowed domains, 502 Bad Gateway for
+// upstream connection failures, 504 Gateway Timeout for upstream dial timeouts.
 func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// r.Host contains the target host:port for CONNECT requests (e.g., "example.com:443")
 	// We strip the port early so all subsequent processing uses domain-only.

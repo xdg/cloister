@@ -224,6 +224,12 @@ func StartWithOptions(opts StartOptions) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
+	// Migrate old approvals/ directory to decisions/ if needed (host-side,
+	// before creating the decisions dir so rename can succeed).
+	if _, err := config.MigrateDecisionDir(); err != nil {
+		return fmt.Errorf("failed to migrate approvals directory: %w", err)
+	}
+
 	// Decision dir is a subdirectory of config dir, mounted rw to overlay the ro config mount
 	hostDecisionDir := hostConfigDir + "/decisions"
 	if err := os.MkdirAll(hostDecisionDir, 0700); err != nil {
