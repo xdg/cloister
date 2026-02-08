@@ -7,7 +7,7 @@ import (
 )
 
 func TestApprovalsToAllowEntries_DomainsOnly(t *testing.T) {
-	approvals := &config.Approvals{
+	approvals := &config.Decisions{
 		Domains: []string{"example.com", "api.example.com"},
 	}
 
@@ -33,7 +33,7 @@ func TestApprovalsToAllowEntries_DomainsOnly(t *testing.T) {
 }
 
 func TestApprovalsToAllowEntries_PatternsOnly(t *testing.T) {
-	approvals := &config.Approvals{
+	approvals := &config.Decisions{
 		Patterns: []string{"*.example.com", "*.cdn.example.com"},
 	}
 
@@ -59,7 +59,7 @@ func TestApprovalsToAllowEntries_PatternsOnly(t *testing.T) {
 }
 
 func TestApprovalsToAllowEntries_DomainsAndPatterns(t *testing.T) {
-	approvals := &config.Approvals{
+	approvals := &config.Decisions{
 		Domains:  []string{"example.com"},
 		Patterns: []string{"*.example.com"},
 	}
@@ -88,7 +88,7 @@ func TestApprovalsToAllowEntries_DomainsAndPatterns(t *testing.T) {
 }
 
 func TestApprovalsToAllowEntries_Empty(t *testing.T) {
-	approvals := &config.Approvals{
+	approvals := &config.Decisions{
 		Domains:  []string{},
 		Patterns: []string{},
 	}
@@ -106,7 +106,7 @@ func TestApprovalsToAllowEntries_Empty(t *testing.T) {
 }
 
 func TestApprovalsToAllowEntries_NilSlices(t *testing.T) {
-	approvals := &config.Approvals{
+	approvals := &config.Decisions{
 		Domains:  nil,
 		Patterns: nil,
 	}
@@ -130,7 +130,7 @@ func TestMergeStaticAndApprovals_GlobalOnly(t *testing.T) {
 		{Domain: "golang.org"},
 		{Domain: "api.anthropic.com"},
 	}
-	approvals := &config.Approvals{
+	approvals := &config.Decisions{
 		Domains:  []string{"approved.example.com"},
 		Patterns: []string{"*.cdn.example.com"},
 	}
@@ -177,10 +177,10 @@ func TestMergeStaticAndApprovals_ProjectWithAllFourSources(t *testing.T) {
 	projectStatic := []config.AllowEntry{
 		{Domain: "custom.project.com"},
 	}
-	globalApprovals := &config.Approvals{
+	globalApprovals := &config.Decisions{
 		Domains: []string{"approved-global.com"},
 	}
-	projectApprovals := &config.Approvals{
+	projectApprovals := &config.Decisions{
 		Domains:  []string{"approved-project.com"},
 		Patterns: []string{"*.internal.corp"},
 	}
@@ -227,7 +227,7 @@ func TestMergeStaticAndApprovals_EmptyApprovals(t *testing.T) {
 		{Domain: "golang.org"},
 		{Domain: "api.anthropic.com"},
 	}
-	approvals := &config.Approvals{
+	approvals := &config.Decisions{
 		Domains:  []string{},
 		Patterns: []string{},
 	}
@@ -248,7 +248,7 @@ func TestMergeStaticAndApprovals_EmptyApprovals(t *testing.T) {
 
 func TestMergeStaticAndApprovals_OnlyApprovals(t *testing.T) {
 	var staticAllow []config.AllowEntry
-	approvals := &config.Approvals{
+	approvals := &config.Decisions{
 		Domains:  []string{"approved.example.com"},
 		Patterns: []string{"*.cdn.example.com"},
 	}

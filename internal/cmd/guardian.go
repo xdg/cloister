@@ -263,7 +263,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	globalApprovals, err := config.LoadGlobalApprovals()
 	if err != nil {
 		clog.Warn("failed to load global approvals: %v", err)
-		globalApprovals = &config.Approvals{}
+		globalApprovals = &config.Decisions{}
 	}
 	globalAllow := cfg.Proxy.Allow
 	if len(globalApprovals.Domains) > 0 || len(globalApprovals.Patterns) > 0 {
@@ -308,7 +308,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		projectApprovals, err := config.LoadProjectApprovals(projectName)
 		if err != nil {
 			clog.Warn("failed to load project approvals for %s: %v", projectName, err)
-			projectApprovals = &config.Approvals{}
+			projectApprovals = &config.Decisions{}
 		}
 
 		// Check if there's anything project-specific to merge
@@ -347,7 +347,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		newGlobalApprovals, err := config.LoadGlobalApprovals()
 		if err != nil {
 			clog.Warn("failed to reload global approvals: %v", err)
-			newGlobalApprovals = &config.Approvals{}
+			newGlobalApprovals = &config.Decisions{}
 		}
 		globalApprovals = newGlobalApprovals
 
@@ -464,7 +464,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			newGlobalApprovals, err := config.LoadGlobalApprovals()
 			if err != nil {
 				clog.Warn("failed to reload global approvals: %v", err)
-				newGlobalApprovals = &config.Approvals{}
+				newGlobalApprovals = &config.Decisions{}
 			}
 			globalApprovals = newGlobalApprovals
 			globalAllow := cfg.Proxy.Allow
@@ -706,8 +706,8 @@ func formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%d days", days)
 }
 
-// approvalsToAllowEntries converts an Approvals struct to AllowEntry slice.
-func approvalsToAllowEntries(approvals *config.Approvals) []config.AllowEntry {
+// approvalsToAllowEntries converts a Decisions struct to AllowEntry slice.
+func approvalsToAllowEntries(approvals *config.Decisions) []config.AllowEntry {
 	entries := make([]config.AllowEntry, 0, len(approvals.Domains)+len(approvals.Patterns))
 	for _, d := range approvals.Domains {
 		entries = append(entries, config.AllowEntry{Domain: d})

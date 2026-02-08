@@ -84,9 +84,9 @@ const (
 	// We set XDG_CONFIG_HOME=/etc so ConfigDir() returns /etc/cloister/.
 	ContainerConfigDir = "/etc/cloister"
 
-	// ContainerApprovalDir is the path inside the guardian container where approvals are mounted.
-	// This overlays the ro config mount at ContainerConfigDir, allowing rw access for approvals.
-	ContainerApprovalDir = ContainerConfigDir + "/approvals"
+	// ContainerDecisionDir is the path inside the guardian container where decisions are mounted.
+	// This overlays the ro config mount at ContainerConfigDir, allowing rw access for decisions.
+	ContainerDecisionDir = ContainerConfigDir + "/decisions"
 )
 
 // ErrGuardianNotRunning indicates the guardian container is not running.
@@ -224,10 +224,10 @@ func StartWithOptions(opts StartOptions) error {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Approval dir is a subdirectory of config dir, mounted rw to overlay the ro config mount
-	hostApprovalDir := hostConfigDir + "/approvals"
-	if err := os.MkdirAll(hostApprovalDir, 0700); err != nil {
-		return fmt.Errorf("failed to create approval directory: %w", err)
+	// Decision dir is a subdirectory of config dir, mounted rw to overlay the ro config mount
+	hostDecisionDir := hostConfigDir + "/decisions"
+	if err := os.MkdirAll(hostDecisionDir, 0700); err != nil {
+		return fmt.Errorf("failed to create decision directory: %w", err)
 	}
 
 	// Determine ports to use
@@ -260,7 +260,7 @@ func StartWithOptions(opts StartOptions) error {
 		"-e", "XDG_CONFIG_HOME=/etc",
 		"-v", hostTokenDir + ":" + ContainerTokenDir + ":ro",
 		"-v", hostConfigDir + ":" + ContainerConfigDir + ":ro",
-		"-v", hostApprovalDir + ":" + ContainerApprovalDir,
+		"-v", hostDecisionDir + ":" + ContainerDecisionDir,
 	}
 
 	// Add executor TCP port if provided (for host.docker.internal connection)

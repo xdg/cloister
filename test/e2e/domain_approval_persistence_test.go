@@ -174,10 +174,10 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 		t.Errorf("Expected CONNECT to be approved (not 403), got: %q", trimmedOutput)
 	}
 
-	// Verify the approval file was created on disk.
-	// The guardian container writes to the approval dir, which is mounted rw
-	// at /etc/cloister/approvals (overlaying the ro config mount).
-	projectApprovalPath := config.ProjectApprovalPath("test-project")
+	// Verify the decision file was created on disk.
+	// The guardian container writes to the decision dir, which is mounted rw
+	// at /etc/cloister/decisions (overlaying the ro config mount).
+	projectApprovalPath := config.ProjectDecisionPath("test-project")
 	approvals, err := config.LoadProjectApprovals("test-project")
 	if err != nil {
 		t.Fatalf("Failed to load project approvals: %v", err)
@@ -264,7 +264,7 @@ func TestDomainApprovalPersistence_GlobalScope(t *testing.T) {
 	}
 
 	// Verify the global approval file was created on disk.
-	globalApprovalPath := config.GlobalApprovalPath()
+	globalApprovalPath := config.GlobalDecisionPath()
 	approvals, err := config.LoadGlobalApprovals()
 	if err != nil {
 		t.Fatalf("Failed to load global approvals: %v", err)

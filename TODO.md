@@ -50,9 +50,9 @@ Migrate from `approvals/` to `decisions/` directory and add denylist support to 
 
 ### 1.1 Update config types and constants
 
-- [ ] Rename `internal/config/approvals.go` to `internal/config/decisions.go`
-- [ ] Rename type `Approvals` to `Decisions` in `decisions.go`
-- [ ] Add new fields to `Decisions` struct:
+- [x] Rename `internal/config/approvals.go` to `internal/config/decisions.go`
+- [x] Rename type `Approvals` to `Decisions` in `decisions.go`
+- [x] Add new fields to `Decisions` struct:
   ```go
   type Decisions struct {
       Domains        []string `yaml:"domains,omitempty"`
@@ -61,12 +61,12 @@ Migrate from `approvals/` to `decisions/` directory and add denylist support to 
       DeniedPatterns []string `yaml:"denied_patterns,omitempty"`
   }
   ```
-- [ ] Update `ApprovalDir()` function to `DecisionDir()` returning `~/.config/cloister/decisions`
-- [ ] Rename `GlobalApprovalPath()` to `GlobalDecisionPath()` (update path to `decisions/global.yaml`)
-- [ ] Rename `ProjectApprovalPath()` to `ProjectDecisionPath()` (update path to `decisions/projects/<name>.yaml`)
-- [ ] **Test**: Unit test for `DecisionDir()` returns correct path
-- [ ] **Test**: Unit test for `GlobalDecisionPath()` returns `decisions/global.yaml`
-- [ ] **Test**: Unit test for `ProjectDecisionPath("my-api")` returns `decisions/projects/my-api.yaml`
+- [x] Update `ApprovalDir()` function to `DecisionDir()` returning `~/.config/cloister/decisions`
+- [x] Rename `GlobalApprovalPath()` to `GlobalDecisionPath()` (update path to `decisions/global.yaml`)
+- [x] Rename `ProjectApprovalPath()` to `ProjectDecisionPath()` (update path to `decisions/projects/<name>.yaml`)
+- [x] **Test**: Unit test for `DecisionDir()` returns correct path
+- [x] **Test**: Unit test for `GlobalDecisionPath()` returns `decisions/global.yaml`
+- [x] **Test**: Unit test for `ProjectDecisionPath("my-api")` returns `decisions/projects/my-api.yaml`
 
 ### 1.2 Update config load/save functions
 

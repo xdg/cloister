@@ -16,7 +16,7 @@ func TestAddDomainToProject_WritesAndReloads(t *testing.T) {
 
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
-	initialApprovals := &config.Approvals{
+	initialApprovals := &config.Decisions{
 		Domains: []string{"example.com"},
 	}
 	if err := config.WriteProjectApprovals(projectName, initialApprovals); err != nil {
@@ -71,7 +71,7 @@ func TestAddDomainToProject_NoDuplicate(t *testing.T) {
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
 	existingDomain := "example.com"
-	initialApprovals := &config.Approvals{
+	initialApprovals := &config.Decisions{
 		Domains: []string{existingDomain},
 	}
 	if err := config.WriteProjectApprovals(projectName, initialApprovals); err != nil {
@@ -158,7 +158,7 @@ func TestAddDomainToProject_CreatesApprovalFileIfMissing(t *testing.T) {
 	}
 
 	// Verify approval file was created
-	approvalPath := config.ProjectApprovalPath(projectName)
+	approvalPath := config.ProjectDecisionPath(projectName)
 	if _, err := os.Stat(approvalPath); err != nil {
 		t.Fatalf("approval file should have been created: %v", err)
 	}
@@ -185,7 +185,7 @@ func TestAddDomainToGlobal_WritesAndReloads(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Set up initial approval file with one existing domain
-	initialApprovals := &config.Approvals{
+	initialApprovals := &config.Decisions{
 		Domains: []string{"golang.org"},
 	}
 	if err := config.WriteGlobalApprovals(initialApprovals); err != nil {
@@ -239,7 +239,7 @@ func TestAddDomainToGlobal_NoDuplicate(t *testing.T) {
 
 	// Set up initial approval file with one existing domain
 	existingDomain := "golang.org"
-	initialApprovals := &config.Approvals{
+	initialApprovals := &config.Decisions{
 		Domains: []string{existingDomain},
 	}
 	if err := config.WriteGlobalApprovals(initialApprovals); err != nil {
@@ -326,7 +326,7 @@ func TestAddDomainToGlobal_CreatesApprovalFileIfMissing(t *testing.T) {
 	}
 
 	// Verify approval file was created
-	approvalPath := config.GlobalApprovalPath()
+	approvalPath := config.GlobalDecisionPath()
 	if _, err := os.Stat(approvalPath); err != nil {
 		t.Fatalf("approval file should have been created: %v", err)
 	}
@@ -392,7 +392,7 @@ func TestAddPatternToProject_WritesAndReloads(t *testing.T) {
 
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
-	initialApprovals := &config.Approvals{
+	initialApprovals := &config.Decisions{
 		Domains: []string{"example.com"},
 	}
 	if err := config.WriteProjectApprovals(projectName, initialApprovals); err != nil {
@@ -450,7 +450,7 @@ func TestAddPatternToProject_NoDuplicate(t *testing.T) {
 	// Set up initial approval file with one existing pattern
 	projectName := "test-project"
 	existingPattern := "*.example.com"
-	initialApprovals := &config.Approvals{
+	initialApprovals := &config.Decisions{
 		Patterns: []string{existingPattern},
 	}
 	if err := config.WriteProjectApprovals(projectName, initialApprovals); err != nil {
@@ -528,7 +528,7 @@ func TestAddPatternToGlobal_WritesAndReloads(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Set up initial approval file with one existing domain
-	initialApprovals := &config.Approvals{
+	initialApprovals := &config.Decisions{
 		Domains: []string{"golang.org"},
 	}
 	if err := config.WriteGlobalApprovals(initialApprovals); err != nil {
@@ -577,7 +577,7 @@ func TestAddPatternToGlobal_NoDuplicate(t *testing.T) {
 
 	// Set up initial approval file with one existing pattern
 	existingPattern := "*.googleapis.com"
-	initialApprovals := &config.Approvals{
+	initialApprovals := &config.Decisions{
 		Patterns: []string{existingPattern},
 	}
 	if err := config.WriteGlobalApprovals(initialApprovals); err != nil {

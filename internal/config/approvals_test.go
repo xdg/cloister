@@ -6,87 +6,87 @@ import (
 	"testing"
 )
 
-func TestApprovalDir_Default(t *testing.T) {
+func TestDecisionDir_Default(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/test/config")
 
-	dir := ApprovalDir()
+	dir := DecisionDir()
 
-	want := "/test/config/cloister/approvals"
+	want := "/test/config/cloister/decisions"
 	if dir != want {
-		t.Errorf("ApprovalDir() = %q, want %q", dir, want)
+		t.Errorf("DecisionDir() = %q, want %q", dir, want)
 	}
 }
 
-func TestGlobalApprovalPath(t *testing.T) {
+func TestGlobalDecisionPath(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/test/config")
 
-	path := GlobalApprovalPath()
+	path := GlobalDecisionPath()
 
-	want := "/test/config/cloister/approvals/global.yaml"
+	want := "/test/config/cloister/decisions/global.yaml"
 	if path != want {
-		t.Errorf("GlobalApprovalPath() = %q, want %q", path, want)
+		t.Errorf("GlobalDecisionPath() = %q, want %q", path, want)
 	}
 }
 
-func TestProjectApprovalPath(t *testing.T) {
+func TestProjectDecisionPath(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/test/config")
 
-	path := ProjectApprovalPath("my-project")
+	path := ProjectDecisionPath("my-api")
 
-	want := "/test/config/cloister/approvals/projects/my-project.yaml"
+	want := "/test/config/cloister/decisions/projects/my-api.yaml"
 	if path != want {
-		t.Errorf("ProjectApprovalPath() = %q, want %q", path, want)
+		t.Errorf("ProjectDecisionPath() = %q, want %q", path, want)
 	}
 }
 
 func TestLoadGlobalApprovals_Missing(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	approvals, err := LoadGlobalApprovals()
+	decisions, err := LoadGlobalApprovals()
 	if err != nil {
 		t.Fatalf("LoadGlobalApprovals() error = %v", err)
 	}
 
-	if approvals == nil {
+	if decisions == nil {
 		t.Fatal("LoadGlobalApprovals() returned nil")
 	}
-	if len(approvals.Domains) != 0 {
-		t.Errorf("approvals.Domains = %v, want empty", approvals.Domains)
+	if len(decisions.Domains) != 0 {
+		t.Errorf("decisions.Domains = %v, want empty", decisions.Domains)
 	}
-	if len(approvals.Patterns) != 0 {
-		t.Errorf("approvals.Patterns = %v, want empty", approvals.Patterns)
+	if len(decisions.Patterns) != 0 {
+		t.Errorf("decisions.Patterns = %v, want empty", decisions.Patterns)
 	}
 }
 
 func TestLoadProjectApprovals_Missing(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	approvals, err := LoadProjectApprovals("nonexistent")
+	decisions, err := LoadProjectApprovals("nonexistent")
 	if err != nil {
 		t.Fatalf("LoadProjectApprovals() error = %v", err)
 	}
 
-	if approvals == nil {
+	if decisions == nil {
 		t.Fatal("LoadProjectApprovals() returned nil")
 	}
-	if len(approvals.Domains) != 0 {
-		t.Errorf("approvals.Domains = %v, want empty", approvals.Domains)
+	if len(decisions.Domains) != 0 {
+		t.Errorf("decisions.Domains = %v, want empty", decisions.Domains)
 	}
-	if len(approvals.Patterns) != 0 {
-		t.Errorf("approvals.Patterns = %v, want empty", approvals.Patterns)
+	if len(decisions.Patterns) != 0 {
+		t.Errorf("decisions.Patterns = %v, want empty", decisions.Patterns)
 	}
 }
 
 func TestLoadGlobalApprovals_InvalidYAML(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	approvalDir := ApprovalDir()
+	decisionDir := DecisionDir()
 
-	if err := os.MkdirAll(approvalDir, 0700); err != nil {
+	if err := os.MkdirAll(decisionDir, 0700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	invalidYAML := "domains: [this is not valid yaml\n"
-	if err := os.WriteFile(filepath.Join(approvalDir, "global.yaml"), []byte(invalidYAML), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(decisionDir, "global.yaml"), []byte(invalidYAML), 0600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -98,7 +98,7 @@ func TestLoadGlobalApprovals_InvalidYAML(t *testing.T) {
 
 func TestLoadProjectApprovals_InvalidYAML(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	projectsDir := filepath.Join(ApprovalDir(), "projects")
+	projectsDir := filepath.Join(DecisionDir(), "projects")
 
 	if err := os.MkdirAll(projectsDir, 0700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
@@ -117,14 +117,14 @@ func TestLoadProjectApprovals_InvalidYAML(t *testing.T) {
 
 func TestLoadGlobalApprovals_UnknownField(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	approvalDir := ApprovalDir()
+	decisionDir := DecisionDir()
 
-	if err := os.MkdirAll(approvalDir, 0700); err != nil {
+	if err := os.MkdirAll(decisionDir, 0700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	yamlContent := "domains:\n  - example.com\nunknown_field: bad\n"
-	if err := os.WriteFile(filepath.Join(approvalDir, "global.yaml"), []byte(yamlContent), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(decisionDir, "global.yaml"), []byte(yamlContent), 0600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -137,7 +137,7 @@ func TestLoadGlobalApprovals_UnknownField(t *testing.T) {
 func TestWriteGlobalApprovals_RoundTrip(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	original := &Approvals{
+	original := &Decisions{
 		Domains:  []string{"example.com", "test.org"},
 		Patterns: []string{"*.example.com"},
 	}
@@ -173,7 +173,7 @@ func TestWriteGlobalApprovals_RoundTrip(t *testing.T) {
 func TestWriteProjectApprovals_RoundTrip(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	original := &Approvals{
+	original := &Decisions{
 		Domains:  []string{"project-specific.com"},
 		Patterns: []string{"*.internal.corp"},
 	}
@@ -197,43 +197,43 @@ func TestWriteProjectApprovals_RoundTrip(t *testing.T) {
 
 func TestWriteGlobalApprovals_CreatesDir(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	approvalDir := ApprovalDir()
+	decisionDir := DecisionDir()
 
 	// Verify directory does not exist
-	if _, err := os.Stat(approvalDir); !os.IsNotExist(err) {
-		t.Fatalf("approval dir should not exist before test: %v", err)
+	if _, err := os.Stat(decisionDir); !os.IsNotExist(err) {
+		t.Fatalf("decision dir should not exist before test: %v", err)
 	}
 
-	approvals := &Approvals{Domains: []string{"example.com"}}
-	if err := WriteGlobalApprovals(approvals); err != nil {
+	decisions := &Decisions{Domains: []string{"example.com"}}
+	if err := WriteGlobalApprovals(decisions); err != nil {
 		t.Fatalf("WriteGlobalApprovals() error = %v", err)
 	}
 
 	// Verify directory was created
-	info, err := os.Stat(approvalDir)
+	info, err := os.Stat(decisionDir)
 	if err != nil {
 		t.Fatalf("os.Stat() error = %v", err)
 	}
 	if !info.IsDir() {
-		t.Error("approval dir should be a directory")
+		t.Error("decision dir should be a directory")
 	}
 	perm := info.Mode().Perm()
 	if perm != 0700 {
-		t.Errorf("approval dir permissions = %o, want 0700", perm)
+		t.Errorf("decision dir permissions = %o, want 0700", perm)
 	}
 }
 
 func TestWriteProjectApprovals_CreatesDir(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	projectsDir := filepath.Join(ApprovalDir(), "projects")
+	projectsDir := filepath.Join(DecisionDir(), "projects")
 
 	// Verify directory does not exist
 	if _, err := os.Stat(projectsDir); !os.IsNotExist(err) {
 		t.Fatalf("projects dir should not exist before test: %v", err)
 	}
 
-	approvals := &Approvals{Domains: []string{"example.com"}}
-	if err := WriteProjectApprovals("test-project", approvals); err != nil {
+	decisions := &Decisions{Domains: []string{"example.com"}}
+	if err := WriteProjectApprovals("test-project", decisions); err != nil {
 		t.Fatalf("WriteProjectApprovals() error = %v", err)
 	}
 
@@ -254,33 +254,33 @@ func TestWriteProjectApprovals_CreatesDir(t *testing.T) {
 func TestWriteGlobalApprovals_FilePermissions(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	approvals := &Approvals{Domains: []string{"example.com"}}
-	if err := WriteGlobalApprovals(approvals); err != nil {
+	decisions := &Decisions{Domains: []string{"example.com"}}
+	if err := WriteGlobalApprovals(decisions); err != nil {
 		t.Fatalf("WriteGlobalApprovals() error = %v", err)
 	}
 
-	info, err := os.Stat(GlobalApprovalPath())
+	info, err := os.Stat(GlobalDecisionPath())
 	if err != nil {
 		t.Fatalf("os.Stat() error = %v", err)
 	}
 
 	perm := info.Mode().Perm()
 	if perm != 0600 {
-		t.Errorf("approval file permissions = %o, want 0600", perm)
+		t.Errorf("decision file permissions = %o, want 0600", perm)
 	}
 }
 
 func TestWriteGlobalApprovals_Overwrites(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Write initial approvals
-	initial := &Approvals{Domains: []string{"old.com"}}
+	// Write initial decisions
+	initial := &Decisions{Domains: []string{"old.com"}}
 	if err := WriteGlobalApprovals(initial); err != nil {
 		t.Fatalf("WriteGlobalApprovals() initial error = %v", err)
 	}
 
-	// Write updated approvals
-	updated := &Approvals{Domains: []string{"new.com", "also-new.com"}}
+	// Write updated decisions
+	updated := &Decisions{Domains: []string{"new.com", "also-new.com"}}
 	if err := WriteGlobalApprovals(updated); err != nil {
 		t.Fatalf("WriteGlobalApprovals() updated error = %v", err)
 	}
@@ -302,11 +302,11 @@ func TestWriteGlobalApprovals_Overwrites(t *testing.T) {
 	}
 }
 
-func TestWriteGlobalApprovals_EmptyApprovals(t *testing.T) {
+func TestWriteGlobalApprovals_EmptyDecisions(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Write empty approvals
-	if err := WriteGlobalApprovals(&Approvals{}); err != nil {
+	// Write empty decisions
+	if err := WriteGlobalApprovals(&Decisions{}); err != nil {
 		t.Fatalf("WriteGlobalApprovals() error = %v", err)
 	}
 
