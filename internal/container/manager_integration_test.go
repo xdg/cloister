@@ -351,7 +351,7 @@ func TestManager_ContainerStatus_SingleDockerCall(t *testing.T) {
 		t.Error("ContainerStatus() running = false, but container should be running")
 	}
 
-	existsOnly, err := manager.containerExists(containerName)
+	existsOnly, err := manager.ContainerExists(containerName)
 	if err != nil {
 		t.Fatalf("containerExists() error = %v", err)
 	}

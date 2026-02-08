@@ -4,6 +4,7 @@ package cloister
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -312,6 +313,84 @@ func TestCloisterLifecycle(t *testing.T) {
 			if c.Name == containerName {
 				t.Errorf("Container %q still exists after Stop()", containerName)
 			}
+		}
+	})
+
+	// Repro for bug: Second Start() on existing container deletes the token
+	// When two terminals run 'cloister start' in the same directory:
+	// 1. Terminal 1 creates container with token T1
+	// 2. Terminal 2 generates token T2, overwrites T1 on disk, then deletes the file on ErrContainerExists
+	// 3. Both terminals become non-functional because T1 is gone
+	t.Run("SecondStart_PreservesToken", func(t *testing.T) {
+		projectName := testutil.TestProjectName()
+		branchName := "token-preservation"
+		containerName := container.GenerateContainerName(projectName)
+		t.Cleanup(func() { testutil.CleanupContainer(containerName) })
+
+		tmpDir, err := os.MkdirTemp("", "cloister-test-*")
+		if err != nil {
+			t.Fatalf("Failed to create temp dir: %v", err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(tmpDir) })
+
+		opts := StartOptions{
+			ProjectPath: tmpDir,
+			ProjectName: projectName,
+			BranchName:  branchName,
+			Image:       version.DefaultImage(),
+		}
+
+		// First start - creates container and token T1
+		_, token1, err := Start(opts)
+		if err != nil {
+			t.Fatalf("First Start() failed: %v", err)
+		}
+		if token1 == "" {
+			t.Fatal("First Start() returned empty token")
+		}
+
+		// Verify token T1 is saved on disk
+		store, err := getTokenStore()
+		if err != nil {
+			t.Fatalf("getTokenStore() failed: %v", err)
+		}
+		tokens, err := store.Load()
+		if err != nil {
+			t.Fatalf("store.Load() failed: %v", err)
+		}
+		tokenInfo1, exists := tokens[token1]
+		if !exists {
+			t.Fatalf("Token T1 not found on disk after first Start()")
+		}
+		if tokenInfo1.CloisterName != containerName {
+			t.Errorf("Token info has wrong cloister name: got %q, want %q", tokenInfo1.CloisterName, containerName)
+		}
+
+		// Second start - should detect existing container and return ErrContainerExists
+		// BUG: This currently deletes the token file
+		_, token2, err := Start(opts)
+		if err == nil {
+			t.Error("Second Start() should return ErrContainerExists, but got nil error")
+		}
+		if !errors.Is(err, container.ErrContainerExists) {
+			t.Errorf("Second Start() error = %v, want ErrContainerExists", err)
+		}
+
+		// ASSERTION: Token T1 should still be on disk
+		// If the test fails here, it reproduces the bug
+		tokens, err = store.Load()
+		if err != nil {
+			t.Fatalf("store.Load() after second Start() failed: %v", err)
+		}
+		if _, exists := tokens[token1]; !exists {
+			t.Errorf("BUG REPRODUCED: Token T1 was deleted from disk after second Start()")
+			t.Logf("Second Start() returned token: %q (should be empty since it failed)", token2)
+			t.Logf("Tokens on disk after second Start(): %v", tokens)
+		}
+
+		// Clean up
+		if err := Stop(containerName, token1); err != nil {
+			t.Logf("Stop() failed during cleanup: %v", err)
 		}
 	})
 }

@@ -20,6 +20,7 @@ import (
 // ContainerManager is the interface for container operations.
 // This allows injecting mock implementations for testing.
 type ContainerManager interface {
+	ContainerExists(name string) (bool, error)
 	Create(cfg *container.Config) (string, error)
 	Start(cfg *container.Config) (string, error)
 	StartContainer(containerName string) error
@@ -207,16 +208,27 @@ type StartOptions struct {
 //	Start(opts, WithManager(mockManager), WithGuardian(mockGuardian))
 func Start(opts StartOptions, options ...Option) (containerID string, tok string, err error) {
 	deps := applyOptions(options...)
-	// Step 1: Ensure guardian is running
+
+	// Step 1: Check if container already exists before mutating any state.
+	// This prevents the bug where a second Start() for the same project
+	// would generate a new token, overwrite the existing token on disk,
+	// then delete it during error cleanup — breaking both sessions.
+	containerName := container.GenerateContainerName(opts.ProjectName)
+	exists, err := deps.manager.ContainerExists(containerName)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to check container status: %w", err)
+	}
+	if exists {
+		return "", "", container.ErrContainerExists
+	}
+
+	// Step 2: Ensure guardian is running
 	if err := deps.guardian.EnsureRunning(); err != nil {
 		return "", "", fmt.Errorf("guardian failed to start: %w", err)
 	}
 
-	// Step 2: Generate a new token
+	// Step 3: Generate a new token
 	tok = token.Generate()
-
-	// Step 3: Build container name for registration
-	containerName := container.GenerateContainerName(opts.ProjectName)
 
 	// Step 4: Persist token to disk (for recovery after guardian restart)
 	store, err := getTokenStore()

@@ -39,20 +39,26 @@ func TestStartOptions_Fields(t *testing.T) {
 // mockManager is a test double for ContainerManager that records calls
 // and returns configurable results.
 type mockManager struct {
-	createCalled         bool
-	createConfig         *container.Config
-	createResult         string
-	createError          error
-	startContainerCalled bool
-	startContainerName   string
-	startContainerError  error
-	stopCalled           bool
-	stopContainerName    string
-	stopError            error
-	attachCalled         bool
-	attachContainerName  string
-	attachExitCode       int
-	attachError          error
+	containerExistsResult bool
+	containerExistsError  error
+	createCalled          bool
+	createConfig          *container.Config
+	createResult          string
+	createError           error
+	startContainerCalled  bool
+	startContainerName    string
+	startContainerError   error
+	stopCalled            bool
+	stopContainerName     string
+	stopError             error
+	attachCalled          bool
+	attachContainerName   string
+	attachExitCode        int
+	attachError           error
+}
+
+func (m *mockManager) ContainerExists(name string) (bool, error) {
+	return m.containerExistsResult, m.containerExistsError
 }
 
 func (m *mockManager) Create(cfg *container.Config) (string, error) {
@@ -807,5 +813,63 @@ func TestStart_AgentReceivesContainerName(t *testing.T) {
 	// Verify agent received the container name
 	if !strings.HasPrefix(mockAgt.containerName, "cloister-") {
 		t.Errorf("agent.containerName = %q, expected prefix 'cloister-'", mockAgt.containerName)
+	}
+}
+
+// TestStart_ExistingContainer_ReturnsEarlyWithoutTokenMutation verifies that
+// Start() returns ErrContainerExists immediately when the container already
+// exists, without generating a token, writing to disk, or registering with
+// the guardian.
+func TestStart_ExistingContainer_ReturnsEarlyWithoutTokenMutation(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
+
+	mockMgr := &mockManager{
+		containerExistsResult: true, // container already exists
+		createResult:          "should-not-be-called",
+	}
+	mockGuard := &mockGuardian{}
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{},
+	}
+
+	opts := StartOptions{
+		ProjectPath: "/path/to/project",
+		ProjectName: "testproject",
+		BranchName:  "main",
+	}
+
+	_, _, err := Start(opts,
+		WithManager(mockMgr),
+		WithGuardian(mockGuard),
+		WithAgent(mockAgt),
+	)
+
+	// Should get ErrContainerExists
+	if !errors.Is(err, container.ErrContainerExists) {
+		t.Fatalf("Start() error = %v, want ErrContainerExists", err)
+	}
+
+	// Create should never have been called
+	if mockMgr.createCalled {
+		t.Error("manager.Create() was called; Start() should return before reaching Create")
+	}
+
+	// Agent setup should never have been called
+	if mockAgt.setupCalled {
+		t.Error("agent.Setup() was called; Start() should return before reaching Setup")
+	}
+
+	// Token store should be empty (no token was persisted)
+	store, err := getTokenStore()
+	if err != nil {
+		t.Fatalf("getTokenStore() failed: %v", err)
+	}
+	tokens, err := store.Load()
+	if err != nil {
+		t.Fatalf("store.Load() failed: %v", err)
+	}
+	if len(tokens) != 0 {
+		t.Errorf("Token store should be empty, but has %d entries: %v", len(tokens), tokens)
 	}
 }

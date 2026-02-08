@@ -107,7 +107,7 @@ func (m *Manager) createContainer(cfg *Config, dockerCmd string, extraArgs ...st
 	containerName := cfg.ContainerName()
 
 	// Check if container already exists
-	exists, err := m.containerExists(containerName)
+	exists, err := m.ContainerExists(containerName)
 	if err != nil {
 		return "", err
 	}
@@ -143,7 +143,7 @@ func (m *Manager) createContainer(cfg *Config, dockerCmd string, extraArgs ...st
 // Returns ErrContainerNotFound if the container does not exist.
 func (m *Manager) StartContainer(containerName string) error {
 	// Check if container exists
-	exists, err := m.containerExists(containerName)
+	exists, err := m.ContainerExists(containerName)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (m *Manager) StartContainer(containerName string) error {
 // Returns ErrContainerNotFound if the container does not exist.
 func (m *Manager) Stop(containerName string) error {
 	// Check if container exists
-	exists, err := m.containerExists(containerName)
+	exists, err := m.ContainerExists(containerName)
 	if err != nil {
 		return err
 	}
@@ -228,7 +228,7 @@ func (m *Manager) List() ([]ContainerInfo, error) {
 // Returns ErrContainerNotFound if the container does not exist.
 func (m *Manager) Attach(containerName string) (int, error) {
 	// Check if container exists
-	exists, err := m.containerExists(containerName)
+	exists, err := m.ContainerExists(containerName)
 	if err != nil {
 		return 0, err
 	}
@@ -275,8 +275,8 @@ func (m *Manager) ContainerStatus(name string) (exists bool, running bool, err e
 	return true, info.State == "running", nil
 }
 
-// containerExists checks if a container with the given name exists (running or stopped).
-func (m *Manager) containerExists(name string) (bool, error) {
+// ContainerExists checks if a container with the given name exists (running or stopped).
+func (m *Manager) ContainerExists(name string) (bool, error) {
 	exists, _, err := m.ContainerStatus(name)
 	return exists, err
 }
