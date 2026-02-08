@@ -275,6 +275,11 @@ func TestDomainApproverImpl_RequestApproval_Denied(t *testing.T) {
 		t.Fatalf("Failed to get request from queue")
 	}
 
+	// Verify port was stripped from queued domain
+	if req.Domain != "example.com" {
+		t.Errorf("Queue domain = %q, want %q (port should be stripped)", req.Domain, "example.com")
+	}
+
 	// Send denial
 	req.Responses[0] <- approval.DomainResponse{
 		Status: "denied",
@@ -323,6 +328,11 @@ func TestDomainApproverImpl_RequestApproval_SessionScope(t *testing.T) {
 		t.Fatalf("Failed to get request from queue")
 	}
 
+	// Verify port was stripped from queued domain
+	if req.Domain != "example.com" {
+		t.Errorf("Queue domain = %q, want %q (port should be stripped)", req.Domain, "example.com")
+	}
+
 	// Send approval with session scope
 	req.Responses[0] <- approval.DomainResponse{
 		Status: "approved",
@@ -344,13 +354,13 @@ func TestDomainApproverImpl_RequestApproval_SessionScope(t *testing.T) {
 	}
 
 	// Verify domain was added to session allowlist (using token, not project)
-	if !sessionAllowlist.IsAllowed("test-token", "example.com:443") {
+	if !sessionAllowlist.IsAllowed("test-token", "example.com") {
 		t.Errorf("Domain not added to session allowlist")
 	}
 
 	// Verify domain was added to cached allowlist
 	projectAllowlist := cache.GetProject("test-project")
-	if !projectAllowlist.IsAllowed("example.com:443") {
+	if !projectAllowlist.IsAllowed("example.com") {
 		t.Errorf("Domain not added to cached allowlist")
 	}
 }
@@ -406,7 +416,7 @@ func TestDomainApproverImpl_RequestApproval_ProjectScope(t *testing.T) {
 
 	// For project scope, the domain should NOT be added to session allowlist
 	// (ConfigPersister handles persistence, cache reload happens via SIGHUP)
-	if sessionAllowlist.IsAllowed("test-token", "example.com:443") {
+	if sessionAllowlist.IsAllowed("test-token", "example.com") {
 		t.Errorf("Domain should not be in session allowlist for project scope")
 	}
 }
@@ -462,7 +472,7 @@ func TestDomainApproverImpl_RequestApproval_GlobalScope(t *testing.T) {
 
 	// For global scope, the domain should NOT be added to session allowlist
 	// (ConfigPersister handles persistence, cache reload happens via SIGHUP)
-	if sessionAllowlist.IsAllowed("test-token", "example.com:443") {
+	if sessionAllowlist.IsAllowed("test-token", "example.com") {
 		t.Errorf("Domain should not be in session allowlist for global scope")
 	}
 }

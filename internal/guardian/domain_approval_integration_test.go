@@ -103,7 +103,9 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	baseURL := "http://" + approvalServer.ListenAddr()
 
 	// 2. Submit domain request (simulating proxy behavior)
+	// testDomain includes port to verify RequestApproval strips it
 	const testDomain = "example.com:443"
+	const wantDomain = "example.com"
 	const testProject = "test-project"
 	const testCloister = "test-cloister"
 
@@ -120,15 +122,15 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	// Wait for request to be added to queue
 	time.Sleep(50 * time.Millisecond)
 
-	// Verify request is in queue
+	// Verify request is in queue with port stripped
 	requests := domainQueue.List()
 	if len(requests) != 1 {
 		t.Fatalf("expected 1 domain request in queue, got %d", len(requests))
 	}
 
 	requestID := requests[0].ID
-	if requests[0].Domain != testDomain {
-		t.Errorf("expected domain %s, got %s", testDomain, requests[0].Domain)
+	if requests[0].Domain != wantDomain {
+		t.Errorf("expected domain %s, got %s", wantDomain, requests[0].Domain)
 	}
 	if requests[0].Project != testProject {
 		t.Errorf("expected project %s, got %s", testProject, requests[0].Project)
@@ -248,6 +250,7 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	baseURL := "http://" + approvalServer.ListenAddr()
 
 	const testDomain = "trusted.com:443"
+	const wantDomain = "trusted.com"
 	const testProject = "test-project"
 	const testCloister = "test-cloister"
 
@@ -317,12 +320,12 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	if call.project != testProject {
 		t.Errorf("expected project %s, got %s", testProject, call.project)
 	}
-	if call.domain != testDomain {
-		t.Errorf("expected domain %s, got %s", testDomain, call.domain)
+	if call.domain != wantDomain {
+		t.Errorf("expected domain %s, got %s", wantDomain, call.domain)
 	}
 
 	// Verify domain is NOT in session allowlist for project scope
-	if sessionAllowlist.IsAllowed("test-token", testDomain) {
+	if sessionAllowlist.IsAllowed("test-token", wantDomain) {
 		t.Error("project scope should not add domain to session allowlist")
 	}
 }
@@ -473,6 +476,7 @@ func TestDomainApprovalIntegration_GetPendingDomains(t *testing.T) {
 	baseURL := "http://" + approvalServer.ListenAddr()
 
 	const testDomain = "pending.com:443"
+	const wantDomain = "pending.com"
 	const testProject = "test-project"
 	const testCloister = "test-cloister"
 
@@ -521,8 +525,8 @@ func TestDomainApprovalIntegration_GetPendingDomains(t *testing.T) {
 	}
 
 	pendingReq := pendingResp.Requests[0]
-	if pendingReq.Domain != testDomain {
-		t.Errorf("expected domain %s, got %s", testDomain, pendingReq.Domain)
+	if pendingReq.Domain != wantDomain {
+		t.Errorf("expected domain %s, got %s", wantDomain, pendingReq.Domain)
 	}
 	if pendingReq.Project != testProject {
 		t.Errorf("expected project %s, got %s", testProject, pendingReq.Project)

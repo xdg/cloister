@@ -125,6 +125,11 @@ func NewDomainApprover(queue *approval.DomainQueue, sessionAllowlist SessionAllo
 // Returns an error if the queue add operation fails, otherwise returns the
 // approval result (approved/denied/timeout).
 func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token string) (DomainApprovalResult, error) {
+	// Strip port from domain so all downstream usage (queue, UI, session cache,
+	// config persistence) works with domain-only. The proxy also strips early,
+	// but this is defensive for any caller.
+	domain = stripPort(domain)
+
 	// Create response channel (buffered to prevent goroutine leaks)
 	respChan := make(chan approval.DomainResponse, 1)
 
@@ -167,12 +172,10 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 		}
 
 		// Add to cached allowlist for this project so subsequent requests don't re-prompt.
-		// Strip port from domain because IsAllowed() does port stripping internally.
 		if d.allowlistCache != nil {
 			projectAllowlist := d.allowlistCache.GetProject(project)
 			if projectAllowlist != nil {
-				domainNoPort := stripPort(domain)
-				projectAllowlist.Add([]string{domainNoPort})
+				projectAllowlist.Add([]string{domain})
 			}
 		}
 
