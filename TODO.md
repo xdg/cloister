@@ -142,7 +142,7 @@ Add scope support to `/deny-domain/{id}` endpoint and update domain approver to 
 
 ### 2.4 Create SessionDenylist interface and implementation
 
-- [ ] Define `SessionDenylist` interface in `internal/guardian/proxy.go` (parallel to `SessionAllowlist`)
+- [x] Define `SessionDenylist` interface in `internal/guardian/proxy.go` (parallel to `SessionAllowlist`)
   ```go
   type SessionDenylist interface {
       IsBlocked(token, domain string) bool
@@ -150,11 +150,11 @@ Add scope support to `/deny-domain/{id}` endpoint and update domain approver to 
       Clear(token string)
   }
   ```
-- [ ] Implement `SessionDenylistImpl` in `internal/guardian/session_allowlist.go` (or new file)
-- [ ] Add SessionDenylist field to `ProxyServer` struct
-- [ ] Update proxy request evaluation to check session denylist before allowlist
-- [ ] **Test**: Unit test for SessionDenylist.Add and IsBlocked
-- [ ] **Test**: Unit test for SessionDenylist.Clear removes all entries for token
+- [x] Implement `SessionDenylistImpl` in `internal/guardian/session_allowlist.go` (or new file)
+- [x] Add SessionDenylist field to `ProxyServer` struct
+- [x] Update proxy request evaluation to check session denylist before allowlist
+- [x] **Test**: Unit test for SessionDenylist.Add and IsBlocked
+- [x] **Test**: Unit test for SessionDenylist.Clear removes all entries for token
 
 ### 2.5 Update approve endpoint for consistency
 

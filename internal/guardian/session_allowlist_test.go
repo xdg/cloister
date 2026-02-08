@@ -350,3 +350,215 @@ func TestSessionAllowlist_Size(t *testing.T) {
 		t.Errorf("after ClearAll, Size should be (0, 0), got: (%d, %d)", tokens, domains)
 	}
 }
+
+// --- MemorySessionDenylist Tests ---
+
+func TestMemorySessionDenylist_AddAndIsBlocked(t *testing.T) {
+	s := NewSessionDenylist()
+
+	// Initially empty - nothing should be blocked
+	if s.IsBlocked("token1", "example.com") {
+		t.Error("empty denylist should not block any domains")
+	}
+
+	// Add domain to token1
+	if err := s.Add("token1", "example.com"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// Should block the added domain for token1
+	if !s.IsBlocked("token1", "example.com") {
+		t.Error("token1 should block example.com after adding")
+	}
+
+	// Should not block for different token
+	if s.IsBlocked("token2", "example.com") {
+		t.Error("token2 should not block example.com (isolated from token1)")
+	}
+
+	// Should not block different domain for same token
+	if s.IsBlocked("token1", "other.com") {
+		t.Error("token1 should not block other.com (not added)")
+	}
+}
+
+func TestMemorySessionDenylist_Clear(t *testing.T) {
+	s := NewSessionDenylist()
+
+	// Setup: Add domains to multiple tokens
+	if err := s.Add("token1", "example.com"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	if err := s.Add("token1", "test.com"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	if err := s.Add("token2", "api.example.com"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// Clear token1
+	s.Clear("token1")
+
+	// token1 domains should no longer be blocked
+	if s.IsBlocked("token1", "example.com") {
+		t.Error("token1 should not block example.com after clear")
+	}
+	if s.IsBlocked("token1", "test.com") {
+		t.Error("token1 should not block test.com after clear")
+	}
+
+	// Other tokens should be unaffected
+	if !s.IsBlocked("token2", "api.example.com") {
+		t.Error("token2 should still block api.example.com after token1 clear")
+	}
+}
+
+func TestMemorySessionDenylist_AddErrors(t *testing.T) {
+	s := NewSessionDenylist()
+
+	// Add with empty token should fail
+	err := s.Add("", "example.com")
+	if err != ErrEmptyToken {
+		t.Errorf("Add with empty token should return ErrEmptyToken, got: %v", err)
+	}
+
+	// Add with empty domain should fail
+	err = s.Add("token1", "")
+	if err != ErrEmptyDomain {
+		t.Errorf("Add with empty domain should return ErrEmptyDomain, got: %v", err)
+	}
+
+	// Add with both empty should fail with ErrEmptyToken (checked first)
+	err = s.Add("", "")
+	if err != ErrEmptyToken {
+		t.Errorf("Add with empty token and domain should return ErrEmptyToken, got: %v", err)
+	}
+
+	// Verify nothing was added
+	if s.IsBlocked("", "example.com") {
+		t.Error("empty token should not be blocked after rejected add")
+	}
+	if s.IsBlocked("token1", "") {
+		t.Error("empty domain should not be blocked after rejected add")
+	}
+}
+
+func TestMemorySessionDenylist_PortStripping(t *testing.T) {
+	s := NewSessionDenylist()
+
+	// Add domain without port
+	if err := s.Add("token1", "example.com"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// Should block domain with port (port is stripped)
+	if !s.IsBlocked("token1", "example.com:443") {
+		t.Error("token1 should block example.com:443 (port should be stripped)")
+	}
+
+	// Should also block domain without port
+	if !s.IsBlocked("token1", "example.com") {
+		t.Error("token1 should block example.com (exact match)")
+	}
+
+	// Add domain with port
+	if err := s.Add("token1", "test.com:8080"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// Should block domain without port (port was stripped on add)
+	if !s.IsBlocked("token1", "test.com") {
+		t.Error("token1 should block test.com (port stripped on add)")
+	}
+
+	// Should block domain with different port
+	if !s.IsBlocked("token1", "test.com:443") {
+		t.Error("token1 should block test.com:443 (port stripped on both add and check)")
+	}
+}
+
+func TestMemorySessionDenylist_ClearAll(t *testing.T) {
+	s := NewSessionDenylist()
+
+	// Setup: Add domains to multiple tokens
+	if err := s.Add("token1", "example.com"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+	if err := s.Add("token2", "test.com"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// Clear all
+	s.ClearAll()
+
+	// All domains should no longer be blocked
+	if s.IsBlocked("token1", "example.com") {
+		t.Error("token1 should not block example.com after clear all")
+	}
+	if s.IsBlocked("token2", "test.com") {
+		t.Error("token2 should not block test.com after clear all")
+	}
+}
+
+func TestMemorySessionDenylist_ClearNonexistent(t *testing.T) {
+	s := NewSessionDenylist()
+
+	// Add domain to token1
+	if err := s.Add("token1", "example.com"); err != nil {
+		t.Fatalf("Add failed: %v", err)
+	}
+
+	// Clear nonexistent token (should be no-op, not panic)
+	s.Clear("nonexistent")
+
+	// token1 should be unaffected
+	if !s.IsBlocked("token1", "example.com") {
+		t.Error("token1 should still block example.com after clearing nonexistent token")
+	}
+}
+
+func TestMemorySessionDenylist_ConcurrentAccess(t *testing.T) {
+	s := NewSessionDenylist()
+	const goroutines = 10
+	const operations = 100
+
+	var wg sync.WaitGroup
+	wg.Add(goroutines * 3) // Add, IsBlocked, Clear operations
+
+	// Concurrent Add operations
+	for i := 0; i < goroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < operations; j++ {
+				_ = s.Add("token1", "example.com")
+			}
+		}(i)
+	}
+
+	// Concurrent IsBlocked operations
+	for i := 0; i < goroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < operations; j++ {
+				s.IsBlocked("token1", "example.com")
+			}
+		}(i)
+	}
+
+	// Concurrent Clear operations (on different token to avoid race on token1)
+	for i := 0; i < goroutines; i++ {
+		go func(id int) {
+			defer wg.Done()
+			for j := 0; j < operations; j++ {
+				s.Clear("token2")
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// After all concurrent operations, token1 should block example.com
+	if !s.IsBlocked("token1", "example.com") {
+		t.Error("token1 should block example.com after concurrent adds")
+	}
+}

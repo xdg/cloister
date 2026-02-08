@@ -108,3 +108,70 @@ func (s *MemorySessionAllowlist) Size() (tokens int, domains int) {
 	}
 	return tokens, domains
 }
+
+// MemorySessionDenylist tracks domains denied with "session" scope.
+// See MemorySessionAllowlist for design rationale (same lifecycle and
+// memory management model).
+type MemorySessionDenylist struct {
+	mu     sync.RWMutex
+	tokens map[string]map[string]struct{} // token -> domain set
+}
+
+// NewSessionDenylist creates an empty MemorySessionDenylist.
+func NewSessionDenylist() *MemorySessionDenylist {
+	return &MemorySessionDenylist{
+		tokens: make(map[string]map[string]struct{}),
+	}
+}
+
+// Add adds a domain to the token's session deny set.
+// If the token doesn't exist yet, it is created.
+// Returns an error if token or domain is empty.
+func (s *MemorySessionDenylist) Add(token, domain string) error {
+	if token == "" {
+		return ErrEmptyToken
+	}
+	if domain == "" {
+		return ErrEmptyDomain
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.tokens[token] == nil {
+		s.tokens[token] = make(map[string]struct{})
+	}
+	s.tokens[token][stripPort(domain)] = struct{}{}
+	return nil
+}
+
+// IsBlocked checks if a domain is in the token's session deny set.
+// Returns false if the token doesn't exist or the domain is not in the set.
+func (s *MemorySessionDenylist) IsBlocked(token, domain string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	domainSet, ok := s.tokens[token]
+	if !ok {
+		return false
+	}
+	_, blocked := domainSet[stripPort(domain)]
+	return blocked
+}
+
+// Clear removes all session denied domains for a token.
+// This is typically called when a cloister stops or token is revoked.
+// If the token doesn't exist, this is a no-op.
+func (s *MemorySessionDenylist) Clear(token string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.tokens, token)
+}
+
+// ClearAll removes all session denied domains for all tokens.
+// This is typically called when the guardian restarts.
+func (s *MemorySessionDenylist) ClearAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.tokens = make(map[string]map[string]struct{})
+}

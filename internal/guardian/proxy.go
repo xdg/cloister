@@ -102,6 +102,10 @@ type ProxyServer struct {
 	// If nil, session allowlist checks are skipped.
 	SessionAllowlist SessionAllowlist
 
+	// SessionDenylist tracks domains denied with "session" scope (ephemeral).
+	// If nil, session denylist checks are skipped.
+	SessionDenylist SessionDenylist
+
 	server         *http.Server
 	listener       net.Listener
 	mu             sync.Mutex
@@ -391,8 +395,16 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	clog.Debug("handleConnect: host=%s, domain=%s, allowlist=%v, staticAllowed=%v",
 		targetHostPort, domain, allowlist != nil, staticAllowed)
 
-	// If NOT in static allowlist, check session allowlist and domain approver
+	// If NOT in static allowlist, check session denylist, session allowlist, and domain approver
 	if !staticAllowed {
+		// Check session denylist FIRST — denied domains take precedence over session approvals
+		if p.SessionDenylist != nil && token != "" {
+			if p.SessionDenylist.IsBlocked(token, domain) {
+				http.Error(w, "Forbidden - domain denied", http.StatusForbidden)
+				return
+			}
+		}
+
 		sessionAllowed := false
 		if p.SessionAllowlist != nil && token != "" {
 			sessionAllowed = p.SessionAllowlist.IsAllowed(token, domain)
