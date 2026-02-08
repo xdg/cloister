@@ -141,9 +141,9 @@ func TestReloadNotifier_PanicSafety(t *testing.T) {
 	}
 
 	// Verify domain was still added despite the panic
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
 	if len(approvals.Domains) != 1 {
@@ -175,9 +175,9 @@ func TestReloadNotifier_GlobalPanicSafety(t *testing.T) {
 	}
 
 	// Verify domain was still added despite the panic
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
 	// Check that example.com was added

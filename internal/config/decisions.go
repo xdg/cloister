@@ -40,21 +40,21 @@ func ProjectDecisionPath(project string) string {
 	return DecisionDir() + "/projects/" + project + ".yaml"
 }
 
-// LoadGlobalApprovals loads the global decisions from the default decisions path.
+// LoadGlobalDecisions loads the global decisions from the default decisions path.
 // If the file doesn't exist, it returns an empty Decisions (not an error).
 // If the file exists but has invalid YAML, it returns an error.
-func LoadGlobalApprovals() (*Decisions, error) {
-	return loadApprovals(GlobalDecisionPath())
+func LoadGlobalDecisions() (*Decisions, error) {
+	return loadDecisions(GlobalDecisionPath())
 }
 
-// LoadProjectApprovals loads project-specific decisions by project name.
+// LoadProjectDecisions loads project-specific decisions by project name.
 // If the file doesn't exist, it returns an empty Decisions (not an error).
 // If the file exists but has invalid YAML, it returns an error.
-func LoadProjectApprovals(project string) (*Decisions, error) {
-	return loadApprovals(ProjectDecisionPath(project))
+func LoadProjectDecisions(project string) (*Decisions, error) {
+	return loadDecisions(ProjectDecisionPath(project))
 }
 
-func loadApprovals(path string) (*Decisions, error) {
+func loadDecisions(path string) (*Decisions, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -70,27 +70,27 @@ func loadApprovals(path string) (*Decisions, error) {
 	return &decisions, nil
 }
 
-// WriteGlobalApprovals writes global decisions atomically to the decisions directory.
+// WriteGlobalDecisions writes global decisions atomically to the decisions directory.
 // The decisions directory is created with 0700 permissions if it doesn't exist.
-func WriteGlobalApprovals(decisions *Decisions) error {
+func WriteGlobalDecisions(decisions *Decisions) error {
 	dir := DecisionDir()
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create decision dir: %w", err)
 	}
-	return writeApprovalsAtomic(GlobalDecisionPath(), decisions)
+	return writeDecisionsAtomic(GlobalDecisionPath(), decisions)
 }
 
-// WriteProjectApprovals writes project-specific decisions atomically.
+// WriteProjectDecisions writes project-specific decisions atomically.
 // The decisions/projects/ directory is created with 0700 permissions if it doesn't exist.
-func WriteProjectApprovals(project string, decisions *Decisions) error {
+func WriteProjectDecisions(project string, decisions *Decisions) error {
 	dir := DecisionDir() + "/projects"
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("create decision projects dir: %w", err)
 	}
-	return writeApprovalsAtomic(ProjectDecisionPath(project), decisions)
+	return writeDecisionsAtomic(ProjectDecisionPath(project), decisions)
 }
 
-func writeApprovalsAtomic(path string, decisions *Decisions) error {
+func writeDecisionsAtomic(path string, decisions *Decisions) error {
 	data, err := yaml.Marshal(decisions)
 	if err != nil {
 		return fmt.Errorf("marshal decisions: %w", err)

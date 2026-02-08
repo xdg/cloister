@@ -260,7 +260,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	}
 
 	// Load global approvals and merge with static config
-	globalApprovals, err := config.LoadGlobalApprovals()
+	globalApprovals, err := config.LoadGlobalDecisions()
 	if err != nil {
 		clog.Warn("failed to load global approvals: %v", err)
 		globalApprovals = &config.Decisions{}
@@ -305,7 +305,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}
 
 		// Load project approvals
-		projectApprovals, err := config.LoadProjectApprovals(projectName)
+		projectApprovals, err := config.LoadProjectDecisions(projectName)
 		if err != nil {
 			clog.Warn("failed to load project approvals for %s: %v", projectName, err)
 			projectApprovals = &config.Decisions{}
@@ -344,7 +344,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		cfg = newCfg
 
 		// Reload global approvals
-		newGlobalApprovals, err := config.LoadGlobalApprovals()
+		newGlobalApprovals, err := config.LoadGlobalDecisions()
 		if err != nil {
 			clog.Warn("failed to reload global approvals: %v", err)
 			newGlobalApprovals = &config.Decisions{}
@@ -461,7 +461,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			clog.Debug("config updated, reloading allowlist cache")
 
 			// Reload global approvals and rebuild global allowlist
-			newGlobalApprovals, err := config.LoadGlobalApprovals()
+			newGlobalApprovals, err := config.LoadGlobalDecisions()
 			if err != nil {
 				clog.Warn("failed to reload global approvals: %v", err)
 				newGlobalApprovals = &config.Decisions{}

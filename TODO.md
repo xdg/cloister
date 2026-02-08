@@ -70,15 +70,15 @@ Migrate from `approvals/` to `decisions/` directory and add denylist support to 
 
 ### 1.2 Update config load/save functions
 
-- [ ] Rename `LoadGlobalApprovals()` to `LoadGlobalDecisions()`
-- [ ] Rename `LoadProjectApprovals()` to `LoadProjectDecisions()`
-- [ ] Rename `WriteGlobalApprovals()` to `WriteGlobalDecisions()`
-- [ ] Rename `WriteProjectApprovals()` to `WriteProjectDecisions()`
-- [ ] Update internal helper `loadApprovals()` to `loadDecisions()`
-- [ ] Update internal helper `writeApprovalsAtomic()` to `writeDecisionsAtomic()`
-- [ ] **Test**: Unit test for loading decisions file with all 4 fields (domains, patterns, denied_domains, denied_patterns)
-- [ ] **Test**: Unit test for writing decisions atomically
-- [ ] **Test**: Unit test for loading empty/missing decisions file returns empty struct
+- [x] Rename `LoadGlobalApprovals()` to `LoadGlobalDecisions()`
+- [x] Rename `LoadProjectApprovals()` to `LoadProjectDecisions()`
+- [x] Rename `WriteGlobalApprovals()` to `WriteGlobalDecisions()`
+- [x] Rename `WriteProjectApprovals()` to `WriteProjectDecisions()`
+- [x] Update internal helper `loadApprovals()` to `loadDecisions()`
+- [x] Update internal helper `writeApprovalsAtomic()` to `writeDecisionsAtomic()`
+- [x] **Test**: Unit test for loading decisions file with all 4 fields (domains, patterns, denied_domains, denied_patterns)
+- [x] **Test**: Unit test for writing decisions atomically
+- [x] **Test**: Unit test for loading empty/missing decisions file returns empty struct
 
 ### 1.3 Update test files
 

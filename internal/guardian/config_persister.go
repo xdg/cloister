@@ -40,7 +40,7 @@ func (p *ConfigPersisterImpl) AddDomainToProject(project, domain string) error {
 	defer p.projectMu.Unlock()
 
 	// Load existing project approvals
-	approvals, err := config.LoadProjectApprovals(project)
+	approvals, err := config.LoadProjectDecisions(project)
 	if err != nil {
 		return fmt.Errorf("load project approvals: %w", err)
 	}
@@ -57,7 +57,7 @@ func (p *ConfigPersisterImpl) AddDomainToProject(project, domain string) error {
 	approvals.Domains = append(approvals.Domains, domain)
 
 	// Write updated approvals
-	if err := config.WriteProjectApprovals(project, approvals); err != nil {
+	if err := config.WriteProjectDecisions(project, approvals); err != nil {
 		return fmt.Errorf("write project approvals: %w", err)
 	}
 
@@ -86,7 +86,7 @@ func (p *ConfigPersisterImpl) AddDomainToGlobal(domain string) error {
 	defer p.globalMu.Unlock()
 
 	// Load existing global approvals
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
 		return fmt.Errorf("load global approvals: %w", err)
 	}
@@ -103,7 +103,7 @@ func (p *ConfigPersisterImpl) AddDomainToGlobal(domain string) error {
 	approvals.Domains = append(approvals.Domains, domain)
 
 	// Write updated approvals
-	if err := config.WriteGlobalApprovals(approvals); err != nil {
+	if err := config.WriteGlobalDecisions(approvals); err != nil {
 		return fmt.Errorf("write global approvals: %w", err)
 	}
 
@@ -173,7 +173,7 @@ func (p *ConfigPersisterImpl) AddPatternToProject(project, pattern string) error
 	defer p.projectMu.Unlock()
 
 	// Load existing project approvals
-	approvals, err := config.LoadProjectApprovals(project)
+	approvals, err := config.LoadProjectDecisions(project)
 	if err != nil {
 		return fmt.Errorf("load project approvals: %w", err)
 	}
@@ -190,7 +190,7 @@ func (p *ConfigPersisterImpl) AddPatternToProject(project, pattern string) error
 	approvals.Patterns = append(approvals.Patterns, pattern)
 
 	// Write updated approvals
-	if err := config.WriteProjectApprovals(project, approvals); err != nil {
+	if err := config.WriteProjectDecisions(project, approvals); err != nil {
 		return fmt.Errorf("write project approvals: %w", err)
 	}
 
@@ -217,7 +217,7 @@ func (p *ConfigPersisterImpl) AddPatternToGlobal(pattern string) error {
 	defer p.globalMu.Unlock()
 
 	// Load existing global approvals
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
 		return fmt.Errorf("load global approvals: %w", err)
 	}
@@ -234,7 +234,7 @@ func (p *ConfigPersisterImpl) AddPatternToGlobal(pattern string) error {
 	approvals.Patterns = append(approvals.Patterns, pattern)
 
 	// Write updated approvals
-	if err := config.WriteGlobalApprovals(approvals); err != nil {
+	if err := config.WriteGlobalDecisions(approvals); err != nil {
 		return fmt.Errorf("write global approvals: %w", err)
 	}
 

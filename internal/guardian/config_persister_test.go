@@ -19,8 +19,8 @@ func TestAddDomainToProject_WritesAndReloads(t *testing.T) {
 	initialApprovals := &config.Decisions{
 		Domains: []string{"example.com"},
 	}
-	if err := config.WriteProjectApprovals(projectName, initialApprovals); err != nil {
-		t.Fatalf("WriteProjectApprovals() error = %v", err)
+	if err := config.WriteProjectDecisions(projectName, initialApprovals); err != nil {
+		t.Fatalf("WriteProjectDecisions() error = %v", err)
 	}
 
 	// Track reload calls
@@ -43,9 +43,9 @@ func TestAddDomainToProject_WritesAndReloads(t *testing.T) {
 	}
 
 	// Verify domain was added by reloading approvals
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
 	// Check that both original and new domain are present
@@ -74,8 +74,8 @@ func TestAddDomainToProject_NoDuplicate(t *testing.T) {
 	initialApprovals := &config.Decisions{
 		Domains: []string{existingDomain},
 	}
-	if err := config.WriteProjectApprovals(projectName, initialApprovals); err != nil {
-		t.Fatalf("WriteProjectApprovals() error = %v", err)
+	if err := config.WriteProjectDecisions(projectName, initialApprovals); err != nil {
+		t.Fatalf("WriteProjectDecisions() error = %v", err)
 	}
 
 	// Track reload calls
@@ -97,9 +97,9 @@ func TestAddDomainToProject_NoDuplicate(t *testing.T) {
 	}
 
 	// Verify only one entry exists
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
 	if len(approvals.Domains) != 1 {
@@ -130,9 +130,9 @@ func TestAddDomainToProject_NoReloadNotifier(t *testing.T) {
 	}
 
 	// Verify domain was added
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
 	if len(approvals.Domains) != 1 {
@@ -164,9 +164,9 @@ func TestAddDomainToProject_CreatesApprovalFileIfMissing(t *testing.T) {
 	}
 
 	// Verify domain was added
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
 	if len(approvals.Domains) != 1 {
@@ -188,8 +188,8 @@ func TestAddDomainToGlobal_WritesAndReloads(t *testing.T) {
 	initialApprovals := &config.Decisions{
 		Domains: []string{"golang.org"},
 	}
-	if err := config.WriteGlobalApprovals(initialApprovals); err != nil {
-		t.Fatalf("WriteGlobalApprovals() error = %v", err)
+	if err := config.WriteGlobalDecisions(initialApprovals); err != nil {
+		t.Fatalf("WriteGlobalDecisions() error = %v", err)
 	}
 
 	// Track reload calls
@@ -212,9 +212,9 @@ func TestAddDomainToGlobal_WritesAndReloads(t *testing.T) {
 	}
 
 	// Verify domain was added by reloading approvals
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
 	// Check that both original and new domain are present
@@ -242,8 +242,8 @@ func TestAddDomainToGlobal_NoDuplicate(t *testing.T) {
 	initialApprovals := &config.Decisions{
 		Domains: []string{existingDomain},
 	}
-	if err := config.WriteGlobalApprovals(initialApprovals); err != nil {
-		t.Fatalf("WriteGlobalApprovals() error = %v", err)
+	if err := config.WriteGlobalDecisions(initialApprovals); err != nil {
+		t.Fatalf("WriteGlobalDecisions() error = %v", err)
 	}
 
 	// Track reload calls
@@ -265,9 +265,9 @@ func TestAddDomainToGlobal_NoDuplicate(t *testing.T) {
 	}
 
 	// Verify only one entry exists
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
 	if len(approvals.Domains) != 1 {
@@ -296,9 +296,9 @@ func TestAddDomainToGlobal_NoReloadNotifier(t *testing.T) {
 	}
 
 	// Verify domain was added
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
 	if len(approvals.Domains) != 1 {
@@ -332,9 +332,9 @@ func TestAddDomainToGlobal_CreatesApprovalFileIfMissing(t *testing.T) {
 	}
 
 	// Verify domain was added
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
 	if len(approvals.Domains) != 1 {
@@ -365,9 +365,9 @@ func TestAddDomainToProject_MultipleAdditions(t *testing.T) {
 	}
 
 	// Verify all domains were added
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
 	if len(approvals.Domains) != len(domains) {
@@ -395,8 +395,8 @@ func TestAddPatternToProject_WritesAndReloads(t *testing.T) {
 	initialApprovals := &config.Decisions{
 		Domains: []string{"example.com"},
 	}
-	if err := config.WriteProjectApprovals(projectName, initialApprovals); err != nil {
-		t.Fatalf("WriteProjectApprovals() error = %v", err)
+	if err := config.WriteProjectDecisions(projectName, initialApprovals); err != nil {
+		t.Fatalf("WriteProjectDecisions() error = %v", err)
 	}
 
 	// Track reload calls
@@ -419,9 +419,9 @@ func TestAddPatternToProject_WritesAndReloads(t *testing.T) {
 	}
 
 	// Verify pattern was added by reloading approvals
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
 	// Check that domain is still present and pattern was added
@@ -453,8 +453,8 @@ func TestAddPatternToProject_NoDuplicate(t *testing.T) {
 	initialApprovals := &config.Decisions{
 		Patterns: []string{existingPattern},
 	}
-	if err := config.WriteProjectApprovals(projectName, initialApprovals); err != nil {
-		t.Fatalf("WriteProjectApprovals() error = %v", err)
+	if err := config.WriteProjectDecisions(projectName, initialApprovals); err != nil {
+		t.Fatalf("WriteProjectDecisions() error = %v", err)
 	}
 
 	// Track reload calls
@@ -476,9 +476,9 @@ func TestAddPatternToProject_NoDuplicate(t *testing.T) {
 	}
 
 	// Verify only one entry exists
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
 	if len(approvals.Patterns) != 1 {
@@ -531,8 +531,8 @@ func TestAddPatternToGlobal_WritesAndReloads(t *testing.T) {
 	initialApprovals := &config.Decisions{
 		Domains: []string{"golang.org"},
 	}
-	if err := config.WriteGlobalApprovals(initialApprovals); err != nil {
-		t.Fatalf("WriteGlobalApprovals() error = %v", err)
+	if err := config.WriteGlobalDecisions(initialApprovals); err != nil {
+		t.Fatalf("WriteGlobalDecisions() error = %v", err)
 	}
 
 	// Track reload calls
@@ -555,9 +555,9 @@ func TestAddPatternToGlobal_WritesAndReloads(t *testing.T) {
 	}
 
 	// Verify pattern was added by reloading approvals
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
 	// Check that domain is still present and pattern was added
@@ -580,8 +580,8 @@ func TestAddPatternToGlobal_NoDuplicate(t *testing.T) {
 	initialApprovals := &config.Decisions{
 		Patterns: []string{existingPattern},
 	}
-	if err := config.WriteGlobalApprovals(initialApprovals); err != nil {
-		t.Fatalf("WriteGlobalApprovals() error = %v", err)
+	if err := config.WriteGlobalDecisions(initialApprovals); err != nil {
+		t.Fatalf("WriteGlobalDecisions() error = %v", err)
 	}
 
 	// Track reload calls
@@ -603,9 +603,9 @@ func TestAddPatternToGlobal_NoDuplicate(t *testing.T) {
 	}
 
 	// Verify only one entry exists
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
 	if len(approvals.Patterns) != 1 {
@@ -666,9 +666,9 @@ func TestAddDomainToProject_StaticConfigUnchanged(t *testing.T) {
 	}
 
 	// Verify the domain went to approval file
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 	if !slices.Contains(approvals.Domains, "new.example.com") {
 		t.Error("domain 'new.example.com' should be present in approval file")
@@ -720,9 +720,9 @@ func TestAddDomainToGlobal_StaticConfigUnchanged(t *testing.T) {
 	}
 
 	// Verify the domain went to approval file
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 	if !slices.Contains(approvals.Domains, "new.golang.org") {
 		t.Error("domain 'new.golang.org' should be present in approval file")
@@ -776,9 +776,9 @@ func TestAddPatternToProject_StaticConfigUnchanged(t *testing.T) {
 	}
 
 	// Verify the pattern went to approval file
-	approvals, err := config.LoadProjectApprovals(projectName)
+	approvals, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 	if !slices.Contains(approvals.Patterns, "*.example.com") {
 		t.Error("pattern '*.example.com' should be present in approval file")
@@ -830,9 +830,9 @@ func TestAddPatternToGlobal_StaticConfigUnchanged(t *testing.T) {
 	}
 
 	// Verify the pattern went to approval file
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 	if !slices.Contains(approvals.Patterns, "*.googleapis.com") {
 		t.Error("pattern '*.googleapis.com' should be present in approval file")
@@ -851,9 +851,9 @@ func TestAddDomainToProject_StripsPort(t *testing.T) {
 		t.Fatalf("AddDomainToProject() error = %v", err)
 	}
 
-	approvals, err := config.LoadProjectApprovals("test-project")
+	approvals, err := config.LoadProjectDecisions("test-project")
 	if err != nil {
-		t.Fatalf("LoadProjectApprovals() error = %v", err)
+		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
 	// Domain should be stored without port
@@ -877,9 +877,9 @@ func TestAddDomainToGlobal_StripsPort(t *testing.T) {
 		t.Fatalf("AddDomainToGlobal() error = %v", err)
 	}
 
-	approvals, err := config.LoadGlobalApprovals()
+	approvals, err := config.LoadGlobalDecisions()
 	if err != nil {
-		t.Fatalf("LoadGlobalApprovals() error = %v", err)
+		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
 	// Domain should be stored without port
