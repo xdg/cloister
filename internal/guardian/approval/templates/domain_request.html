@@ -2,6 +2,7 @@
 <li class="request" id="request-{{.ID}}">
     <div class="request-header">
         <div class="request-meta">
+            <span class="card-type-icon">🌐</span>
             <span><strong>{{.Cloister}}</strong></span>
             <span>{{.Project}}</span>
         </div>
@@ -9,14 +10,26 @@
     </div>
     <div class="request-cmd">{{.Domain}}</div>
     <div class="request-actions">
-        <button class="btn btn-approve" data-action="/approve-domain/{{.ID}}" data-vals='{"scope":"session"}'>Allow (Session)</button>
-        <button class="btn btn-approve" data-action="/approve-domain/{{.ID}}" data-vals='{"scope":"project"}'>Save to Project</button>
-        <button class="btn btn-approve" data-action="/approve-domain/{{.ID}}" data-vals='{"scope":"global"}'>Save to Global</button>
+        <div class="allow-section">
+            <span class="section-label">Allow:</span>
+            <button class="btn btn-allow" data-action="/approve-domain/{{.ID}}" data-vals='{"scope":"once"}'>Once</button>
+            <button class="btn btn-allow" data-action="/approve-domain/{{.ID}}" data-vals='{"scope":"session"}'>Session</button>
+            <button class="btn btn-allow" data-action="/approve-domain/{{.ID}}" data-vals='{"scope":"project"}'>Project</button>
+            <button class="btn btn-allow" data-action="/approve-domain/{{.ID}}" data-vals='{"scope":"global"}'>Global</button>
+        </div>
+        <div class="deny-section">
+            <span class="section-label">Deny:</span>
+            <button class="btn btn-deny-scope" data-action="/deny-domain/{{.ID}}" data-scope="once">Once</button>
+            <button class="btn btn-deny-scope" data-action="/deny-domain/{{.ID}}" data-scope="session">Session</button>
+            <button class="btn btn-deny-scope" data-action="/deny-domain/{{.ID}}" data-scope="project">Project</button>
+            <button class="btn btn-deny-scope" data-action="/deny-domain/{{.ID}}" data-scope="global">Global</button>
+        </div>
         {{if .Wildcard}}
-        <button class="btn btn-wildcard" data-action="/approve-domain/{{.ID}}" data-vals='{"scope":"project","pattern":"{{.Wildcard}}"}' title="Save {{.Wildcard}} to Project">Wildcard (Project)</button>
-        <button class="btn btn-wildcard" data-action="/approve-domain/{{.ID}}" data-vals='{"scope":"global","pattern":"{{.Wildcard}}"}' title="Save {{.Wildcard}} to Global">Wildcard (Global)</button>
+        <label class="wildcard-label">
+            <input type="checkbox" class="wildcard-checkbox" data-pattern="{{.Wildcard}}">
+            Apply to wildcard pattern: <code>{{.Wildcard}}</code>
+        </label>
         {{end}}
-        <button class="btn btn-deny" data-action="/deny-domain/{{.ID}}">Deny</button>
     </div>
 </li>
 {{end}}

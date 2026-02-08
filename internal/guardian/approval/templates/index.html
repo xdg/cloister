@@ -73,6 +73,7 @@
         }
         .request-actions {
             display: flex;
+            flex-direction: column;
             gap: 8px;
             margin-top: 12px;
         }
@@ -97,13 +98,6 @@
         }
         .btn-deny:hover {
             background: #dc2626;
-        }
-        .btn-wildcard {
-            background: #8b5cf6;
-            color: #fff;
-        }
-        .btn-wildcard:hover {
-            background: #7c3aed;
         }
         .wildcard-badge {
             display: inline-block;
@@ -176,6 +170,81 @@
         }
         .warning-text {
             flex: 1;
+        }
+        .connection-banner {
+            padding: 10px 16px;
+            border-radius: 6px;
+            margin-bottom: 16px;
+            font-size: 0.875rem;
+            font-weight: 500;
+            text-align: center;
+        }
+        .connection-banner.reconnecting {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #f59e0b;
+        }
+        .connection-banner.offline {
+            background: #fef2f2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        .allow-section, .deny-section {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex-wrap: wrap;
+        }
+        .allow-section {
+            padding: 6px 8px;
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 6px;
+        }
+        .deny-section {
+            padding: 6px 8px;
+            background: #fef2f2;
+            border: 1px solid #fecaca;
+            border-radius: 6px;
+        }
+        .section-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #666;
+            margin-right: 4px;
+        }
+        .btn-allow {
+            background: #22c55e;
+            color: #fff;
+        }
+        .btn-allow:hover {
+            background: #16a34a;
+        }
+        .btn-deny-scope {
+            background: #ef4444;
+            color: #fff;
+        }
+        .btn-deny-scope:hover {
+            background: #dc2626;
+        }
+        .card-type-icon {
+            font-size: 1rem;
+            margin-right: 4px;
+        }
+        .wildcard-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.8rem;
+            color: #666;
+            padding: 4px 0;
+        }
+        .wildcard-label code {
+            font-family: "SF Mono", Monaco, "Courier New", monospace;
+            background: #f0f0f0;
+            padding: 1px 4px;
+            border-radius: 3px;
+            color: #8b5cf6;
         }
         .modal-overlay {
             display: none;
@@ -263,31 +332,20 @@
 </head>
 <body>
     <h1>Cloister Approval Queue</h1>
-    <h2 style="font-size: 1.2rem; font-weight: 600; margin: 20px 0 10px;">Command Requests</h2>
+    <div id="connection-banner" class="connection-banner" style="display:none;"></div>
     <div class="queue">
-        {{if .Requests}}
+        {{if or .Requests .DomainRequests}}
         <ul class="request-list" id="request-list">
             {{range .Requests}}
             {{template "request" .}}
             {{end}}
-        </ul>
-        {{else}}
-        <div class="queue-empty" id="queue-empty">
-            No pending requests
-        </div>
-        {{end}}
-    </div>
-    <h2 style="font-size: 1.2rem; font-weight: 600; margin: 20px 0 10px;">Domain Requests</h2>
-    <div class="queue">
-        {{if .DomainRequests}}
-        <ul class="request-list" id="domain-request-list">
             {{range .DomainRequests}}
             {{template "domain_request" .}}
             {{end}}
         </ul>
         {{else}}
-        <div class="queue-empty" id="domain-queue-empty">
-            No pending domain requests
+        <div class="queue-empty" id="queue-empty">
+            No pending requests
         </div>
         {{end}}
     </div>
@@ -446,18 +504,26 @@
             });
 
             eventSource.addEventListener('domain-request-added', function(e) {
-                addToList('domain-request-list', 'domain-queue-empty', e.data);
+                addToList('request-list', 'queue-empty', e.data);
                 var info = extractInfo(e.data);
                 notifyRequest('Cloister: Domain Approval Requested', info.cloister + ': ' + info.detail);
             });
 
             eventSource.addEventListener('domain-request-removed', function(e) {
                 var data = JSON.parse(e.data);
-                removeFromList('domain-request-list', 'domain-queue-empty', 'No pending domain requests', data.id);
+                removeFromList('request-list', 'queue-empty', 'No pending requests', data.id);
             });
 
             eventSource.onerror = function() {
-                console.log('[cloister] SSE connection error, reconnecting...');
+                var banner = document.getElementById('connection-banner');
+                banner.textContent = 'Connection lost. Reconnecting...';
+                banner.className = 'connection-banner reconnecting';
+                banner.style.display = 'block';
+            };
+
+            eventSource.onopen = function() {
+                var banner = document.getElementById('connection-banner');
+                banner.style.display = 'none';
             };
 
             // Wildcard confirmation modal functions
@@ -510,19 +576,41 @@
                 var btn = e.target.closest('button[data-action]');
                 if (!btn) return;
 
-                // Wildcard buttons get a confirmation modal first
-                if (btn.classList.contains('btn-wildcard')) {
-                    e.preventDefault();
-                    try {
-                        var vals = JSON.parse(btn.getAttribute('data-vals'));
-                        if (vals.pattern && vals.scope) {
-                            showWildcardModal(vals.pattern, vals.scope, function() {
-                                postAction(btn);
-                            });
-                        }
-                    } catch (err) {
-                        console.error('[cloister] Failed to parse data-vals:', err);
+                // Deny-scope buttons: send POST with scope and wildcard state
+                if (btn.classList.contains('btn-deny-scope')) {
+                    var scope = btn.getAttribute('data-scope');
+                    var request = btn.closest('.request');
+                    var wildcardCb = request.querySelector('.wildcard-checkbox');
+                    var wildcard = wildcardCb && wildcardCb.checked;
+                    var vals = JSON.stringify({scope: scope, wildcard: wildcard});
+                    btn.setAttribute('data-vals', vals);
+                    // For wildcard denials with project/global scope, show confirmation modal
+                    if (wildcard && (scope === 'project' || scope === 'global')) {
+                        var pattern = wildcardCb.getAttribute('data-pattern');
+                        showWildcardModal(pattern, scope + ' (deny)', function() { postAction(btn); });
+                        return;
                     }
+                    postAction(btn);
+                    return;
+                }
+
+                // Allow buttons: check wildcard checkbox and include pattern if checked
+                if (btn.classList.contains('btn-allow')) {
+                    var scope = JSON.parse(btn.getAttribute('data-vals')).scope;
+                    var request = btn.closest('.request');
+                    var wildcardCb = request.querySelector('.wildcard-checkbox');
+                    var pattern = '';
+                    if (wildcardCb && wildcardCb.checked) {
+                        pattern = wildcardCb.getAttribute('data-pattern');
+                    }
+                    var vals = JSON.stringify({scope: scope, pattern: pattern});
+                    btn.setAttribute('data-vals', vals);
+                    // For wildcard approvals with project/global scope, show confirmation modal
+                    if (pattern && (scope === 'project' || scope === 'global')) {
+                        showWildcardModal(pattern, scope, function() { postAction(btn); });
+                        return;
+                    }
+                    postAction(btn);
                     return;
                 }
 

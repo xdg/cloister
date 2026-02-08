@@ -172,16 +172,16 @@ Update web UI to support persistent denials with scope buttons and simplified la
 
 ### 3.1 Update approval server HTML templates
 
-- [ ] In `internal/guardian/approval/templates/index.html`, remove "Active Cloisters" section
-- [ ] Remove tabs for "Commands" vs "Domains" - show single chronological list
-- [ ] Add connection status banner area at top (initially hidden, shown on SSE disconnect)
-- [ ] Update pending requests section to show mixed command/domain cards chronologically
-- [ ] Add card type indicators: 🔧 for commands, 🌐 for domains
-- [ ] **Test**: Manual - Load UI, verify single list layout with no tabs
+- [x] In `internal/guardian/approval/templates/index.html`, remove "Active Cloisters" section
+- [x] Remove tabs for "Commands" vs "Domains" - show single chronological list
+- [x] Add connection status banner area at top (initially hidden, shown on SSE disconnect)
+- [x] Update pending requests section to show mixed command/domain cards chronologically
+- [x] Add card type indicators: 🔧 for commands, 🌐 for domains
+- [x] **Test**: Manual - Load UI, verify single list layout with no tabs
 
 ### 3.2 Update domain request card template
 
-- [ ] In `internal/guardian/approval/templates/domain_request.html`, update button layout:
+- [x] In `internal/guardian/approval/templates/domain_request.html`, update button layout:
   ```html
   <div class="allow-section">
     <button data-scope="once">Once</button>
@@ -200,30 +200,30 @@ Update web UI to support persistent denials with scope buttons and simplified la
     Apply to wildcard pattern: *.{{.Domain}}
   </label>
   ```
-- [ ] Add CSS classes `.allow-section` (green) and `.deny-section` (red)
-- [ ] **Test**: Manual - Domain request shows 8 buttons + wildcard checkbox
+- [x] Add CSS classes `.allow-section` (green) and `.deny-section` (red)
+- [x] **Test**: Manual - Domain request shows 8 buttons + wildcard checkbox
 
 ### 3.3 Update JavaScript event handlers
 
-- [ ] In `internal/guardian/approval/templates/index.html` or separate JS file:
-- [ ] Add click handlers for deny buttons that send POST to `/deny-domain/{id}` with scope and wildcard
-- [ ] Update approve button handlers to support scope="once"
-- [ ] Add SSE disconnect handler to show connection status banner
-- [ ] Add SSE reconnect handler to hide banner when connection restored
-- [ ] Update confirmation message to not show undo/view-effective buttons (removed from spec)
-- [ ] **Test**: Manual - Click "Deny → Project" sends correct request
-- [ ] **Test**: Manual - Click "Allow → Once" forwards request without persistence
-- [ ] **Test**: Manual - Disconnect guardian, verify yellow banner appears
-- [ ] **Test**: Manual - Reconnect guardian, verify banner disappears
+- [x] In `internal/guardian/approval/templates/index.html` or separate JS file:
+- [x] Add click handlers for deny buttons that send POST to `/deny-domain/{id}` with scope and wildcard
+- [x] Update approve button handlers to support scope="once"
+- [x] Add SSE disconnect handler to show connection status banner
+- [x] Add SSE reconnect handler to hide banner when connection restored
+- [x] Update confirmation message to not show undo/view-effective buttons (removed from spec)
+- [x] **Test**: Manual - Click "Deny → Project" sends correct request
+- [x] **Test**: Manual - Click "Allow → Once" forwards request without persistence
+- [x] **Test**: Manual - Disconnect guardian, verify yellow banner appears
+- [x] **Test**: Manual - Reconnect guardian, verify banner disappears
 
 ### 3.4 Update CSS for new layout
 
-- [ ] Add styles for `.allow-section` (green background/border)
-- [ ] Add styles for `.deny-section` (red background/border)
-- [ ] Add styles for connection status banner (yellow for reconnecting, red for offline)
-- [ ] Update card styles to handle 🔧/🌐 icons and mixed list
-- [ ] **Test**: Manual - Buttons styled correctly with green/red sections
-- [ ] **Test**: Manual - Connection banner styled correctly (yellow/red)
+- [x] Add styles for `.allow-section` (green background/border)
+- [x] Add styles for `.deny-section` (red background/border)
+- [x] Add styles for connection status banner (yellow for reconnecting, red for offline)
+- [x] Update card styles to handle 🔧/🌐 icons and mixed list
+- [x] **Test**: Manual - Buttons styled correctly with green/red sections
+- [x] **Test**: Manual - Connection banner styled correctly (yellow/red)
 
 ---
 

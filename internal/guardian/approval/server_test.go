@@ -645,17 +645,24 @@ func TestTemplates_DomainRequestPartial(t *testing.T) {
 	if !strings.Contains(output, "domain123") {
 		t.Error("expected output to contain request ID 'domain123'")
 	}
-	if !strings.Contains(output, "Allow (Session)") {
-		t.Error("expected output to contain 'Allow (Session)' button")
+	// Verify allow section with scope buttons
+	if !strings.Contains(output, "allow-section") {
+		t.Error("expected output to contain 'allow-section' div")
 	}
-	if !strings.Contains(output, "Save to Project") {
-		t.Error("expected output to contain 'Save to Project' button")
+	if !strings.Contains(output, "deny-section") {
+		t.Error("expected output to contain 'deny-section' div")
 	}
-	if !strings.Contains(output, "Save to Global") {
-		t.Error("expected output to contain 'Save to Global' button")
+	if !strings.Contains(output, "btn-allow") {
+		t.Error("expected output to contain 'btn-allow' buttons")
 	}
-	if !strings.Contains(output, "Deny") {
-		t.Error("expected output to contain 'Deny' button")
+	if !strings.Contains(output, "btn-deny-scope") {
+		t.Error("expected output to contain 'btn-deny-scope' buttons")
+	}
+	if !strings.Contains(output, `/approve-domain/domain123`) {
+		t.Error("expected output to contain approve-domain action URL")
+	}
+	if !strings.Contains(output, `/deny-domain/domain123`) {
+		t.Error("expected output to contain deny-domain action URL")
 	}
 }
 
