@@ -15,9 +15,9 @@ import (
 // DomainResponse represents the result of a domain approval decision.
 type DomainResponse struct {
 	Status           string `json:"status"`                      // "approved", "denied", or "timeout"
-	Scope            string `json:"scope"`                       // "session", "project", or "global" (only for approved)
+	Scope            string `json:"scope"`                       // "once", "session", "project", or "global"
 	Reason           string `json:"reason,omitempty"`            // Reason for denial (only for denied)
-	Pattern          string `json:"pattern,omitempty"`           // Wildcard pattern if approved with wildcard (e.g., "*.example.com")
+	Pattern          string `json:"pattern,omitempty"`           // Wildcard pattern (e.g., "*.example.com") for approved/denied with wildcard
 	PersistenceError string `json:"persistence_error,omitempty"` // Error message if config persistence failed (domain still approved for session)
 }
 

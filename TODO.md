@@ -106,9 +106,9 @@ Add scope support to `/deny-domain/{id}` endpoint and update domain approver to 
 
 ### 2.1 Update domain queue response types
 
-- [ ] In `internal/guardian/approval/domain_queue.go`, update `DomainResponse` struct to include `Scope` field for denials
-- [ ] Ensure `DomainResponse.Status` can be "approved", "denied", or "timeout"
-- [ ] **Test**: Unit test for DomainResponse JSON marshaling with all fields
+- [x] In `internal/guardian/approval/domain_queue.go`, update `DomainResponse` struct to include `Scope` field for denials
+- [x] Ensure `DomainResponse.Status` can be "approved", "denied", or "timeout"
+- [x] **Test**: Unit test for DomainResponse JSON marshaling with all fields
 
 ### 2.2 Update approval server deny endpoint
 

@@ -1,6 +1,7 @@
 package approval
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync"
@@ -1088,5 +1089,62 @@ func TestDomainQueue_Deduplication_CleanupOnRemove(t *testing.T) {
 	// Queue should have 1 entry
 	if q.Len() != 1 {
 		t.Errorf("Len() = %d, want 1", q.Len())
+	}
+}
+
+func TestDomainResponse_JSONMarshal(t *testing.T) {
+	tests := []struct {
+		name string
+		resp DomainResponse
+	}{
+		{
+			name: "approved with scope",
+			resp: DomainResponse{
+				Status: "approved",
+				Scope:  "project",
+			},
+		},
+		{
+			name: "denied with scope and pattern",
+			resp: DomainResponse{
+				Status:  "denied",
+				Scope:   "global",
+				Pattern: "*.example.com",
+			},
+		},
+		{
+			name: "timeout",
+			resp: DomainResponse{
+				Status: "timeout",
+				Reason: "request timed out",
+			},
+		},
+		{
+			name: "approved with all fields",
+			resp: DomainResponse{
+				Status:           "approved",
+				Scope:            "session",
+				Pattern:          "*.cdn.example.com",
+				PersistenceError: "write failed",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(tt.resp)
+			if err != nil {
+				t.Fatalf("json.Marshal() error = %v", err)
+			}
+
+			var got DomainResponse
+			if err := json.Unmarshal(data, &got); err != nil {
+				t.Fatalf("json.Unmarshal() error = %v", err)
+			}
+
+			if got != tt.resp {
+				t.Errorf("round-trip mismatch:\n  got:  %+v\n  want: %+v", got, tt.resp)
+			}
+		})
 	}
 }
