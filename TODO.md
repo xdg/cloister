@@ -158,11 +158,11 @@ Add scope support to `/deny-domain/{id}` endpoint and update domain approver to 
 
 ### 2.5 Update approve endpoint for consistency
 
-- [ ] In `internal/guardian/approval/server.go`, update `POST /approve-domain/{id}` handler
-- [ ] Add `"once"` to valid scope options (currently: session, project, global)
-- [ ] Handle scope="once" by forwarding request without persistence
-- [ ] **Test**: Handler test - approve with scope="once" returns correct response
-- [ ] **Test**: Handler test - approve with scope="once" does not write to config
+- [x] In `internal/guardian/approval/server.go`, update `POST /approve-domain/{id}` handler
+- [x] Add `"once"` to valid scope options (currently: session, project, global)
+- [x] Handle scope="once" by forwarding request without persistence
+- [x] **Test**: Handler test - approve with scope="once" returns correct response
+- [x] **Test**: Handler test - approve with scope="once" does not write to config
 
 ---
 

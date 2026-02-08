@@ -1924,8 +1924,8 @@ func TestServer_HandleApproveDomain_InvalidScope(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if resp.Error != "scope must be session, project, or global" {
-		t.Errorf("expected error 'scope must be session, project, or global', got %q", resp.Error)
+	if resp.Error != "scope must be once, session, project, or global" {
+		t.Errorf("expected error 'scope must be once, session, project, or global', got %q", resp.Error)
 	}
 }
 
@@ -2689,5 +2689,150 @@ func TestTemplates_DomainResultWithPersistenceError(t *testing.T) {
 	}
 	if !strings.Contains(output, "permission denied") {
 		t.Error("expected output to contain the error message")
+	}
+}
+
+func TestServer_HandleApproveDomain_ScopeOnce(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	// ConfigPersister is nil (not needed for once scope)
+
+	body := `{"scope": "once"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+	if resp.ID != id {
+		t.Errorf("expected ID %s, got %s", id, resp.ID)
+	}
+	if resp.Scope != "once" {
+		t.Errorf("expected scope 'once', got %q", resp.Scope)
+	}
+
+	// Verify the response was sent on the channel
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "once" {
+			t.Errorf("expected approval response scope 'once', got %q", approvalResp.Scope)
+		}
+	default:
+		t.Error("expected approval response on channel")
+	}
+
+	// Verify request was removed from queue
+	if domainQueue.Len() != 0 {
+		t.Errorf("expected domain queue to be empty, got %d", domainQueue.Len())
+	}
+}
+
+// failingConfigPersister panics if any method is called.
+// Used to verify that scope="once" does not trigger persistence.
+type failingConfigPersister struct{}
+
+func (f *failingConfigPersister) AddDomainToProject(_, _ string) error {
+	panic("AddDomainToProject should not be called for scope=once")
+}
+func (f *failingConfigPersister) AddDomainToGlobal(_ string) error {
+	panic("AddDomainToGlobal should not be called for scope=once")
+}
+func (f *failingConfigPersister) AddPatternToProject(_, _ string) error {
+	panic("AddPatternToProject should not be called for scope=once")
+}
+func (f *failingConfigPersister) AddPatternToGlobal(_ string) error {
+	panic("AddPatternToGlobal should not be called for scope=once")
+}
+
+func TestServer_HandleApproveDomain_ScopeOnce_NoPersistence(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "example.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+	// Set a ConfigPersister that panics if called — scope="once" must not touch it
+	server.ConfigPersister = &failingConfigPersister{}
+
+	body := `{"scope": "once"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	// If ConfigPersister methods are called, this will panic and fail the test
+	server.handleApproveDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp approveDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "approved" {
+		t.Errorf("expected status 'approved', got %q", resp.Status)
+	}
+	if resp.Scope != "once" {
+		t.Errorf("expected scope 'once', got %q", resp.Scope)
+	}
+
+	// Verify the response was sent on the channel
+	select {
+	case approvalResp := <-respChan:
+		if approvalResp.Status != "approved" {
+			t.Errorf("expected approval response status 'approved', got %q", approvalResp.Status)
+		}
+		if approvalResp.Scope != "once" {
+			t.Errorf("expected approval response scope 'once', got %q", approvalResp.Scope)
+		}
+	default:
+		t.Error("expected approval response on channel")
 	}
 }

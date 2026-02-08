@@ -595,7 +595,7 @@ func (s *Server) handlePendingDomains(w http.ResponseWriter, r *http.Request) {
 
 // approveDomainRequest is the request body for POST /approve-domain/{id}.
 type approveDomainRequest struct {
-	Scope   string `json:"scope"`   // "session", "project", or "global"
+	Scope   string `json:"scope"`   // "once", "session", "project", or "global"
 	Pattern string `json:"pattern"` // optional wildcard pattern like "*.example.com"
 }
 
@@ -628,8 +628,8 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	scope = approveReq.Scope
 	pattern = approveReq.Pattern
-	if scope != "session" && scope != "project" && scope != "global" {
-		s.writeError(w, http.StatusBadRequest, "scope must be session, project, or global")
+	if scope != "once" && scope != "session" && scope != "project" && scope != "global" {
+		s.writeError(w, http.StatusBadRequest, "scope must be once, session, project, or global")
 		return
 	}
 
