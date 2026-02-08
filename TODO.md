@@ -233,12 +233,12 @@ Update proxy to evaluate denials before allowlists with correct precedence.
 
 ### 4.1 Update allowlist cache to include denylists
 
-- [ ] In `internal/guardian/allowlist_cache.go`, add methods to `AllowlistCache` for denylist support
-- [ ] Update cache to store both allowed and denied domains/patterns per project
-- [ ] Add `IsBlocked(projectName, domain string) bool` method to cache
-- [ ] Update cache loading to parse `denied_domains` and `denied_patterns` from decisions files
-- [ ] **Test**: Unit test - cache loads denied_domains from decisions file
-- [ ] **Test**: Unit test - cache.IsBlocked() returns true for denied domain
+- [x] In `internal/guardian/allowlist_cache.go`, add methods to `AllowlistCache` for denylist support
+- [x] Update cache to store both allowed and denied domains/patterns per project
+- [x] Add `IsBlocked(projectName, domain string) bool` method to cache
+- [x] Update cache loading to parse `denied_domains` and `denied_patterns` from decisions files
+- [x] **Test**: Unit test - cache loads denied_domains from decisions file
+- [x] **Test**: Unit test - cache.IsBlocked() returns true for denied domain
 
 ### 4.2 Update proxy evaluation order
 
