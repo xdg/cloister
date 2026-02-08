@@ -82,11 +82,11 @@ Migrate from `approvals/` to `decisions/` directory and add denylist support to 
 
 ### 1.3 Update test files
 
-- [ ] Rename `internal/config/approvals_test.go` to `internal/config/decisions_test.go`
-- [ ] Update all test function names (`TestLoadGlobalApprovals` → `TestLoadGlobalDecisions`, etc.)
-- [ ] Update test assertions to use new function names and paths
-- [ ] Add test cases for denied_domains and denied_patterns fields
-- [ ] **Test**: All tests in `decisions_test.go` pass with new paths and field names
+- [x] Rename `internal/config/approvals_test.go` to `internal/config/decisions_test.go`
+- [x] Update all test function names (`TestLoadGlobalApprovals` → `TestLoadGlobalDecisions`, etc.)
+- [x] Update test assertions to use new function names and paths
+- [x] Add test cases for denied_domains and denied_patterns fields
+- [x] **Test**: All tests in `decisions_test.go` pass with new paths and field names
 
 ### 1.4 Update guardian command integration
 
