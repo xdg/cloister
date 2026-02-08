@@ -171,6 +171,8 @@ Guardian stopped.
 
 The guardian runs as a Docker container (`cloister-guardian`) on the `cloister-net` network.
 
+For details on using the approval web UI, see the [Web UI section in guardian-api.md](guardian-api.md#web-ui).
+
 ---
 
 ## Scenario: Managing Projects

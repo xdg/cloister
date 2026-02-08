@@ -224,18 +224,70 @@ This separation is necessary because:
 
 See [guardian-api.md](guardian-api.md) for full endpoint documentation.
 
-**Domain approval flow for unlisted domains:**
+**Domain Matching and Precedence:**
 
-1. Request arrives for domain not in allowlist
+The proxy allowlist system supports both exact domain matches and wildcard patterns:
+
+- **Exact domains**: `api.example.com`, `docs.internal.dev`
+- **Wildcard patterns**: `*.cdn.example.com`, `*.s3.amazonaws.com`
+  - Wildcards only match one subdomain level: `*.example.com` matches `api.example.com` but NOT `api.staging.example.com`
+  - The pattern `*.example.com` also matches the apex domain `example.com` (for convenience)
+  - Patterns are stored separately from exact domains for clarity in config files
+
+**Precedence rules** (evaluated in order):
+1. **Exact deny** — Domain in `denied_domains` → blocked
+2. **Pattern deny** — Domain matches `denied_patterns` → blocked
+3. **Exact allow** — Domain in `domains` → allowed
+4. **Pattern allow** — Domain matches `patterns` → allowed
+5. **Default** — No match → queued for human approval (or blocked if approval disabled)
+
+Key principle: **Denials override approvals at all levels.** If `evil.com` appears in both allowlist and denylist, it's blocked. This ensures security-first behavior even with conflicting rules.
+
+**Scope hierarchy** (merged at load time):
+- Global config (`~/.config/cloister/config.yaml`)
+- Project config (`~/.config/cloister/projects/<name>/config.yaml`)
+- Global decisions (`~/.config/cloister/decisions/global.yaml`)
+- Project decisions (`~/.config/cloister/decisions/projects/<name>.yaml`)
+- Session allowlist (in-memory, token-scoped)
+
+All sources are merged, with denials taking precedence regardless of which file they appear in.
+
+**Human approval flow for unlisted domains:**
+
+1. Request arrives for domain not in any allowlist or denylist
 2. Proxy creates pending approval request with 60s timeout
-3. Proxy holds connection open, waiting for approval
-4. Human sees request in approval UI with options:
-   - **Allow (session)** — in-memory only, expires when cloister stops
-   - **Save to project** — persists to `~/.config/cloister/approvals/projects/<name>.yaml`
-   - **Save to global** — persists to `~/.config/cloister/approvals/global.yaml`
-   - **Deny** — reject this request
-5. If approved: domain added to allowlist, request forwarded
-6. If denied or timeout: return 403 with JSON error body
+3. Proxy holds connection open, waiting for human decision
+4. Human sees request in approval UI showing:
+   - Requesting cloister name and project
+   - Requested domain (e.g., `api.newservice.com`)
+   - Timestamp of request
+   - Decision options (see below)
+5. Human chooses one of:
+   - **Allow once** — Forward this request only, don't cache
+   - **Allow (session)** — Add to in-memory allowlist, expires when cloister stops
+   - **Allow (project)** — Persist to `~/.config/cloister/decisions/projects/<name>.yaml`
+   - **Allow (global)** — Persist to `~/.config/cloister/decisions/global.yaml`
+   - **Block once** — Reject this request only, don't cache
+   - **Block (session)** — Add to in-memory denylist, expires when cloister stops
+   - **Block (project)** — Persist to `~/.config/cloister/decisions/projects/<name>.yaml`
+   - **Block (global)** — Persist to `~/.config/cloister/decisions/global.yaml`
+6. UI also offers wildcard option:
+   - Checkbox: "Apply to wildcard pattern `*.newservice.com`"
+   - When checked, adds pattern instead of exact domain
+   - Works for both allow and deny scopes
+7. If approved: domain/pattern added to appropriate allowlist, request forwarded
+8. If denied: domain/pattern added to appropriate denylist, return 403 Forbidden
+9. If timeout (60s): return 403 Forbidden with "Request timed out" message
+
+The UI groups buttons visually:
+- **Allow** section (green) — once, session, project, global
+- **Deny** section (red) — once, session, project, global
+- **Wildcard checkbox** — applies to whichever button is clicked
+
+After approval/denial, the UI shows a confirmation message with:
+- Action taken (e.g., "Blocked api.sketchy.com for this project")
+- Current effective state (merges all scopes to show what's actually allowed/denied)
+- Option to undo (removes from the file that was just written)
 
 #### Internal Architecture
 
@@ -270,10 +322,10 @@ cloister guardian stop            # Stop guardian
 │   ├── my-api.yaml
 │   ├── frontend.yaml
 │   └── shared-lib.yaml
-├── approvals/                 # Domain approvals from web UI (machine-authored, RW mount)
-│   ├── global.yaml            # Globally approved domains/patterns
+├── decisions/                 # Domain decisions from web UI (machine-authored, RW mount)
+│   ├── global.yaml            # Globally allowed/denied domains/patterns
 │   └── projects/
-│       ├── my-api.yaml        # Project-specific approved domains/patterns
+│       ├── my-api.yaml        # Project-specific allowed/denied domains/patterns
 │       └── frontend.yaml
 ├── tokens/                    # Active cloister tokens (survives guardian restart)
 │   ├── cloister-my-api        # Token file with cloister metadata (JSON)
@@ -313,7 +365,7 @@ See [devcontainer-integration.md](devcontainer-integration.md) for configuration
 Configuration is stored in `~/.config/cloister/`:
 - `config.yaml` — Global settings (proxy allowlist, approval patterns, agent configs)
 - `projects/<name>.yaml` — Per-project overrides (additional allowlists, refs)
-- `approvals/` — Domain approvals from web UI (merged with static config at load time)
+- `decisions/` — Domain decisions from web UI (merged with static config at load time)
 
 Allowlists are built from: global config + project config + global approvals + project approvals.
 

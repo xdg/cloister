@@ -352,27 +352,264 @@ List pending domain approval requests.
 
 ### POST /approve-domain/{id}
 
-Approve a pending domain request with specified scope.
+Approve a pending domain request with specified scope and optional wildcard pattern.
 
 **Request:**
 ```json
 {
-    "scope": "project"
+    "scope": "project",
+    "wildcard": false
 }
 ```
 
-Scope options:
-- `"session"` — Allow for this cloister session only (in-memory, expires on stop)
-- `"project"` — Save to `~/.config/cloister/approvals/projects/<name>.yaml`
-- `"global"` — Save to `~/.config/cloister/approvals/global.yaml`
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `scope` | Yes | string | Persistence scope (see below) |
+| `wildcard` | No | bool | If true, approve `*.domain.com` pattern instead of exact domain. Default: false |
+
+**Scope options:**
+- `"once"` — Forward this request only, don't add to any allowlist (stateless approval)
+- `"session"` — Add to in-memory allowlist, expires when cloister stops
+- `"project"` — Persist to `~/.config/cloister/decisions/projects/<name>.yaml` under `domains` or `patterns`
+- `"global"` — Persist to `~/.config/cloister/decisions/global.yaml` under `domains` or `patterns`
+
+**Wildcard behavior:**
+- If `wildcard: true` and domain is `api.example.com`, the pattern `*.example.com` is added to the appropriate allowlist
+- Wildcard patterns match one subdomain level: `*.example.com` matches `api.example.com` but NOT `api.v2.example.com`
+- The pattern `*.example.com` also matches the apex domain `example.com` for convenience
+- Wildcard patterns are stored in the `patterns` field; exact domains in the `domains` field
+
+**Response:**
+```json
+{
+    "status": "approved",
+    "scope": "project",
+    "pattern": "*.example.com"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `status` | Always `"approved"` for success |
+| `scope` | Echo of requested scope |
+| `pattern` | If wildcard was used, the resulting pattern; otherwise omitted |
+| `persistence_error` | If config write failed, error message (domain still approved for session) |
 
 ### POST /deny-domain/{id}
 
-Deny a pending domain request.
+Deny a pending domain request with specified scope and optional wildcard pattern.
+
+**Request:**
+```json
+{
+    "scope": "project",
+    "wildcard": false
+}
+```
+
+| Field | Required | Type | Description |
+|-------|----------|------|-------------|
+| `scope` | Yes | string | Persistence scope (see below) |
+| `wildcard` | No | bool | If true, deny `*.domain.com` pattern instead of exact domain. Default: false |
+
+**Scope options:**
+- `"once"` — Reject this request only, don't add to any denylist (stateless denial)
+- `"session"` — Add to in-memory denylist, expires when cloister stops
+- `"project"` — Persist to `~/.config/cloister/decisions/projects/<name>.yaml` under `denied_domains` or `denied_patterns`
+- `"global"` — Persist to `~/.config/cloister/decisions/global.yaml` under `denied_domains` or `denied_patterns`
+
+**Precedence:** Denials override approvals at all scope levels. If a domain appears in both allowlist and denylist, it's blocked.
+
+**Wildcard behavior:** Same semantics as approval endpoint — `*.example.com` blocks all subdomains and apex.
+
+**Response:**
+```json
+{
+    "status": "denied",
+    "scope": "project",
+    "pattern": "*.sketchy.io"
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `status` | Always `"denied"` for success |
+| `scope` | Echo of requested scope |
+| `pattern` | If wildcard was used, the resulting pattern; otherwise omitted |
+| `persistence_error` | If config write failed, error message (domain still denied for session) |
 
 ### GET /logs?cloister={name} (Planned)
 
 Stream audit logs, optionally filtered by cloister. *Not yet implemented.*
+
+---
+
+## Web UI
+
+The approval server at `http://localhost:9999` provides a web interface for reviewing and approving agent requests in real-time. The UI is a single-page application with vanilla JavaScript and Server-Sent Events (SSE) for live updates.
+
+### Overview
+
+**URL:** `http://localhost:9999/`
+
+The main dashboard shows:
+- **Pending Requests** — Chronological list of all pending requests (commands and domains mixed)
+  - Each request card shows type (command/domain), cloister, timestamp, and decision buttons
+  - Most recent requests appear first
+- **Recent Decisions** — Last 10 approvals/denials with timestamps and scope
+
+**Connection status:** Banner at top shows connectivity state:
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ⚠ Connection lost - Reconnecting...              [Retry]   │  ← Yellow banner
+└─────────────────────────────────────────────────────────────┘
+```
+Or when guardian is offline:
+```
+┌─────────────────────────────────────────────────────────────┐
+│ ✗ Cannot connect to guardian - Is it running?    [Retry]   │  ← Red banner
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Real-time updates:** The UI connects to `/events` (SSE) to receive notifications when:
+- New requests are added to the queue
+- Requests are approved, denied, or time out
+- Connection to guardian is lost or restored
+
+### Pending Requests
+
+All pending requests appear in a single chronological list, with the most recent at the top. Each request card shows its type (command or domain) along with relevant details.
+
+**Command request card:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🔧 COMMAND REQUEST                                          │
+├─────────────────────────────────────────────────────────────┤
+│ Cloister:  my-api-main                                      │
+│ Command:   docker compose up -d                             │
+│ Time:      14:32:05 (expires in 4m 32s)                    │
+├─────────────────────────────────────────────────────────────┤
+│ [ Approve ]  [ Deny ]                                       │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Approval flow:**
+1. Click **Approve** → Command executes on host, output streams back to agent
+2. Click **Deny** → Optional reason modal, then 403 error returned to agent
+3. Timeout (5 minutes) → Automatic denial, agent receives timeout error
+
+**After decision:**
+- Request card removed from queue
+- Confirmation banner: `✓ Approved: docker compose up -d`
+- Output streaming (if approved): Real-time stdout/stderr display
+
+**Domain request card:**
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│ 🌐 DOMAIN REQUEST                                           │
+├─────────────────────────────────────────────────────────────┤
+│ Cloister:  my-api-main                                      │
+│ Domain:    api.newservice.com                               │
+│ Time:      14:33:00 (expires in 58s)                       │
+├─────────────────────────────────────────────────────────────┤
+│ [✓] Apply to wildcard pattern: *.newservice.com            │
+│                                                             │
+│ ╔══════════════ ALLOW ══════════════╗                      │
+│ ║ [ Once ] [ Session ] [ Project ] [ Global ] ║            │
+│ ╚═══════════════════════════════════╝                      │
+│                                                             │
+│ ╔══════════════ DENY ═══════════════╗                      │
+│ ║ [ Once ] [ Session ] [ Project ] [ Global ] ║            │
+│ ╚═══════════════════════════════════╝                      │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Decision options:**
+
+| Action | Scope | Description | Persisted To |
+|--------|-------|-------------|--------------|
+| **Allow** | Once | Forward this request only | None (stateless) |
+| | Session | Allow until cloister stops | In-memory cache |
+| | Project | Allow for all cloisters in this project | `~/.config/cloister/decisions/projects/<name>.yaml` |
+| | Global | Allow for all projects | `~/.config/cloister/decisions/global.yaml` |
+| **Deny** | Once | Reject this request only | None (stateless) |
+| | Session | Block until cloister stops | In-memory denylist |
+| | Project | Block for all cloisters in this project | `~/.config/cloister/decisions/projects/<name>.yaml` |
+| | Global | Block for all projects | `~/.config/cloister/decisions/global.yaml` |
+
+**Wildcard checkbox:**
+- When checked, decision applies to `*.newservice.com` instead of exact domain `api.newservice.com`
+- Matches one subdomain level: `*.example.com` matches `api.example.com` but NOT `api.v2.example.com`
+- Also matches apex domain: `*.example.com` matches `example.com`
+- Useful for CDNs, API gateways, multi-region services
+
+**Approval flow:**
+1. Agent requests `api.newservice.com`
+2. Proxy holds connection open (60s timeout)
+3. Request appears in UI with all decision options
+4. User clicks button (e.g., **Allow → Project**)
+5. UI sends POST to `/approve-domain/{id}` with `{"scope": "project", "wildcard": false}`
+6. Backend adds domain to `~/.config/cloister/decisions/projects/my-api.yaml` under `domains:`
+7. Proxy forwards request to upstream server
+8. UI shows confirmation, e.g:
+   ```
+   ✓ Allowed api.newservice.com (project scope)
+   Request forwarded to agent.
+   ```
+
+**Denial flow:**
+1. Same steps 1-4 as approval
+2. User clicks button (e.g., **Deny → Global**)
+3. UI sends POST to `/deny-domain/{id}` with `{"scope": "global", "wildcard": false}`
+4. Backend adds domain to `~/.config/cloister/decisions/global.yaml` under `denied_domains:`
+5. Proxy returns 403 Forbidden to agent
+6. UI shows confirmation, e.g.:
+   ```
+   ✗ Blocked api.newservice.com (global scope)
+   All future requests to this domain will be denied.
+   ```
+
+**Wildcard example:**
+- Domain: `assets.cdn.example.com`
+- Checkbox: ✓ Apply to wildcard pattern
+- Click: **Allow → Project**
+- Result: Adds `*.cdn.example.com` to `patterns:` in project config
+- Effect: All subdomains match (`assets.cdn.example.com`, `images.cdn.example.com`, etc.)
+
+**Timeout behavior:**
+- If no decision within 60 seconds, request auto-removed from queue
+- Proxy returns 403 Forbidden with "Request timed out waiting for approval"
+- UI shows notification: `⏱ Timed out: api.newservice.com`
+
+### Common Workflows
+
+**Allow a CDN with wildcards:**
+1. Agent requests `assets.cdn.example.com`
+2. Check ✓ Apply to wildcard pattern
+3. Click **Allow → Project**
+4. Result: `*.cdn.example.com` added to project patterns
+5. Effect: All CDN subdomains allowed for this project
+
+**Block an entire network:**
+1. Agent requests `tracker.adnetwork.io`
+2. Check ✓ Apply to wildcard pattern
+3. Click **Deny → Global**
+4. Result: `*.adnetwork.io` added to global denied patterns
+5. Effect: All subdomains blocked across all projects
+
+**Temporary debugging access:**
+1. Agent requests `staging-api.newfeature.dev`
+2. Leave wildcard unchecked
+3. Click **Allow → Session**
+4. Result: Domain cached in memory for this cloister
+5. Effect: Allowed until cloister stops, then forgotten
+
+**One-time denial (don't cache):**
+1. Agent requests `unknown-site.com`
+2. Click **Deny → Once**
+3. Result: This request blocked, no persistence
+4. Effect: Future requests will re-prompt for human decision
 
 ---
 

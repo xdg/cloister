@@ -208,28 +208,79 @@ commands:
 
 ---
 
-## Approval File Schema
+## Decision File Schema
 
-Domains approved via the web UI are stored in a separate `approvals/` directory, not in the static config files above. This ensures the guardian container has write access only to approval data.
+Domains approved or denied via the web UI are stored in a separate `decisions/` directory, not in the static config files above. This ensures the guardian container has write access only to decision data.
 
 ```yaml
-# ~/.config/cloister/approvals/global.yaml
+# ~/.config/cloister/decisions/global.yaml
 # or
-# ~/.config/cloister/approvals/projects/<name>.yaml
+# ~/.config/cloister/decisions/projects/<name>.yaml
 
-# Exact domains approved via the web UI
+# Allowlist: Exact domains approved via the web UI
 domains:
   - docs.example.com
   - internal-api.company.com
+  - pkg.go.dev
 
-# Wildcard patterns approved via the web UI
+# Allowlist: Wildcard patterns approved via the web UI
 patterns:
   - "*.cdn.example.com"
+  - "*.s3.amazonaws.com"
+
+# Denylist: Exact domains denied via the web UI
+denied_domains:
+  - malware-cdn.example.com
+  - known-bad-site.io
+
+# Denylist: Wildcard patterns denied via the web UI
+denied_patterns:
+  - "*.sketchy.io"
+  - "*.suspicious-ads.com"
 ```
 
-At load time, approval files are merged with static config: global config + project config + global approvals + project approvals. Deduplication is handled automatically.
+### Wildcard Pattern Semantics
 
-To consolidate accumulated approvals into static config, move entries from an approval file into the corresponding config file (e.g., from `approvals/global.yaml` into `config.yaml`), then delete the approval file. This is optional — both sources are merged at load time.
+Wildcard patterns use `*.` prefix and match one subdomain level:
+- `*.example.com` matches `api.example.com` ✓
+- `*.example.com` matches `example.com` ✓ (apex domain, for convenience)
+- `*.example.com` does NOT match `api.v2.example.com` ✗ (multiple levels)
+
+To match multiple subdomain levels, create separate patterns:
+- `*.example.com` — matches `api.example.com`
+- `*.v2.example.com` — matches `api.v2.example.com`
+
+### Precedence Rules
+
+At load time, all config sources are merged with these precedence rules:
+
+**Merge order (least to most specific):**
+1. Global config (`~/.config/cloister/config.yaml`)
+2. Project config (`~/.config/cloister/projects/<name>/config.yaml`)
+3. Global decisions (`~/.config/cloister/decisions/global.yaml`)
+4. Project decisions (`~/.config/cloister/decisions/projects/<name>.yaml`)
+5. Session allowlist (in-memory, token-scoped, ephemeral)
+
+**Evaluation order (per request):**
+1. **Exact deny** — Domain in `denied_domains` → blocked
+2. **Pattern deny** — Domain matches `denied_patterns` → blocked
+3. **Exact allow** — Domain in `domains` → allowed
+4. **Pattern allow** — Domain matches `patterns` → allowed
+5. **Default** — No match → queued for human approval
+
+**Key principle:** Denials override approvals at all scope levels. If `evil.com` appears in both `domains` (allowlist) and `denied_domains` (denylist), it's blocked. This ensures security-first behavior even with conflicting configuration.
+
+### File Management
+
+**Deduplication:** Handled automatically at load time. If the same domain appears in multiple files, it's merged into a single entry.
+
+**Consolidation:** To clean up accumulated decision files, move entries from a decision file into the corresponding static config file:
+- `decisions/global.yaml` → `config.yaml`
+- `decisions/projects/<name>.yaml` → `projects/<name>/config.yaml`
+
+Then delete the decision file. This is optional — both sources are merged at load time, so functionality is identical.
+
+**Security note:** Static config files (`config.yaml`, `projects/<name>/config.yaml`) are read-only to the guardian container. Only files in `decisions/` are writable by the guardian. This prevents a compromised guardian from modifying the base configuration.
 
 ---
 
@@ -243,10 +294,13 @@ Unified log for proxy and approval events, tagged by project, branch, and cloist
 2024-01-15T14:32:02Z PROXY ALLOW api.anthropic.com/v1/messages project=my-api branch=feature-auth cloister=my-api-feature-auth
 2024-01-15T14:32:03Z PROXY DENY github.com/api/repos project=my-api branch=main cloister=my-api reason="domain not in allowlist"
 
-# Domain approval events
+# Domain approval/denial events
 2024-01-15T14:33:00Z PROXY REQUEST project=my-api branch=main cloister=my-api domain="docs.example.com"
 2024-01-15T14:33:15Z PROXY APPROVE project=my-api branch=main cloister=my-api domain="docs.example.com" scope=project user="david"
-2024-01-15T14:34:00Z PROXY TIMEOUT project=my-api branch=main cloister=my-api domain="sketchy.io"
+2024-01-15T14:33:45Z PROXY DENY project=my-api branch=main cloister=my-api domain="malware-cdn.io" scope=global user="david"
+2024-01-15T14:34:00Z PROXY APPROVE project=my-api branch=main cloister=my-api pattern="*.cdn.example.com" scope=session user="david"
+2024-01-15T14:34:30Z PROXY DENY project=my-api branch=main cloister=my-api pattern="*.sketchy.io" scope=project user="david"
+2024-01-15T14:35:00Z PROXY TIMEOUT project=my-api branch=main cloister=my-api domain="unknown-site.com"
 
 # Hostexec approval events
 2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api branch=main cloister=my-api cmd="docker compose up -d"

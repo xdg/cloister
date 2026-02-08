@@ -138,7 +138,7 @@ portion.
 - Proxy holds connection for unlisted domains (60s timeout)
 - Approval UI shows pending domain requests
 - Approval scopes: session (memory only), project (persisted), global (persisted)
-- Approval persistence to isolated `~/.config/cloister/approvals/` directory (not static config)
+- Approval persistence to isolated `~/.config/cloister/decisions/` directory (not static config)
 - Deny option for requests
 
 **Verification:**
