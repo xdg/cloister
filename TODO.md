@@ -242,7 +242,7 @@ Update proxy to evaluate denials before allowlists with correct precedence.
 
 ### 4.2 Update proxy evaluation order
 
-- [ ] In `internal/guardian/proxy.go`, update `handleConnect()` evaluation order:
+- [x] In `internal/guardian/proxy.go`, update `handleConnect()` evaluation order:
   1. Check static denylist (exact domains)
   2. Check static denylist (patterns)
   3. Check session denylist
@@ -250,10 +250,10 @@ Update proxy to evaluate denials before allowlists with correct precedence.
   5. Check static allowlist (patterns)
   6. Check session allowlist
   7. Queue for human approval
-- [ ] Ensure denials take precedence over approvals at all scope levels
-- [ ] **Test**: Integration test - denied domain in global config blocks request even if in project allowlist
-- [ ] **Test**: Integration test - session denied domain blocks request
-- [ ] **Test**: Integration test - denied pattern blocks matching subdomain
+- [x] Ensure denials take precedence over approvals at all scope levels
+- [x] **Test**: Integration test - denied domain in global config blocks request even if in project allowlist
+- [x] **Test**: Integration test - session denied domain blocks request
+- [x] **Test**: Integration test - denied pattern blocks matching subdomain
 
 ### 4.3 Add audit log events for denials
 

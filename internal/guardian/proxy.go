@@ -377,8 +377,9 @@ func isTimeoutError(err error) bool {
 }
 
 // handleConnect processes CONNECT requests.
-// It checks the allowlist and establishes a bidirectional tunnel to the upstream server.
-// Returns 403 Forbidden for non-allowed domains, 502 Bad Gateway for connection failures.
+// It checks denylists, allowlists, and establishes a bidirectional tunnel to the upstream server.
+// Evaluation order: static denylist > session denylist > static allowlist > session allowlist > human approval.
+// Returns 403 Forbidden for denied/non-allowed domains, 502 Bad Gateway for connection failures.
 func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// r.Host contains the target host:port for CONNECT requests (e.g., "example.com:443")
 	// We strip the port early so all subsequent processing uses domain-only.
@@ -390,27 +391,34 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// Resolve allowlist, project, cloister, and token from the request in a single lookup
 	allowlist, projectName, cloisterName, token := p.resolveRequest(r)
 
-	// Check static allowlist FIRST, before session or approval logic
-	staticAllowed := allowlist != nil && allowlist.IsAllowed(domain)
-	clog.Debug("handleConnect: host=%s, domain=%s, allowlist=%v, staticAllowed=%v",
-		targetHostPort, domain, allowlist != nil, staticAllowed)
+	clog.Debug("handleConnect: host=%s, domain=%s, project=%s, allowlist=%v",
+		targetHostPort, domain, projectName, allowlist != nil)
 
-	// If NOT in static allowlist, check session denylist, session allowlist, and domain approver
-	if !staticAllowed {
-		// Check session denylist FIRST — denied domains take precedence over session approvals
-		if p.SessionDenylist != nil && token != "" {
-			if p.SessionDenylist.IsBlocked(token, domain) {
-				http.Error(w, "Forbidden - domain denied", http.StatusForbidden)
-				return
-			}
+	// 1. Check static denylist FIRST — denied domains take precedence over everything
+	if p.AllowlistCache != nil && p.AllowlistCache.IsBlocked(projectName, domain) {
+		http.Error(w, "Forbidden - domain denied", http.StatusForbidden)
+		return
+	}
+
+	// 2. Check session denylist — denied domains take precedence over all approvals
+	if p.SessionDenylist != nil && token != "" {
+		if p.SessionDenylist.IsBlocked(token, domain) {
+			http.Error(w, "Forbidden - domain denied", http.StatusForbidden)
+			return
 		}
+	}
 
+	// 3. Check static allowlist
+	staticAllowed := allowlist != nil && allowlist.IsAllowed(domain)
+	if !staticAllowed {
+		// 4. Check session allowlist
 		sessionAllowed := false
 		if p.SessionAllowlist != nil && token != "" {
 			sessionAllowed = p.SessionAllowlist.IsAllowed(token, domain)
 		}
 
 		if !sessionAllowed {
+			// 5. Queue for human approval (or reject if no approver)
 			if p.DomainApprover == nil {
 				// No approver - reject immediately (backward compatible)
 				http.Error(w, "Forbidden - domain not allowed", http.StatusForbidden)

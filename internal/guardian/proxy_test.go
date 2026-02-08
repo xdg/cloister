@@ -1668,3 +1668,286 @@ func TestProxyServer_DomainApproval_EmptyHostRejected(t *testing.T) {
 		t.Errorf("expected 400 Bad Request for empty host, got: %s", statusLine)
 	}
 }
+
+func TestProxyServer_DenylistPrecedence_StaticDenyOverridesAllowlist(t *testing.T) {
+	// Denied domain in global config blocks request even if in project allowlist.
+
+	// Start a mock upstream for the non-denied domain test case.
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanup := startMockUpstream(t, echoHandler)
+	defer cleanup()
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	// Create AllowlistCache with global allowlist containing both the denied domain
+	// and the upstream host (for the positive test case).
+	globalAllowlist := NewAllowlist([]string{"denied-but-allowed.example.com", upstreamHost})
+	cache := NewAllowlistCache(globalAllowlist)
+
+	// Set global denylist containing the denied domain.
+	cache.SetGlobalDeny(NewAllowlist([]string{"denied-but-allowed.example.com"}))
+
+	// Project allowlist also includes the denied domain.
+	cache.SetProject("test-project", NewAllowlist([]string{"denied-but-allowed.example.com", upstreamHost}))
+
+	tokenLookup := func(token string) (TokenLookupResult, bool) {
+		if token == "test-token" {
+			return TokenLookupResult{ProjectName: "test-project"}, true
+		}
+		return TokenLookupResult{}, false
+	}
+
+	p := NewProxyServer(":0")
+	p.Allowlist = globalAllowlist
+	p.AllowlistCache = cache
+	p.TokenLookup = tokenLookup
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	makeRequest := func(token, targetAddr string) (int, error) {
+		conn, err := net.Dial("tcp", proxyAddr)
+		if err != nil {
+			return 0, err
+		}
+		defer func() { _ = conn.Close() }()
+
+		authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:"+token))
+		connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: %s\r\n\r\n",
+			targetAddr, targetAddr, authHeader)
+		_, err = conn.Write([]byte(connectReq))
+		if err != nil {
+			return 0, err
+		}
+
+		reader := bufio.NewReader(conn)
+		statusLine, err := reader.ReadString('\n')
+		if err != nil {
+			return 0, err
+		}
+
+		var statusCode int
+		_, err = fmt.Sscanf(statusLine, "HTTP/1.1 %d", &statusCode)
+		return statusCode, err
+	}
+
+	// Denied domain should be blocked (403) even though it's in the project allowlist.
+	t.Run("denied domain blocked despite allowlist", func(t *testing.T) {
+		status, err := makeRequest("test-token", "denied-but-allowed.example.com:443")
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		if status != 403 {
+			t.Errorf("expected 403 for denied domain, got %d", status)
+		}
+	})
+
+	// Non-denied domain in the allowlist should succeed (200 via mock upstream).
+	t.Run("non-denied domain allowed", func(t *testing.T) {
+		status, err := makeRequest("test-token", upstreamAddr)
+		if err != nil {
+			t.Fatalf("request failed: %v", err)
+		}
+		if status != 200 {
+			t.Errorf("expected 200 for non-denied domain, got %d", status)
+		}
+	})
+}
+
+func TestProxyServer_DenylistPrecedence_SessionDenyBlocks(t *testing.T) {
+	// Session denied domain blocks request even when session allowlist has
+	// the same domain allowed for the same token.
+
+	approver := &mockDomainApprover{
+		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
+			t.Error("DomainApprover should not be called when session denylist blocks")
+			return DomainApprovalResult{Approved: true, Scope: "session"}, nil
+		},
+	}
+
+	// Create session denylist and allowlist with the same domain for the same token.
+	sessionDeny := NewSessionDenylist()
+	if err := sessionDeny.Add("test-token", "denied-session.example.com"); err != nil {
+		t.Fatalf("failed to add to session denylist: %v", err)
+	}
+
+	sessionAllow := NewSessionAllowlist()
+	if err := sessionAllow.Add("test-token", "denied-session.example.com"); err != nil {
+		t.Fatalf("failed to add to session allowlist: %v", err)
+	}
+
+	// Empty static allowlist so we rely on session lists.
+	globalAllowlist := NewAllowlist([]string{})
+	cache := NewAllowlistCache(globalAllowlist)
+	cache.SetProject("test-project", NewAllowlist([]string{}))
+
+	tokenLookup := func(token string) (TokenLookupResult, bool) {
+		if token == "test-token" {
+			return TokenLookupResult{ProjectName: "test-project"}, true
+		}
+		return TokenLookupResult{}, false
+	}
+
+	p := NewProxyServer(":0")
+	p.Allowlist = globalAllowlist
+	p.AllowlistCache = cache
+	p.TokenLookup = tokenLookup
+	p.TokenValidator = newMockTokenValidator("test-token")
+	p.DomainApprover = approver
+	p.SessionDenylist = sessionDeny
+	p.SessionAllowlist = sessionAllow
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	conn, err := net.Dial("tcp", proxyAddr)
+	if err != nil {
+		t.Fatalf("failed to connect to proxy: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
+	connectReq := fmt.Sprintf("CONNECT denied-session.example.com:443 HTTP/1.1\r\nHost: denied-session.example.com:443\r\nProxy-Authorization: %s\r\n\r\n", authHeader)
+	_, err = conn.Write([]byte(connectReq))
+	if err != nil {
+		t.Fatalf("failed to send CONNECT request: %v", err)
+	}
+
+	reader := bufio.NewReader(conn)
+	statusLine, err := reader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("failed to read status line: %v", err)
+	}
+
+	if !strings.Contains(statusLine, "403") {
+		t.Errorf("expected 403 Forbidden for session-denied domain, got: %s", statusLine)
+	}
+
+	// Verify DomainApprover was never called (session deny short-circuits).
+	if approver.CallCount() != 0 {
+		t.Errorf("expected DomainApprover to not be called, but it was called %d times", approver.CallCount())
+	}
+}
+
+func TestProxyServer_DenylistPrecedence_DenyPatternBlocksSubdomain(t *testing.T) {
+	// Denied pattern blocks matching subdomain even if the exact domain
+	// is in the allowlist. Non-denied domains on the allowlist still work.
+
+	// Start a mock upstream for the positive control test
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanup := startMockUpstream(t, echoHandler)
+	defer cleanup()
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	// Global allowlist includes the denied subdomain and the upstream host.
+	globalAllowlist := NewAllowlist([]string{"api.evil.com", upstreamHost})
+	cache := NewAllowlistCache(globalAllowlist)
+
+	// Global denylist uses a wildcard pattern to block all *.evil.com.
+	cache.SetGlobalDeny(NewAllowlistWithPatterns(nil, []string{"*.evil.com"}))
+
+	// Project allowlist also includes both.
+	cache.SetProject("test-project", NewAllowlist([]string{"api.evil.com", upstreamHost}))
+
+	tokenLookup := func(token string) (TokenLookupResult, bool) {
+		if token == "test-token" {
+			return TokenLookupResult{ProjectName: "test-project"}, true
+		}
+		return TokenLookupResult{}, false
+	}
+
+	p := NewProxyServer(":0")
+	p.Allowlist = globalAllowlist
+	p.AllowlistCache = cache
+	p.TokenLookup = tokenLookup
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
+
+	makeRequest := func(targetAddr string) (int, error) {
+		conn, err := net.Dial("tcp", proxyAddr)
+		if err != nil {
+			return 0, err
+		}
+		defer func() { _ = conn.Close() }()
+
+		connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: %s\r\n\r\n",
+			targetAddr, targetAddr, authHeader)
+		_, err = conn.Write([]byte(connectReq))
+		if err != nil {
+			return 0, err
+		}
+
+		reader := bufio.NewReader(conn)
+		statusLine, err := reader.ReadString('\n')
+		if err != nil {
+			return 0, err
+		}
+
+		var statusCode int
+		_, err = fmt.Sscanf(statusLine, "HTTP/1.1 %d", &statusCode)
+		return statusCode, err
+	}
+
+	// Denied subdomain blocked by pattern
+	status, err := makeRequest("api.evil.com:443")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if status != 403 {
+		t.Errorf("expected 403 Forbidden for pattern-denied subdomain, got %d", status)
+	}
+
+	// Positive control: non-denied domain on the allowlist succeeds
+	status, err = makeRequest(upstreamAddr)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	if status != 200 {
+		t.Errorf("expected 200 for non-denied allowed domain, got %d", status)
+	}
+}
