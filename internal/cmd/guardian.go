@@ -452,7 +452,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		sessionAllowlist = guardian.NewSessionAllowlist()
 
 		// Create domain approver with all dependencies
-		domainApprover = guardian.NewDomainApprover(domainQueue, sessionAllowlist, allowlistCache)
+		domainApprover = guardian.NewDomainApprover(domainQueue, sessionAllowlist, nil, allowlistCache)
 		clog.Info("domain approval enabled (timeout: %v)", approvalTimeout)
 	} else {
 		clog.Info("domain approval disabled (unlisted domains will be rejected)")

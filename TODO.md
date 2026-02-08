@@ -129,16 +129,16 @@ Add scope support to `/deny-domain/{id}` endpoint and update domain approver to 
 
 ### 2.3 Update domain approver to persist denials
 
-- [ ] In `internal/guardian/domain_approver.go`, update `RequestApproval()` to handle denial responses with scope
-- [ ] For scope="session": Add domain to `SessionDenylist` (new interface, similar to SessionAllowlist)
-- [ ] For scope="project": Load project decisions, append to `denied_domains` or `denied_patterns`, write back
-- [ ] For scope="global": Load global decisions, append to `denied_domains` or `denied_patterns`, write back
-- [ ] For scope="once": No persistence, just return denial
-- [ ] Add wildcard logic: if `wildcard=true`, convert `api.example.com` → `*.example.com` before persisting
-- [ ] **Test**: Unit test - denial with scope="session" adds to session denylist
-- [ ] **Test**: Unit test - denial with scope="project" writes to project decisions file
-- [ ] **Test**: Unit test - denial with scope="global" writes to global decisions file
-- [ ] **Test**: Unit test - denial with wildcard creates correct pattern
+- [x] In `internal/guardian/domain_approver.go`, update `RequestApproval()` to handle denial responses with scope
+- [x] For scope="session": Add domain to `SessionDenylist` (new interface, similar to SessionAllowlist)
+- [x] For scope="project": Load project decisions, append to `denied_domains` or `denied_patterns`, write back
+- [x] For scope="global": Load global decisions, append to `denied_domains` or `denied_patterns`, write back
+- [x] For scope="once": No persistence, just return denial
+- [x] Add wildcard logic: if `wildcard=true`, convert `api.example.com` → `*.example.com` before persisting
+- [x] **Test**: Unit test - denial with scope="session" adds to session denylist
+- [x] **Test**: Unit test - denial with scope="project" writes to project decisions file
+- [x] **Test**: Unit test - denial with scope="global" writes to global decisions file
+- [x] **Test**: Unit test - denial with wildcard creates correct pattern
 
 ### 2.4 Create SessionDenylist interface and implementation
 

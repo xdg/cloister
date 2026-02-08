@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/xdg/cloister/internal/clog"
+	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/guardian/approval"
 )
 
@@ -94,16 +95,19 @@ func ValidateDomain(domain string) error {
 type DomainApproverImpl struct {
 	queue            *approval.DomainQueue
 	sessionAllowlist SessionAllowlist
+	sessionDenylist  SessionDenylist
 	allowlistCache   *AllowlistCache
 }
 
 // NewDomainApprover creates a new DomainApproverImpl.
 // The sessionAllowlist and allowlistCache parameters are required for updating
-// the in-memory allowlists after approval.
-func NewDomainApprover(queue *approval.DomainQueue, sessionAllowlist SessionAllowlist, allowlistCache *AllowlistCache) *DomainApproverImpl {
+// the in-memory allowlists after approval. The sessionDenylist parameter is
+// optional (may be nil) and is used for session-scoped denial persistence.
+func NewDomainApprover(queue *approval.DomainQueue, sessionAllowlist SessionAllowlist, sessionDenylist SessionDenylist, allowlistCache *AllowlistCache) *DomainApproverImpl {
 	return &DomainApproverImpl{
 		queue:            queue,
 		sessionAllowlist: sessionAllowlist,
+		sessionDenylist:  sessionDenylist,
 		allowlistCache:   allowlistCache,
 	}
 }
@@ -153,11 +157,46 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 	// Block waiting for response
 	resp := <-respChan
 
-	// Handle timeout or denial
+	// Handle timeout
+	if resp.Status == "timeout" {
+		return DomainApprovalResult{Approved: false}, nil
+	}
+
+	// Handle denial with scope-based persistence
+	if resp.Status == "denied" {
+		// Determine what to persist: use pattern if provided (wildcard), else domain
+		target := domain
+		isPattern := false
+		if resp.Pattern != "" {
+			target = resp.Pattern
+			isPattern = true
+		}
+
+		switch resp.Scope {
+		case "session":
+			if d.sessionDenylist != nil && token != "" {
+				if err := d.sessionDenylist.Add(token, target); err != nil {
+					clog.Warn("failed to add %s to session denylist: %v", target, err)
+				}
+			}
+		case "project":
+			if err := d.persistDenial("project", project, target, isPattern); err != nil {
+				clog.Warn("failed to persist project denial for %s: %v", target, err)
+			}
+		case "global":
+			if err := d.persistDenial("global", "", target, isPattern); err != nil {
+				clog.Warn("failed to persist global denial for %s: %v", target, err)
+			}
+		case "once":
+			// No persistence needed
+		}
+
+		return DomainApprovalResult{Approved: false}, nil
+	}
+
+	// Handle unknown status (treat as denial)
 	if resp.Status != "approved" {
-		return DomainApprovalResult{
-			Approved: false,
-		}, nil
+		return DomainApprovalResult{Approved: false}, nil
 	}
 
 	// Handle approval based on scope
@@ -191,4 +230,44 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 		Approved: true,
 		Scope:    resp.Scope,
 	}, nil
+}
+
+// persistDenial writes a denial to the project or global decisions file.
+func (d *DomainApproverImpl) persistDenial(scope, project, target string, isPattern bool) error {
+	switch scope {
+	case "project":
+		decisions, err := config.LoadProjectDecisions(project)
+		if err != nil {
+			return fmt.Errorf("load project decisions: %w", err)
+		}
+		if isPattern {
+			decisions.DeniedPatterns = appendUnique(decisions.DeniedPatterns, target)
+		} else {
+			decisions.DeniedDomains = appendUnique(decisions.DeniedDomains, target)
+		}
+		return config.WriteProjectDecisions(project, decisions)
+	case "global":
+		decisions, err := config.LoadGlobalDecisions()
+		if err != nil {
+			return fmt.Errorf("load global decisions: %w", err)
+		}
+		if isPattern {
+			decisions.DeniedPatterns = appendUnique(decisions.DeniedPatterns, target)
+		} else {
+			decisions.DeniedDomains = appendUnique(decisions.DeniedDomains, target)
+		}
+		return config.WriteGlobalDecisions(decisions)
+	default:
+		return fmt.Errorf("unknown scope: %s", scope)
+	}
+}
+
+// appendUnique appends value to slice if not already present.
+func appendUnique(slice []string, value string) []string {
+	for _, s := range slice {
+		if s == value {
+			return slice
+		}
+	}
+	return append(slice, value)
 }

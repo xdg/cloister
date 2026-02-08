@@ -85,7 +85,7 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	mockPersister := &mockConfigPersister{}
 
 	// Create domain approver
-	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, cache)
+	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, nil, cache)
 
 	// Create approval server
 	cmdQueue := approval.NewQueue()
@@ -234,7 +234,7 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	cache.SetProject("test-project", NewAllowlist([]string{}))
 
 	mockPersister := &mockConfigPersister{}
-	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, cache)
+	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, nil, cache)
 
 	cmdQueue := approval.NewQueue()
 	approvalServer := approval.NewServer(cmdQueue, nil)
@@ -339,7 +339,7 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 	cache := NewAllowlistCache(globalAllowlist)
 	cache.SetProject("test-project", NewAllowlist([]string{}))
 
-	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, cache)
+	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, nil, cache)
 
 	cmdQueue := approval.NewQueue()
 	approvalServer := approval.NewServer(cmdQueue, nil)
@@ -430,7 +430,7 @@ func TestDomainApprovalIntegration_Timeout(t *testing.T) {
 	globalAllowlist := NewAllowlist([]string{})
 	cache := NewAllowlistCache(globalAllowlist)
 
-	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, cache)
+	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, nil, cache)
 
 	const testDomain = "slow-response.com:443"
 	const testProject = "test-project"
@@ -461,7 +461,7 @@ func TestDomainApprovalIntegration_GetPendingDomains(t *testing.T) {
 	globalAllowlist := NewAllowlist([]string{})
 	cache := NewAllowlistCache(globalAllowlist)
 
-	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, cache)
+	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, nil, cache)
 
 	cmdQueue := approval.NewQueue()
 	approvalServer := approval.NewServer(cmdQueue, nil)

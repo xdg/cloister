@@ -63,6 +63,15 @@ type SessionAllowlist interface {
 	Clear(token string) // Called when token is revoked to clean up session domains
 }
 
+// SessionDenylist tracks ephemeral session-denied domains per token.
+// Token-based isolation ensures each cloister session has an independent
+// deny cache, even when multiple cloisters belong to the same project.
+type SessionDenylist interface {
+	IsBlocked(token, domain string) bool
+	Add(token, domain string) error
+	Clear(token string) // Called when token is revoked to clean up session domains
+}
+
 // ProxyServer is an HTTP CONNECT proxy that enforces domain allowlists
 // for cloister containers.
 type ProxyServer struct {
