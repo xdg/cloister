@@ -1539,12 +1539,18 @@ func TestServer_HandleDenyDomain_Success(t *testing.T) {
 	if resp.ID != id {
 		t.Errorf("expected ID %s, got %s", id, resp.ID)
 	}
+	if resp.Scope != "once" {
+		t.Errorf("expected default scope 'once', got %q", resp.Scope)
+	}
 
-	// Verify the response was sent on the channel with default reason
+	// Verify the response was sent on the channel with default reason and scope
 	select {
 	case denyResp := <-respChan:
 		if denyResp.Status != "denied" {
 			t.Errorf("expected denial response status 'denied', got %q", denyResp.Status)
+		}
+		if denyResp.Scope != "once" {
+			t.Errorf("expected denial response scope 'once', got %q", denyResp.Scope)
 		}
 		if !strings.Contains(denyResp.Reason, "Denied by") {
 			t.Errorf("expected default reason to start with 'Denied by', got %q", denyResp.Reason)
@@ -1602,6 +1608,227 @@ func TestServer_HandleDenyDomain_WithReason(t *testing.T) {
 		}
 	default:
 		t.Error("expected denial response on channel")
+	}
+}
+
+func TestServer_HandleDenyDomain_WithScopeOnce(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "suspicious.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	body := `{"scope":"once"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDenyDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp denyDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q", resp.Status)
+	}
+	if resp.Scope != "once" {
+		t.Errorf("expected scope 'once', got %q", resp.Scope)
+	}
+
+	// Verify the response was sent on the channel with scope
+	select {
+	case denyResp := <-respChan:
+		if denyResp.Status != "denied" {
+			t.Errorf("expected denial response status 'denied', got %q", denyResp.Status)
+		}
+		if denyResp.Scope != "once" {
+			t.Errorf("expected scope 'once' on channel response, got %q", denyResp.Scope)
+		}
+	default:
+		t.Error("expected denial response on channel")
+	}
+}
+
+func TestServer_HandleDenyDomain_WithScopeProject(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "suspicious.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	body := `{"scope":"project"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDenyDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp denyDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q", resp.Status)
+	}
+	if resp.Scope != "project" {
+		t.Errorf("expected scope 'project', got %q", resp.Scope)
+	}
+
+	// Verify the response was sent on the channel with scope
+	select {
+	case denyResp := <-respChan:
+		if denyResp.Scope != "project" {
+			t.Errorf("expected scope 'project' on channel response, got %q", denyResp.Scope)
+		}
+	default:
+		t.Error("expected denial response on channel")
+	}
+}
+
+func TestServer_HandleDenyDomain_WithWildcard(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request with a response channel (domain with 3+ components for wildcard)
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "api.example.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	body := `{"scope":"session","wildcard":true}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDenyDomain(rr, httpReq)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+
+	var resp denyDomainResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if resp.Status != "denied" {
+		t.Errorf("expected status 'denied', got %q", resp.Status)
+	}
+	if resp.Scope != "session" {
+		t.Errorf("expected scope 'session', got %q", resp.Scope)
+	}
+	if resp.Pattern != "*.example.com" {
+		t.Errorf("expected pattern '*.example.com', got %q", resp.Pattern)
+	}
+
+	// Verify the response was sent on the channel with pattern
+	select {
+	case denyResp := <-respChan:
+		if denyResp.Pattern != "*.example.com" {
+			t.Errorf("expected pattern '*.example.com' on channel response, got %q", denyResp.Pattern)
+		}
+		if denyResp.Scope != "session" {
+			t.Errorf("expected scope 'session' on channel response, got %q", denyResp.Scope)
+		}
+	default:
+		t.Error("expected denial response on channel")
+	}
+}
+
+func TestServer_HandleDenyDomain_InvalidScope(t *testing.T) {
+	queue := NewQueue()
+	domainQueue := NewDomainQueue()
+
+	// Add a test domain request
+	respChan := make(chan DomainResponse, 1)
+	domainReq := &DomainRequest{
+		Cloister:  "test-cloister",
+		Project:   "test-project",
+		Domain:    "suspicious.com",
+		Timestamp: time.Now(),
+		Responses: []chan<- DomainResponse{respChan},
+	}
+	id, err := domainQueue.Add(domainReq)
+	if err != nil {
+		t.Fatalf("failed to add domain request: %v", err)
+	}
+
+	server := NewServer(queue, nil)
+	server.DomainQueue = domainQueue
+
+	body := `{"scope":"invalid"}`
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, bytes.NewBufferString(body))
+	httpReq.SetPathValue("id", id)
+	rr := httptest.NewRecorder()
+
+	server.handleDenyDomain(rr, httpReq)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+
+	var resp errorResponse
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if !strings.Contains(resp.Error, "invalid scope") {
+		t.Errorf("expected error to contain 'invalid scope', got %q", resp.Error)
+	}
+
+	// Verify request is still in the queue (not consumed by invalid request)
+	if domainQueue.Len() != 1 {
+		t.Errorf("expected domain queue to still have 1 item, got %d", domainQueue.Len())
 	}
 }
 

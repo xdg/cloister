@@ -735,13 +735,17 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 
 // denyDomainRequest is the optional request body for POST /deny-domain/{id}.
 type denyDomainRequest struct {
-	Reason string `json:"reason,omitempty"`
+	Scope    string `json:"scope"`
+	Wildcard bool   `json:"wildcard,omitempty"`
+	Reason   string `json:"reason,omitempty"`
 }
 
 // denyDomainResponse is the response body for POST /deny-domain/{id}.
 type denyDomainResponse struct {
-	Status string `json:"status"`
-	ID     string `json:"id"`
+	Status  string `json:"status"`
+	ID      string `json:"id"`
+	Scope   string `json:"scope,omitempty"`
+	Pattern string `json:"pattern,omitempty"`
 }
 
 // handleDenyDomain denies a pending domain request by ID.
@@ -768,10 +772,29 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 	project := req.Project
 	cloister := req.Cloister
 
-	// Parse optional reason from request body
+	// Parse optional request body (empty body is valid for backward compatibility)
 	var denyReq denyDomainRequest
-	// Ignore decode errors - reason is optional
+	// Ignore decode errors - all fields are optional
 	_ = json.NewDecoder(r.Body).Decode(&denyReq)
+
+	// Default scope to "once" if not provided
+	scope := denyReq.Scope
+	if scope == "" {
+		scope = "once"
+	}
+
+	// Validate scope
+	validScopes := map[string]bool{"once": true, "session": true, "project": true, "global": true}
+	if !validScopes[scope] {
+		s.writeError(w, http.StatusBadRequest, "invalid scope: must be one of: once, session, project, global")
+		return
+	}
+
+	// Compute wildcard pattern if requested
+	var pattern string
+	if denyReq.Wildcard {
+		pattern = domainToWildcard(domain)
+	}
 
 	reason := denyReq.Reason
 	if reason == "" {
@@ -791,8 +814,10 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Send denied response on the request's channels. Broadcasts to all waiting callers.
 	broadcastDomainResponse(req, DomainResponse{
-		Status: "denied",
-		Reason: reason,
+		Status:  "denied",
+		Scope:   scope,
+		Pattern: pattern,
+		Reason:  reason,
 	})
 
 	if strings.Contains(r.Header.Get("Accept"), "text/html") {
@@ -801,8 +826,10 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	s.writeJSON(w, http.StatusOK, denyDomainResponse{
-		Status: "denied",
-		ID:     id,
+		Status:  "denied",
+		ID:      id,
+		Scope:   scope,
+		Pattern: pattern,
 	})
 }
 

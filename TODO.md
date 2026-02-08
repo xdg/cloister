@@ -112,20 +112,20 @@ Add scope support to `/deny-domain/{id}` endpoint and update domain approver to 
 
 ### 2.2 Update approval server deny endpoint
 
-- [ ] In `internal/guardian/approval/server.go`, update `POST /deny-domain/{id}` handler
-- [ ] Parse request body with schema:
+- [x] In `internal/guardian/approval/server.go`, update `POST /deny-domain/{id}` handler
+- [x] Parse request body with schema:
   ```go
   type DenyDomainRequest struct {
       Scope    string `json:"scope"`    // "once", "session", "project", "global"
       Wildcard bool   `json:"wildcard"` // default false
   }
   ```
-- [ ] Validate `scope` is one of: "once", "session", "project", "global"
-- [ ] Send `DomainResponse` with `Status: "denied"`, `Scope: <scope>`, and optional `Pattern: <wildcard>`
-- [ ] **Test**: Handler test - deny with scope="once" returns correct response
-- [ ] **Test**: Handler test - deny with scope="project" returns correct response
-- [ ] **Test**: Handler test - deny with wildcard=true returns pattern in response
-- [ ] **Test**: Handler test - invalid scope returns 400 Bad Request
+- [x] Validate `scope` is one of: "once", "session", "project", "global"
+- [x] Send `DomainResponse` with `Status: "denied"`, `Scope: <scope>`, and optional `Pattern: <wildcard>`
+- [x] **Test**: Handler test - deny with scope="once" returns correct response
+- [x] **Test**: Handler test - deny with scope="project" returns correct response
+- [x] **Test**: Handler test - deny with wildcard=true returns pattern in response
+- [x] **Test**: Handler test - invalid scope returns 400 Bad Request
 
 ### 2.3 Update domain approver to persist denials
 
