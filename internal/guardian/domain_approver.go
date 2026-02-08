@@ -195,10 +195,14 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 		case "project":
 			if err := d.persistDenial("project", project, target, isPattern); err != nil {
 				clog.Warn("failed to persist project denial for %s: %v", target, err)
+			} else {
+				d.updateDenylistCache("project", project, target, isPattern)
 			}
 		case "global":
 			if err := d.persistDenial("global", "", target, isPattern); err != nil {
 				clog.Warn("failed to persist global denial for %s: %v", target, err)
+			} else {
+				d.updateDenylistCache("global", "", target, isPattern)
 			}
 		case "once":
 			// No persistence needed
@@ -274,6 +278,55 @@ func (d *DomainApproverImpl) persistDenial(scope, project, target string, isPatt
 		return config.WriteGlobalDecisions(decisions)
 	default:
 		return fmt.Errorf("unknown scope: %s", scope)
+	}
+}
+
+// updateDenylistCache updates the in-memory AllowlistCache denylist after a
+// denial is persisted to disk. This ensures subsequent proxy requests see the
+// denial immediately without waiting for a SIGHUP/config reload.
+func (d *DomainApproverImpl) updateDenylistCache(scope, project, target string, isPattern bool) {
+	if d.allowlistCache == nil {
+		return
+	}
+
+	switch scope {
+	case "global":
+		denylist := d.allowlistCache.GetGlobalDeny()
+		if denylist == nil {
+			// Create a new global denylist with this entry
+			entries := []config.AllowEntry{}
+			if isPattern {
+				entries = append(entries, config.AllowEntry{Pattern: target})
+			} else {
+				entries = append(entries, config.AllowEntry{Domain: target})
+			}
+			d.allowlistCache.SetGlobalDeny(NewAllowlistFromConfig(entries))
+		} else {
+			if isPattern {
+				denylist.AddPatterns([]string{target})
+			} else {
+				denylist.Add([]string{target})
+			}
+		}
+	case "project":
+		denylist := d.allowlistCache.GetProjectDeny(project)
+		globalDeny := d.allowlistCache.GetGlobalDeny()
+		if denylist == nil || denylist == globalDeny {
+			// No project-specific denylist yet; create one
+			entries := []config.AllowEntry{}
+			if isPattern {
+				entries = append(entries, config.AllowEntry{Pattern: target})
+			} else {
+				entries = append(entries, config.AllowEntry{Domain: target})
+			}
+			d.allowlistCache.SetProjectDeny(project, NewAllowlistFromConfig(entries))
+		} else {
+			if isPattern {
+				denylist.AddPatterns([]string{target})
+			} else {
+				denylist.Add([]string{target})
+			}
+		}
 	}
 }
 

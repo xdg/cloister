@@ -279,8 +279,18 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	clog.Info("loaded global allowlist: %d static + %d approved = %d total",
 		staticCount, approvedCount, len(globalAllow))
 
+	// Build global denylist from decisions
+	var globalDenylist *guardian.Allowlist
+	if len(globalDecisions.DeniedDomains) > 0 || len(globalDecisions.DeniedPatterns) > 0 {
+		_, denyEntries := decisionsToAllowEntries(globalDecisions)
+		globalDenylist = guardian.NewAllowlistFromConfig(denyEntries)
+		clog.Info("loaded global denylist: %d domains + %d patterns",
+			len(globalDecisions.DeniedDomains), len(globalDecisions.DeniedPatterns))
+	}
+
 	// Create allowlist cache for per-project allowlists
 	allowlistCache := guardian.NewAllowlistCache(globalAllowlist)
+	allowlistCache.SetGlobalDeny(globalDenylist)
 
 	// Create the proxy server with config-derived allowlist
 	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)
@@ -337,8 +347,25 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		return allowlist
 	}
 
-	// Set the project loader for lazy loading
+	// Create project denylist loader
+	loadProjectDenylist := func(projectName string) *guardian.Allowlist {
+		projectDecisions, err := config.LoadProjectDecisions(projectName)
+		if err != nil {
+			clog.Warn("failed to load project decisions (deny) for %s: %v", projectName, err)
+			return nil
+		}
+		if len(projectDecisions.DeniedDomains) == 0 && len(projectDecisions.DeniedPatterns) == 0 {
+			return nil
+		}
+		_, denyEntries := decisionsToAllowEntries(projectDecisions)
+		denylist := guardian.NewAllowlistFromConfig(denyEntries)
+		clog.Info("loaded denylist for project %s (%d entries)", projectName, len(denyEntries))
+		return denylist
+	}
+
+	// Set the project loaders for lazy loading
 	allowlistCache.SetProjectLoader(loadProjectAllowlist)
+	allowlistCache.SetDenylistLoader(loadProjectDenylist)
 
 	// Set up config reloader for SIGHUP
 	proxy.SetConfigReloader(func() (*guardian.Allowlist, error) {
@@ -365,6 +392,15 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}
 		newGlobal := guardian.NewAllowlistFromConfig(globalAllow)
 		allowlistCache.SetGlobal(newGlobal)
+
+		// Rebuild global denylist from decisions
+		if len(globalDecisions.DeniedDomains) > 0 || len(globalDecisions.DeniedPatterns) > 0 {
+			_, denyEntries := decisionsToAllowEntries(globalDecisions)
+			allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(denyEntries))
+		} else {
+			allowlistCache.SetGlobalDeny(nil)
+		}
+
 		// Clear project cache so they get reloaded with new global
 		allowlistCache.Clear()
 		// Reload all project allowlists
@@ -435,6 +471,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	// Create domain approver if unlisted_domain_behavior is "request_approval"
 	var domainApprover guardian.DomainApprover
 	var sessionAllowlist guardian.SessionAllowlist
+	var sessionDenylist guardian.SessionDenylist
 	var domainQueue *approval.DomainQueue
 	if cfg.Proxy.UnlistedDomainBehavior == "request_approval" {
 		// Parse domain approval timeout from config (default 60s)
@@ -451,11 +488,12 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		// Create the domain approval queue with configured timeout
 		domainQueue = approval.NewDomainQueueWithTimeout(approvalTimeout)
 
-		// Create session allowlist for ephemeral domain approvals
+		// Create session allowlist and denylist for ephemeral domain decisions
 		sessionAllowlist = guardian.NewSessionAllowlist()
+		sessionDenylist = guardian.NewSessionDenylist()
 
 		// Create domain approver with all dependencies
-		domainApprover = guardian.NewDomainApprover(domainQueue, sessionAllowlist, nil, allowlistCache, auditLogger)
+		domainApprover = guardian.NewDomainApprover(domainQueue, sessionAllowlist, sessionDenylist, allowlistCache, auditLogger)
 		clog.Info("domain approval enabled (timeout: %v)", approvalTimeout)
 	} else {
 		clog.Info("domain approval disabled (unlisted domains will be rejected)")
@@ -464,10 +502,10 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	// Create config persister with reload notifier
 	configPersister := &guardian.ConfigPersisterImpl{
 		ReloadNotifier: func() {
-			// Clear and reload allowlist cache when config is updated
-			clog.Debug("config updated, reloading allowlist cache")
+			// Clear and reload allowlist/denylist cache when config is updated
+			clog.Debug("config updated, reloading allowlist/denylist cache")
 
-			// Reload global decisions and rebuild global allowlist
+			// Reload global decisions and rebuild global allowlist + denylist
 			newGlobalDecisions, err := config.LoadGlobalDecisions()
 			if err != nil {
 				clog.Warn("failed to reload global decisions: %v", err)
@@ -481,7 +519,15 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			}
 			allowlistCache.SetGlobal(guardian.NewAllowlistFromConfig(globalAllow))
 
-			// Clear and reload all project allowlists
+			// Rebuild global denylist
+			if len(globalDecisions.DeniedDomains) > 0 || len(globalDecisions.DeniedPatterns) > 0 {
+				_, denyEntries := decisionsToAllowEntries(globalDecisions)
+				allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(denyEntries))
+			} else {
+				allowlistCache.SetGlobalDeny(nil)
+			}
+
+			// Clear and reload all project allowlists (denylists cleared too, reloaded lazily)
 			allowlistCache.Clear()
 			for _, info := range registry.List() {
 				if info.ProjectName != "" {
@@ -492,9 +538,10 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		},
 	}
 
-	// Set domain approver and session allowlist on proxy (both may be nil if disabled)
+	// Set domain approver and session allow/deny lists on proxy (all may be nil if disabled)
 	proxy.DomainApprover = domainApprover
 	proxy.SessionAllowlist = sessionAllowlist
+	proxy.SessionDenylist = sessionDenylist
 
 	// Set session allowlist on API server for cleanup on token revocation
 	api.SessionAllowlist = sessionAllowlist
