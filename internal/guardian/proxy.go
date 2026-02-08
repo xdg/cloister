@@ -367,21 +367,26 @@ func isTimeoutError(err error) bool {
 // It checks the allowlist and establishes a bidirectional tunnel to the upstream server.
 // Returns 403 Forbidden for non-allowed domains, 502 Bad Gateway for connection failures.
 func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
-	// r.Host contains the target host:port for CONNECT requests
-	host := r.Host
+	// r.Host contains the target host:port for CONNECT requests (e.g., "example.com:443")
+	// We strip the port early so all subsequent processing uses domain-only.
+	// This ensures consistent behavior across allowlist matching, session cache,
+	// approval queue display, and config persistence.
+	targetHostPort := r.Host
+	domain := stripPort(targetHostPort)
 
 	// Resolve allowlist, project, cloister, and token from the request in a single lookup
 	allowlist, projectName, cloisterName, token := p.resolveRequest(r)
 
 	// Check static allowlist FIRST, before session or approval logic
-	staticAllowed := allowlist != nil && allowlist.IsAllowed(host)
-	clog.Debug("handleConnect: host=%s, allowlist=%v, staticAllowed=%v", host, allowlist != nil, staticAllowed)
+	staticAllowed := allowlist != nil && allowlist.IsAllowed(domain)
+	clog.Debug("handleConnect: host=%s, domain=%s, allowlist=%v, staticAllowed=%v",
+		targetHostPort, domain, allowlist != nil, staticAllowed)
 
 	// If NOT in static allowlist, check session allowlist and domain approver
 	if !staticAllowed {
 		sessionAllowed := false
 		if p.SessionAllowlist != nil && token != "" {
-			sessionAllowed = p.SessionAllowlist.IsAllowed(token, host)
+			sessionAllowed = p.SessionAllowlist.IsAllowed(token, domain)
 		}
 
 		if !sessionAllowed {
@@ -392,14 +397,15 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Validate domain format before queueing for approval
-			if err := ValidateDomain(host); err != nil {
+			if err := ValidateDomain(domain); err != nil {
 				http.Error(w, fmt.Sprintf("Forbidden - invalid domain: %v", err), http.StatusForbidden)
 				return
 			}
 
 			// Request approval (blocks until response)
-			// Note: DomainApprover still uses project name for the approval queue/UI display
-			result, err := p.DomainApprover.RequestApproval(projectName, cloisterName, host, token)
+			// Pass domain-only (no port) so approval UI shows clean domain names
+			// and duplicates are properly detected across different ports
+			result, err := p.DomainApprover.RequestApproval(projectName, cloisterName, domain, token)
 			if err != nil || !result.Approved {
 				http.Error(w, "Forbidden - domain not approved", http.StatusForbidden)
 				return
@@ -409,18 +415,19 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// Establish connection to upstream server.
 	// We use net.Dial (not TLS) because the client will perform TLS handshake
 	// through the tunnel - this is how HTTP CONNECT proxies work.
+	// Use the original targetHostPort (with port) for the actual connection.
 	dialer := &net.Dialer{
 		Timeout: dialTimeout,
 	}
-	upstreamConn, err := dialer.DialContext(r.Context(), "tcp", host)
+	upstreamConn, err := dialer.DialContext(r.Context(), "tcp", targetHostPort)
 	if err != nil {
 		// Log timeout errors with specific message for debugging
 		if isTimeoutError(err) {
-			p.log("proxy connection timeout to %s after %v: %v", host, dialTimeout, err)
+			p.log("proxy connection timeout to %s after %v: %v", targetHostPort, dialTimeout, err)
 			http.Error(w, fmt.Sprintf("Gateway Timeout - connection to upstream timed out after %v", dialTimeout), http.StatusGatewayTimeout)
 			return
 		}
-		p.log("proxy connection failed to %s: %v", host, err)
+		p.log("proxy connection failed to %s: %v", targetHostPort, err)
 		http.Error(w, fmt.Sprintf("Bad Gateway - failed to connect to upstream: %v", err), http.StatusBadGateway)
 		return
 	}

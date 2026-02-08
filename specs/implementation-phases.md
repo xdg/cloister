@@ -127,7 +127,7 @@ Each phase produces a working (if limited) system. Phase 1 enables basic sandbox
 
 ---
 
-## Phases 6 & 7: Domain Approval Flow
+## Phases 6 & 7: Domain Approval Flow (COMPLETE)
 
 Phase 6 represents the approval portion.  Phase 7 represents the persistence
 portion.
