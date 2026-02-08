@@ -649,6 +649,63 @@ func TestEventFormat_DomainDeny(t *testing.T) {
 	}
 }
 
+func TestEventFormat_DomainDeny_WithScope(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainDeny,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "malicious.example.com",
+		Scope:     "session",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_DENY project=my-api cloister=my-api-main domain="malicious.example.com" scope="session"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+func TestEventFormat_DomainDeny_WithScopeAndPattern(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainDeny,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "api.evil.example.com",
+		Scope:     "project",
+		Pattern:   "*.evil.example.com",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_DENY project=my-api cloister=my-api-main domain="api.evil.example.com" scope="project" pattern="*.evil.example.com"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
+func TestEventFormat_DomainDeny_WithAllFields(t *testing.T) {
+	e := &Event{
+		Timestamp: testTime,
+		Type:      EventDomainDeny,
+		Project:   "my-api",
+		Cloister:  "my-api-main",
+		Domain:    "api.evil.example.com",
+		Scope:     "global",
+		Pattern:   "*.evil.example.com",
+		Reason:    "Denied by user",
+	}
+
+	got := e.Format()
+	want := `2024-01-15T14:32:05Z DOMAIN DOMAIN_DENY project=my-api cloister=my-api-main domain="api.evil.example.com" scope="global" pattern="*.evil.example.com" reason="Denied by user"`
+
+	if got != want {
+		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
+	}
+}
+
 func TestEventFormat_DomainTimeout(t *testing.T) {
 	e := &Event{
 		Timestamp: testTime,
@@ -780,6 +837,50 @@ func TestLogger_LogDomainDeny(t *testing.T) {
 	}
 	if !strings.Contains(got, `reason="Denied by user"`) {
 		t.Errorf("LogDomainDeny() should contain reason: %s", got)
+	}
+}
+
+func TestLogger_LogDomainDenyWithScope(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf)
+
+	if err := logger.LogDomainDenyWithScope("my-api", "my-api-main", "api.evil.example.com", "project", "*.evil.example.com"); err != nil {
+		t.Fatalf("LogDomainDenyWithScope() error = %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, "DOMAIN DOMAIN_DENY") {
+		t.Errorf("LogDomainDenyWithScope() should contain 'DOMAIN DOMAIN_DENY': %s", got)
+	}
+	if !strings.Contains(got, `domain="api.evil.example.com"`) {
+		t.Errorf("LogDomainDenyWithScope() should contain domain: %s", got)
+	}
+	if !strings.Contains(got, `scope="project"`) {
+		t.Errorf("LogDomainDenyWithScope() should contain scope: %s", got)
+	}
+	if !strings.Contains(got, `pattern="*.evil.example.com"`) {
+		t.Errorf("LogDomainDenyWithScope() should contain pattern: %s", got)
+	}
+	// Should NOT contain reason (not set by this method)
+	if strings.Contains(got, "reason=") {
+		t.Errorf("LogDomainDenyWithScope() should not contain reason: %s", got)
+	}
+}
+
+func TestLogger_LogDomainDenyWithScope_NoPattern(t *testing.T) {
+	var buf bytes.Buffer
+	logger := NewLogger(&buf)
+
+	if err := logger.LogDomainDenyWithScope("my-api", "my-api-main", "evil.example.com", "session", ""); err != nil {
+		t.Fatalf("LogDomainDenyWithScope() error = %v", err)
+	}
+
+	got := buf.String()
+	if !strings.Contains(got, `scope="session"`) {
+		t.Errorf("LogDomainDenyWithScope() should contain scope: %s", got)
+	}
+	if strings.Contains(got, "pattern=") {
+		t.Errorf("LogDomainDenyWithScope() should not contain pattern when empty: %s", got)
 	}
 }
 

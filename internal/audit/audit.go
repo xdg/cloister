@@ -148,6 +148,14 @@ func (e *Event) Format() string {
 			b.WriteString(quoteValue(e.User))
 		}
 	case EventDomainDeny:
+		if e.Scope != "" {
+			b.WriteString(" scope=")
+			b.WriteString(quoteValue(e.Scope))
+		}
+		if e.Pattern != "" {
+			b.WriteString(" pattern=")
+			b.WriteString(quoteValue(e.Pattern))
+		}
 		if e.Reason != "" {
 			b.WriteString(" reason=")
 			b.WriteString(quoteValue(e.Reason))
@@ -309,6 +317,20 @@ func (l *Logger) LogDomainDeny(project, cloister, domain, reason string) error {
 		Cloister:  cloister,
 		Domain:    domain,
 		Reason:    reason,
+	})
+}
+
+// LogDomainDenyWithScope logs a DOMAIN DOMAIN_DENY event with scope and pattern fields.
+// This is used by the domain approver to log processed denials with full context.
+func (l *Logger) LogDomainDenyWithScope(project, cloister, domain, scope, pattern string) error {
+	return l.Log(&Event{
+		Timestamp: time.Now(),
+		Type:      EventDomainDeny,
+		Project:   project,
+		Cloister:  cloister,
+		Domain:    domain,
+		Scope:     scope,
+		Pattern:   pattern,
 	})
 }
 

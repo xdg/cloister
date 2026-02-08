@@ -257,11 +257,11 @@ Update proxy to evaluate denials before allowlists with correct precedence.
 
 ### 4.3 Add audit log events for denials
 
-- [ ] In `internal/guardian/domain_approver.go`, log denial events to audit log
-- [ ] Log format: `PROXY DENY project=X cloister=Y domain=Z scope=S user=U`
-- [ ] Include `pattern=P` if wildcard was used
-- [ ] **Test**: Integration test - denial with scope="project" logs audit event
-- [ ] **Test**: Integration test - audit log includes pattern field for wildcard denials
+- [x] In `internal/guardian/domain_approver.go`, log denial events to audit log
+- [x] Log format: `PROXY DENY project=X cloister=Y domain=Z scope=S user=U`
+- [x] Include `pattern=P` if wildcard was used
+- [x] **Test**: Integration test - denial with scope="project" logs audit event
+- [x] **Test**: Integration test - audit log includes pattern field for wildcard denials
 
 ---
 

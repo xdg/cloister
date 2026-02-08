@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xdg/cloister/internal/audit"
 	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/guardian/approval"
@@ -97,18 +98,22 @@ type DomainApproverImpl struct {
 	sessionAllowlist SessionAllowlist
 	sessionDenylist  SessionDenylist
 	allowlistCache   *AllowlistCache
+	auditLogger      *audit.Logger
 }
 
 // NewDomainApprover creates a new DomainApproverImpl.
 // The sessionAllowlist and allowlistCache parameters are required for updating
 // the in-memory allowlists after approval. The sessionDenylist parameter is
 // optional (may be nil) and is used for session-scoped denial persistence.
-func NewDomainApprover(queue *approval.DomainQueue, sessionAllowlist SessionAllowlist, sessionDenylist SessionDenylist, allowlistCache *AllowlistCache) *DomainApproverImpl {
+// The auditLogger parameter is optional (may be nil) and is used for logging
+// domain denial events with scope and pattern context.
+func NewDomainApprover(queue *approval.DomainQueue, sessionAllowlist SessionAllowlist, sessionDenylist SessionDenylist, allowlistCache *AllowlistCache, auditLogger *audit.Logger) *DomainApproverImpl {
 	return &DomainApproverImpl{
 		queue:            queue,
 		sessionAllowlist: sessionAllowlist,
 		sessionDenylist:  sessionDenylist,
 		allowlistCache:   allowlistCache,
+		auditLogger:      auditLogger,
 	}
 }
 
@@ -164,6 +169,11 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 
 	// Handle denial with scope-based persistence
 	if resp.Status == "denied" {
+		// Log the denial with scope and pattern context
+		if d.auditLogger != nil {
+			_ = d.auditLogger.LogDomainDenyWithScope(project, cloister, domain, resp.Scope, resp.Pattern)
+		}
+
 		// Determine what to persist: use pattern if provided (wildcard), else domain
 		target := domain
 		isPattern := false

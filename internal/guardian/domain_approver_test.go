@@ -1,10 +1,13 @@
 package guardian
 
 import (
+	"bytes"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/xdg/cloister/internal/audit"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/guardian/approval"
 )
@@ -272,7 +275,7 @@ func TestDomainApproverImpl_RequestApproval_Timeout(t *testing.T) {
 	sessionAllowlist := NewSessionAllowlist()
 	cache := NewAllowlistCache(NewDefaultAllowlist())
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache)
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
 
 	// Submit request and wait for timeout
 	result, err := approver.RequestApproval("test-project", "test-cloister", "example.com:443", "test-token")
@@ -290,7 +293,7 @@ func TestDomainApproverImpl_RequestApproval_Denied(t *testing.T) {
 	sessionAllowlist := NewSessionAllowlist()
 	cache := NewAllowlistCache(NewDefaultAllowlist())
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache)
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -343,7 +346,7 @@ func TestDomainApproverImpl_RequestApproval_SessionScope(t *testing.T) {
 	cache := NewAllowlistCache(NewDefaultAllowlist())
 	cache.SetProject("test-project", NewAllowlist([]string{}))
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache)
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -409,7 +412,7 @@ func TestDomainApproverImpl_RequestApproval_ProjectScope(t *testing.T) {
 	sessionAllowlist := NewSessionAllowlist()
 	cache := NewAllowlistCache(NewDefaultAllowlist())
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache)
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -465,7 +468,7 @@ func TestDomainApproverImpl_RequestApproval_GlobalScope(t *testing.T) {
 	sessionAllowlist := NewSessionAllowlist()
 	cache := NewAllowlistCache(NewDefaultAllowlist())
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache)
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -522,7 +525,7 @@ func TestRequestApproval_DenialSessionScope(t *testing.T) {
 	sessionDenylist := newMockSessionDenylist()
 	cache := NewAllowlistCache(NewDefaultAllowlist())
 
-	approver := NewDomainApprover(queue, sessionAllowlist, sessionDenylist, cache)
+	approver := NewDomainApprover(queue, sessionAllowlist, sessionDenylist, cache, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -578,7 +581,7 @@ func TestRequestApproval_DenialProjectScope(t *testing.T) {
 	sessionAllowlist := NewSessionAllowlist()
 	cache := NewAllowlistCache(NewDefaultAllowlist())
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache)
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -641,7 +644,7 @@ func TestRequestApproval_DenialGlobalScope(t *testing.T) {
 	sessionAllowlist := NewSessionAllowlist()
 	cache := NewAllowlistCache(NewDefaultAllowlist())
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache)
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -704,7 +707,7 @@ func TestRequestApproval_DenialWithWildcard(t *testing.T) {
 	sessionAllowlist := NewSessionAllowlist()
 	cache := NewAllowlistCache(NewDefaultAllowlist())
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache)
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -757,5 +760,178 @@ func TestRequestApproval_DenialWithWildcard(t *testing.T) {
 	}
 	if len(decisions.DeniedDomains) != 0 {
 		t.Errorf("Expected empty DeniedDomains, got %v", decisions.DeniedDomains)
+	}
+}
+
+func TestRequestApproval_DenialAuditLog(t *testing.T) {
+	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
+	sessionAllowlist := NewSessionAllowlist()
+	cache := NewAllowlistCache(NewDefaultAllowlist())
+
+	var buf bytes.Buffer
+	auditLogger := audit.NewLogger(&buf)
+
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, auditLogger)
+
+	// Submit request in background
+	done := make(chan struct{})
+	var result DomainApprovalResult
+	var err error
+	go func() {
+		result, err = approver.RequestApproval("test-project", "test-cloister", "evil.example.com:443", "test-token")
+		close(done)
+	}()
+
+	// Give it a moment to be added to queue
+	time.Sleep(10 * time.Millisecond)
+
+	// Find the request and deny it with session scope
+	requests := queue.List()
+	if len(requests) != 1 {
+		t.Fatalf("Expected 1 request in queue, got %d", len(requests))
+	}
+	req, ok := queue.Get(requests[0].ID)
+	if !ok {
+		t.Fatalf("Failed to get request from queue")
+	}
+
+	// Send denial with session scope
+	req.Responses[0] <- approval.DomainResponse{
+		Status: "denied",
+		Scope:  "session",
+	}
+	queue.Remove(requests[0].ID)
+
+	// Wait for result
+	<-done
+
+	if err != nil {
+		t.Fatalf("RequestApproval returned error: %v", err)
+	}
+	if result.Approved {
+		t.Errorf("Expected Approved=false for denial, got true")
+	}
+
+	// Verify audit log was written
+	got := buf.String()
+	if !strings.Contains(got, "DOMAIN DOMAIN_DENY") {
+		t.Errorf("Audit log should contain 'DOMAIN DOMAIN_DENY': %s", got)
+	}
+	if !strings.Contains(got, `domain="evil.example.com"`) {
+		t.Errorf("Audit log should contain domain: %s", got)
+	}
+	if !strings.Contains(got, `scope="session"`) {
+		t.Errorf("Audit log should contain scope: %s", got)
+	}
+}
+
+func TestRequestApproval_DenialAuditLog_WithPattern(t *testing.T) {
+	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
+	sessionAllowlist := NewSessionAllowlist()
+	cache := NewAllowlistCache(NewDefaultAllowlist())
+
+	var buf bytes.Buffer
+	auditLogger := audit.NewLogger(&buf)
+
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, auditLogger)
+
+	// Submit request in background
+	done := make(chan struct{})
+	var result DomainApprovalResult
+	var err error
+	go func() {
+		result, err = approver.RequestApproval("test-project", "test-cloister", "api.evil.example.com:443", "test-token")
+		close(done)
+	}()
+
+	// Give it a moment to be added to queue
+	time.Sleep(10 * time.Millisecond)
+
+	// Find the request and deny it with pattern
+	requests := queue.List()
+	if len(requests) != 1 {
+		t.Fatalf("Expected 1 request in queue, got %d", len(requests))
+	}
+	req, ok := queue.Get(requests[0].ID)
+	if !ok {
+		t.Fatalf("Failed to get request from queue")
+	}
+
+	// Send denial with project scope and wildcard pattern
+	req.Responses[0] <- approval.DomainResponse{
+		Status:  "denied",
+		Scope:   "project",
+		Pattern: "*.evil.example.com",
+	}
+	queue.Remove(requests[0].ID)
+
+	// Wait for result
+	<-done
+
+	if err != nil {
+		t.Fatalf("RequestApproval returned error: %v", err)
+	}
+	if result.Approved {
+		t.Errorf("Expected Approved=false for denial, got true")
+	}
+
+	// Verify audit log was written with scope and pattern
+	got := buf.String()
+	if !strings.Contains(got, "DOMAIN DOMAIN_DENY") {
+		t.Errorf("Audit log should contain 'DOMAIN DOMAIN_DENY': %s", got)
+	}
+	if !strings.Contains(got, `scope="project"`) {
+		t.Errorf("Audit log should contain scope: %s", got)
+	}
+	if !strings.Contains(got, `pattern="*.evil.example.com"`) {
+		t.Errorf("Audit log should contain pattern: %s", got)
+	}
+}
+
+func TestRequestApproval_DenialNoAuditLog_NilLogger(t *testing.T) {
+	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
+	sessionAllowlist := NewSessionAllowlist()
+	cache := NewAllowlistCache(NewDefaultAllowlist())
+
+	// No audit logger (nil)
+	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+
+	// Submit request in background
+	done := make(chan struct{})
+	var result DomainApprovalResult
+	var err error
+	go func() {
+		result, err = approver.RequestApproval("test-project", "test-cloister", "evil.example.com:443", "test-token")
+		close(done)
+	}()
+
+	// Give it a moment to be added to queue
+	time.Sleep(10 * time.Millisecond)
+
+	// Find the request and deny it
+	requests := queue.List()
+	if len(requests) != 1 {
+		t.Fatalf("Expected 1 request in queue, got %d", len(requests))
+	}
+	req, ok := queue.Get(requests[0].ID)
+	if !ok {
+		t.Fatalf("Failed to get request from queue")
+	}
+
+	// Send denial -- should not panic with nil audit logger
+	req.Responses[0] <- approval.DomainResponse{
+		Status: "denied",
+		Scope:  "once",
+	}
+	queue.Remove(requests[0].ID)
+
+	// Wait for result
+	<-done
+
+	if err != nil {
+		t.Fatalf("RequestApproval returned error: %v", err)
+	}
+	if result.Approved {
+		t.Errorf("Expected Approved=false for denial, got true")
 	}
 }
