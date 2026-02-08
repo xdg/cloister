@@ -6,136 +6,259 @@ import (
 	"github.com/xdg/cloister/internal/config"
 )
 
-func TestApprovalsToAllowEntries_DomainsOnly(t *testing.T) {
-	approvals := &config.Decisions{
+func TestDecisionsToAllowEntries_DomainsOnly(t *testing.T) {
+	decisions := &config.Decisions{
 		Domains: []string{"example.com", "api.example.com"},
 	}
 
-	entries := approvalsToAllowEntries(approvals)
+	allow, deny := decisionsToAllowEntries(decisions)
 
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
-	}
-
-	if entries[0].Domain != "example.com" {
-		t.Errorf("entries[0].Domain = %q, want %q", entries[0].Domain, "example.com")
-	}
-	if entries[0].Pattern != "" {
-		t.Errorf("entries[0].Pattern should be empty, got %q", entries[0].Pattern)
+	if len(allow) != 2 {
+		t.Fatalf("expected 2 allow entries, got %d", len(allow))
 	}
 
-	if entries[1].Domain != "api.example.com" {
-		t.Errorf("entries[1].Domain = %q, want %q", entries[1].Domain, "api.example.com")
+	if allow[0].Domain != "example.com" {
+		t.Errorf("allow[0].Domain = %q, want %q", allow[0].Domain, "example.com")
 	}
-	if entries[1].Pattern != "" {
-		t.Errorf("entries[1].Pattern should be empty, got %q", entries[1].Pattern)
+	if allow[0].Pattern != "" {
+		t.Errorf("allow[0].Pattern should be empty, got %q", allow[0].Pattern)
+	}
+
+	if allow[1].Domain != "api.example.com" {
+		t.Errorf("allow[1].Domain = %q, want %q", allow[1].Domain, "api.example.com")
+	}
+	if allow[1].Pattern != "" {
+		t.Errorf("allow[1].Pattern should be empty, got %q", allow[1].Pattern)
+	}
+
+	if len(deny) != 0 {
+		t.Fatalf("expected 0 deny entries, got %d", len(deny))
 	}
 }
 
-func TestApprovalsToAllowEntries_PatternsOnly(t *testing.T) {
-	approvals := &config.Decisions{
+func TestDecisionsToAllowEntries_PatternsOnly(t *testing.T) {
+	decisions := &config.Decisions{
 		Patterns: []string{"*.example.com", "*.cdn.example.com"},
 	}
 
-	entries := approvalsToAllowEntries(approvals)
+	allow, deny := decisionsToAllowEntries(decisions)
 
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
-	}
-
-	if entries[0].Pattern != "*.example.com" {
-		t.Errorf("entries[0].Pattern = %q, want %q", entries[0].Pattern, "*.example.com")
-	}
-	if entries[0].Domain != "" {
-		t.Errorf("entries[0].Domain should be empty, got %q", entries[0].Domain)
+	if len(allow) != 2 {
+		t.Fatalf("expected 2 allow entries, got %d", len(allow))
 	}
 
-	if entries[1].Pattern != "*.cdn.example.com" {
-		t.Errorf("entries[1].Pattern = %q, want %q", entries[1].Pattern, "*.cdn.example.com")
+	if allow[0].Pattern != "*.example.com" {
+		t.Errorf("allow[0].Pattern = %q, want %q", allow[0].Pattern, "*.example.com")
 	}
-	if entries[1].Domain != "" {
-		t.Errorf("entries[1].Domain should be empty, got %q", entries[1].Domain)
+	if allow[0].Domain != "" {
+		t.Errorf("allow[0].Domain should be empty, got %q", allow[0].Domain)
+	}
+
+	if allow[1].Pattern != "*.cdn.example.com" {
+		t.Errorf("allow[1].Pattern = %q, want %q", allow[1].Pattern, "*.cdn.example.com")
+	}
+	if allow[1].Domain != "" {
+		t.Errorf("allow[1].Domain should be empty, got %q", allow[1].Domain)
+	}
+
+	if len(deny) != 0 {
+		t.Fatalf("expected 0 deny entries, got %d", len(deny))
 	}
 }
 
-func TestApprovalsToAllowEntries_DomainsAndPatterns(t *testing.T) {
-	approvals := &config.Decisions{
+func TestDecisionsToAllowEntries_DomainsAndPatterns(t *testing.T) {
+	decisions := &config.Decisions{
 		Domains:  []string{"example.com"},
 		Patterns: []string{"*.example.com"},
 	}
 
-	entries := approvalsToAllowEntries(approvals)
+	allow, deny := decisionsToAllowEntries(decisions)
 
-	if len(entries) != 2 {
-		t.Fatalf("expected 2 entries, got %d", len(entries))
+	if len(allow) != 2 {
+		t.Fatalf("expected 2 allow entries, got %d", len(allow))
 	}
 
 	// Domains come first
-	if entries[0].Domain != "example.com" {
-		t.Errorf("entries[0].Domain = %q, want %q", entries[0].Domain, "example.com")
+	if allow[0].Domain != "example.com" {
+		t.Errorf("allow[0].Domain = %q, want %q", allow[0].Domain, "example.com")
 	}
-	if entries[0].Pattern != "" {
-		t.Errorf("entries[0].Pattern should be empty, got %q", entries[0].Pattern)
+	if allow[0].Pattern != "" {
+		t.Errorf("allow[0].Pattern should be empty, got %q", allow[0].Pattern)
 	}
 
 	// Patterns come after domains
-	if entries[1].Pattern != "*.example.com" {
-		t.Errorf("entries[1].Pattern = %q, want %q", entries[1].Pattern, "*.example.com")
+	if allow[1].Pattern != "*.example.com" {
+		t.Errorf("allow[1].Pattern = %q, want %q", allow[1].Pattern, "*.example.com")
 	}
-	if entries[1].Domain != "" {
-		t.Errorf("entries[1].Domain should be empty, got %q", entries[1].Domain)
+	if allow[1].Domain != "" {
+		t.Errorf("allow[1].Domain should be empty, got %q", allow[1].Domain)
+	}
+
+	if len(deny) != 0 {
+		t.Fatalf("expected 0 deny entries, got %d", len(deny))
 	}
 }
 
-func TestApprovalsToAllowEntries_Empty(t *testing.T) {
-	approvals := &config.Decisions{
+func TestDecisionsToAllowEntries_Empty(t *testing.T) {
+	decisions := &config.Decisions{
 		Domains:  []string{},
 		Patterns: []string{},
 	}
 
-	entries := approvalsToAllowEntries(approvals)
+	allow, deny := decisionsToAllowEntries(decisions)
 
-	if len(entries) != 0 {
-		t.Fatalf("expected 0 entries, got %d", len(entries))
+	if len(allow) != 0 {
+		t.Fatalf("expected 0 allow entries, got %d", len(allow))
 	}
 
 	// Verify it returns a non-nil empty slice (not nil)
-	if entries == nil {
-		t.Error("expected non-nil empty slice, got nil")
+	if allow == nil {
+		t.Error("expected non-nil empty allow slice, got nil")
+	}
+
+	if len(deny) != 0 {
+		t.Fatalf("expected 0 deny entries, got %d", len(deny))
+	}
+
+	if deny == nil {
+		t.Error("expected non-nil empty deny slice, got nil")
 	}
 }
 
-func TestApprovalsToAllowEntries_NilSlices(t *testing.T) {
-	approvals := &config.Decisions{
+func TestDecisionsToAllowEntries_NilSlices(t *testing.T) {
+	decisions := &config.Decisions{
 		Domains:  nil,
 		Patterns: nil,
 	}
 
-	entries := approvalsToAllowEntries(approvals)
+	allow, deny := decisionsToAllowEntries(decisions)
 
-	if len(entries) != 0 {
-		t.Fatalf("expected 0 entries, got %d", len(entries))
+	if len(allow) != 0 {
+		t.Fatalf("expected 0 allow entries, got %d", len(allow))
 	}
 
 	// Verify it returns a non-nil empty slice (not nil)
-	if entries == nil {
-		t.Error("expected non-nil empty slice, got nil")
+	if allow == nil {
+		t.Error("expected non-nil empty allow slice, got nil")
+	}
+
+	if len(deny) != 0 {
+		t.Fatalf("expected 0 deny entries, got %d", len(deny))
+	}
+
+	if deny == nil {
+		t.Error("expected non-nil empty deny slice, got nil")
 	}
 }
 
-func TestMergeStaticAndApprovals_GlobalOnly(t *testing.T) {
+func TestDecisionsToAllowEntries_DeniedDomainsOnly(t *testing.T) {
+	decisions := &config.Decisions{
+		DeniedDomains: []string{"blocked.example.com", "malware.test"},
+	}
+
+	allow, deny := decisionsToAllowEntries(decisions)
+
+	if len(allow) != 0 {
+		t.Fatalf("expected 0 allow entries, got %d", len(allow))
+	}
+
+	if len(deny) != 2 {
+		t.Fatalf("expected 2 deny entries, got %d", len(deny))
+	}
+
+	if deny[0].Domain != "blocked.example.com" {
+		t.Errorf("deny[0].Domain = %q, want %q", deny[0].Domain, "blocked.example.com")
+	}
+	if deny[0].Pattern != "" {
+		t.Errorf("deny[0].Pattern should be empty, got %q", deny[0].Pattern)
+	}
+
+	if deny[1].Domain != "malware.test" {
+		t.Errorf("deny[1].Domain = %q, want %q", deny[1].Domain, "malware.test")
+	}
+	if deny[1].Pattern != "" {
+		t.Errorf("deny[1].Pattern should be empty, got %q", deny[1].Pattern)
+	}
+}
+
+func TestDecisionsToAllowEntries_DeniedPatternsOnly(t *testing.T) {
+	decisions := &config.Decisions{
+		DeniedPatterns: []string{"*.evil.com", "*.tracking.net"},
+	}
+
+	allow, deny := decisionsToAllowEntries(decisions)
+
+	if len(allow) != 0 {
+		t.Fatalf("expected 0 allow entries, got %d", len(allow))
+	}
+
+	if len(deny) != 2 {
+		t.Fatalf("expected 2 deny entries, got %d", len(deny))
+	}
+
+	if deny[0].Pattern != "*.evil.com" {
+		t.Errorf("deny[0].Pattern = %q, want %q", deny[0].Pattern, "*.evil.com")
+	}
+	if deny[0].Domain != "" {
+		t.Errorf("deny[0].Domain should be empty, got %q", deny[0].Domain)
+	}
+
+	if deny[1].Pattern != "*.tracking.net" {
+		t.Errorf("deny[1].Pattern = %q, want %q", deny[1].Pattern, "*.tracking.net")
+	}
+	if deny[1].Domain != "" {
+		t.Errorf("deny[1].Domain should be empty, got %q", deny[1].Domain)
+	}
+}
+
+func TestDecisionsToAllowEntries_AllFourFields(t *testing.T) {
+	decisions := &config.Decisions{
+		Domains:        []string{"example.com"},
+		Patterns:       []string{"*.example.com"},
+		DeniedDomains:  []string{"blocked.example.com"},
+		DeniedPatterns: []string{"*.evil.com"},
+	}
+
+	allow, deny := decisionsToAllowEntries(decisions)
+
+	if len(allow) != 2 {
+		t.Fatalf("expected 2 allow entries, got %d", len(allow))
+	}
+
+	if allow[0].Domain != "example.com" {
+		t.Errorf("allow[0].Domain = %q, want %q", allow[0].Domain, "example.com")
+	}
+	if allow[1].Pattern != "*.example.com" {
+		t.Errorf("allow[1].Pattern = %q, want %q", allow[1].Pattern, "*.example.com")
+	}
+
+	if len(deny) != 2 {
+		t.Fatalf("expected 2 deny entries, got %d", len(deny))
+	}
+
+	if deny[0].Domain != "blocked.example.com" {
+		t.Errorf("deny[0].Domain = %q, want %q", deny[0].Domain, "blocked.example.com")
+	}
+	if deny[1].Pattern != "*.evil.com" {
+		t.Errorf("deny[1].Pattern = %q, want %q", deny[1].Pattern, "*.evil.com")
+	}
+}
+
+func TestMergeStaticAndDecisions_GlobalOnly(t *testing.T) {
 	// Simulates the global allowlist merging pattern from runGuardianProxy:
-	// globalAllow = append(cfg.Proxy.Allow, approvalsToAllowEntries(globalApprovals)...)
+	// allowEntries, _ := decisionsToAllowEntries(globalDecisions)
+	// globalAllow = append(cfg.Proxy.Allow, allowEntries...)
 	staticAllow := []config.AllowEntry{
 		{Domain: "golang.org"},
 		{Domain: "api.anthropic.com"},
 	}
-	approvals := &config.Decisions{
+	decisions := &config.Decisions{
 		Domains:  []string{"approved.example.com"},
 		Patterns: []string{"*.cdn.example.com"},
 	}
 
-	merged := append(staticAllow, approvalsToAllowEntries(approvals)...)
+	allowEntries, _ := decisionsToAllowEntries(decisions)
+	merged := append(staticAllow, allowEntries...)
 
 	if len(merged) != 4 {
 		t.Fatalf("expected 4 entries, got %d", len(merged))
@@ -166,28 +289,32 @@ func TestMergeStaticAndApprovals_GlobalOnly(t *testing.T) {
 	}
 }
 
-func TestMergeStaticAndApprovals_ProjectWithAllFourSources(t *testing.T) {
+func TestMergeStaticAndDecisions_ProjectWithAllFourSources(t *testing.T) {
 	// Simulates the project allowlist merging pattern from loadProjectAllowlist:
 	// merged = MergeAllowlists(global, project)
-	// merged = append(merged, approvalsToAllowEntries(globalApprovals)...)
-	// merged = append(merged, approvalsToAllowEntries(projectApprovals)...)
+	// allowEntries, _ := decisionsToAllowEntries(globalDecisions)
+	// merged = append(merged, allowEntries...)
+	// allowEntries, _ = decisionsToAllowEntries(projectDecisions)
+	// merged = append(merged, allowEntries...)
 	globalStatic := []config.AllowEntry{
 		{Domain: "golang.org"},
 	}
 	projectStatic := []config.AllowEntry{
 		{Domain: "custom.project.com"},
 	}
-	globalApprovals := &config.Decisions{
+	globalDecisions := &config.Decisions{
 		Domains: []string{"approved-global.com"},
 	}
-	projectApprovals := &config.Decisions{
+	projectDecisions := &config.Decisions{
 		Domains:  []string{"approved-project.com"},
 		Patterns: []string{"*.internal.corp"},
 	}
 
 	merged := config.MergeAllowlists(globalStatic, projectStatic)
-	merged = append(merged, approvalsToAllowEntries(globalApprovals)...)
-	merged = append(merged, approvalsToAllowEntries(projectApprovals)...)
+	globalAllow, _ := decisionsToAllowEntries(globalDecisions)
+	merged = append(merged, globalAllow...)
+	projectAllow, _ := decisionsToAllowEntries(projectDecisions)
+	merged = append(merged, projectAllow...)
 
 	if len(merged) != 5 {
 		t.Fatalf("expected 5 entries, got %d", len(merged))
@@ -222,17 +349,18 @@ func TestMergeStaticAndApprovals_ProjectWithAllFourSources(t *testing.T) {
 	}
 }
 
-func TestMergeStaticAndApprovals_EmptyApprovals(t *testing.T) {
+func TestMergeStaticAndDecisions_EmptyDecisions(t *testing.T) {
 	staticAllow := []config.AllowEntry{
 		{Domain: "golang.org"},
 		{Domain: "api.anthropic.com"},
 	}
-	approvals := &config.Decisions{
+	decisions := &config.Decisions{
 		Domains:  []string{},
 		Patterns: []string{},
 	}
 
-	merged := append(staticAllow, approvalsToAllowEntries(approvals)...)
+	allowEntries, _ := decisionsToAllowEntries(decisions)
+	merged := append(staticAllow, allowEntries...)
 
 	if len(merged) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(merged))
@@ -246,14 +374,15 @@ func TestMergeStaticAndApprovals_EmptyApprovals(t *testing.T) {
 	}
 }
 
-func TestMergeStaticAndApprovals_OnlyApprovals(t *testing.T) {
+func TestMergeStaticAndDecisions_OnlyDecisions(t *testing.T) {
 	var staticAllow []config.AllowEntry
-	approvals := &config.Decisions{
+	decisions := &config.Decisions{
 		Domains:  []string{"approved.example.com"},
 		Patterns: []string{"*.cdn.example.com"},
 	}
 
-	merged := append(staticAllow, approvalsToAllowEntries(approvals)...)
+	allowEntries, _ := decisionsToAllowEntries(decisions)
+	merged := append(staticAllow, allowEntries...)
 
 	if len(merged) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(merged))

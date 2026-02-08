@@ -90,13 +90,13 @@ Migrate from `approvals/` to `decisions/` directory and add denylist support to 
 
 ### 1.4 Update guardian command integration
 
-- [ ] In `internal/cmd/guardian.go`, rename `approvalsToAllowEntries()` to `decisionsToAllowEntries()`
-- [ ] Update `decisionsToAllowEntries()` to handle both allowlist and denylist fields
-- [ ] Update all calls to `LoadGlobalApprovals()` → `LoadGlobalDecisions()`
-- [ ] Update all calls to `LoadProjectApprovals()` → `LoadProjectDecisions()`
-- [ ] Update comments referencing "approvals" to "decisions"
-- [ ] **Test**: Integration test - guardian loads decisions from new path correctly
-- [ ] **Test**: Integration test - global decisions merge with project decisions
+- [x] In `internal/cmd/guardian.go`, rename `approvalsToAllowEntries()` to `decisionsToAllowEntries()`
+- [x] Update `decisionsToAllowEntries()` to handle both allowlist and denylist fields
+- [x] Update all calls to `LoadGlobalApprovals()` → `LoadGlobalDecisions()`
+- [x] Update all calls to `LoadProjectApprovals()` → `LoadProjectDecisions()`
+- [x] Update comments referencing "approvals" to "decisions"
+- [x] **Test**: Integration test - guardian loads decisions from new path correctly
+- [x] **Test**: Integration test - global decisions merge with project decisions
 
 ---
 
