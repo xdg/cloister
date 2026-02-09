@@ -387,7 +387,7 @@ proxy:
     - pattern: "*.evil.com"
 ```
 
-- [ ] Redefine `Decisions` struct in `internal/config/decisions.go`:
+- [x] Redefine `Decisions` struct in `internal/config/decisions.go`:
   ```go
   type Decisions struct {
       Proxy DecisionsProxy `yaml:"proxy,omitempty"`
@@ -397,23 +397,23 @@ proxy:
       Deny  []AllowEntry `yaml:"deny,omitempty"`
   }
   ```
-- [ ] Update `LoadGlobalDecisions` / `LoadProjectDecisions` — these use `strictUnmarshal` so the new struct just works
-- [ ] Update `WriteGlobalDecisions` / `WriteProjectDecisions` — same, `yaml.Marshal` handles it
-- [ ] Update all decision-reading code in `internal/config/decisions_test.go`:
+- [x] Update `LoadGlobalDecisions` / `LoadProjectDecisions` — these use `strictUnmarshal` so the new struct just works
+- [x] Update `WriteGlobalDecisions` / `WriteProjectDecisions` — same, `yaml.Marshal` handles it
+- [x] Update all decision-reading code in `internal/config/decisions_test.go`:
   - Replace `decisions.Domains` → access via `decisions.Proxy.Allow` filtering by Domain
   - Replace `decisions.Patterns` → access via `decisions.Proxy.Allow` filtering by Pattern
   - Replace `decisions.DeniedDomains` → access via `decisions.Proxy.Deny` filtering by Domain
   - Replace `decisions.DeniedPatterns` → access via `decisions.Proxy.Deny` filtering by Pattern
-- [ ] Add helper methods on `Decisions` for convenience (optional but reduces churn):
+- [x] Add helper methods on `Decisions` for convenience (optional but reduces churn):
   ```go
   func (d *Decisions) AllowedDomains() []string   // extract domain strings from Proxy.Allow
   func (d *Decisions) AllowedPatterns() []string   // extract pattern strings from Proxy.Allow
   func (d *Decisions) DeniedDomains() []string     // extract domain strings from Proxy.Deny
   func (d *Decisions) DeniedPatterns() []string    // extract pattern strings from Proxy.Deny
   ```
-- [ ] **Test**: Unit test — round-trip marshal/unmarshal of new `Decisions` format
-- [ ] **Test**: Unit test — empty `Decisions` marshals to empty YAML (no spurious keys)
-- [ ] **Test**: Unit test — `AllowedDomains()` / `DeniedPatterns()` helpers return correct values
+- [x] **Test**: Unit test — round-trip marshal/unmarshal of new `Decisions` format
+- [x] **Test**: Unit test — empty `Decisions` marshals to empty YAML (no spurious keys)
+- [x] **Test**: Unit test — `AllowedDomains()` / `DeniedPatterns()` helpers return correct values
 
 ### 6.5 Update guardian startup (`internal/cmd/guardian.go`)
 

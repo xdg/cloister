@@ -19,14 +19,61 @@ import (
 // the decisions directory (~/.config/cloister/decisions/), separately from
 // static config files. These are written by the guardian when users approve or
 // deny domains via the web UI, with scope options (once, session, project, global).
-// The Domains/Patterns fields record allowed entries; DeniedDomains/DeniedPatterns
-// record denied entries. Denied entries take precedence over allowed entries
-// during proxy evaluation.
+// The structure mirrors the static config format: Proxy.Allow contains allowed
+// domain/pattern entries, Proxy.Deny contains denied entries. Denied entries
+// take precedence over allowed entries during proxy evaluation.
 type Decisions struct {
-	Domains        []string `yaml:"domains,omitempty"`
-	Patterns       []string `yaml:"patterns,omitempty"`
-	DeniedDomains  []string `yaml:"denied_domains,omitempty"`
-	DeniedPatterns []string `yaml:"denied_patterns,omitempty"`
+	Proxy DecisionsProxy `yaml:"proxy,omitempty"`
+}
+
+// DecisionsProxy holds the allow and deny lists for proxy decisions.
+type DecisionsProxy struct {
+	Allow []AllowEntry `yaml:"allow,omitempty"`
+	Deny  []AllowEntry `yaml:"deny,omitempty"`
+}
+
+// AllowedDomains returns the domain strings from the allow list.
+func (d *Decisions) AllowedDomains() []string {
+	var result []string
+	for _, e := range d.Proxy.Allow {
+		if e.Domain != "" {
+			result = append(result, e.Domain)
+		}
+	}
+	return result
+}
+
+// AllowedPatterns returns the pattern strings from the allow list.
+func (d *Decisions) AllowedPatterns() []string {
+	var result []string
+	for _, e := range d.Proxy.Allow {
+		if e.Pattern != "" {
+			result = append(result, e.Pattern)
+		}
+	}
+	return result
+}
+
+// DeniedDomains returns the domain strings from the deny list.
+func (d *Decisions) DeniedDomains() []string {
+	var result []string
+	for _, e := range d.Proxy.Deny {
+		if e.Domain != "" {
+			result = append(result, e.Domain)
+		}
+	}
+	return result
+}
+
+// DeniedPatterns returns the pattern strings from the deny list.
+func (d *Decisions) DeniedPatterns() []string {
+	var result []string
+	for _, e := range d.Proxy.Deny {
+		if e.Pattern != "" {
+			result = append(result, e.Pattern)
+		}
+	}
+	return result
 }
 
 // DecisionDir returns the decisions persistence directory path.
