@@ -16,11 +16,14 @@ Implement persistent domain denial feature with scope options (once/session/proj
 Before marking a phase complete and committing:
 
 1. `make test` passes (unit tests, sandbox-safe)
-2. `make test-integration` passes (requires Docker) - only when changing Docker/container code
+2. `make test-all` passes (use hostexec when inside sandbox)
 3. Manual browser testing for UI interactions
 4. No console errors in browser (check DevTools)
 5. Code reviewed for obvious issues
 6. Audit log entries appear correctly for new denial events
+
+When inside a cloister, use `hostexec` to run `make test-integration`, `make
+test-e2e` or `make test-all`.
 
 When verification of a phase or subphase is complete, commit all relevant newly-created and modified files.
 
