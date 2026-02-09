@@ -46,15 +46,15 @@ func (p *ConfigPersisterImpl) AddDomainToProject(project, domain string) error {
 	}
 
 	// Check if domain already exists in approvals
-	for _, d := range approvals.Domains {
-		if d == domain {
+	for _, e := range approvals.Proxy.Allow {
+		if e.Domain == domain {
 			// Domain already present, no need to add
 			return nil
 		}
 	}
 
 	// Append new domain
-	approvals.Domains = append(approvals.Domains, domain)
+	approvals.Proxy.Allow = append(approvals.Proxy.Allow, config.AllowEntry{Domain: domain})
 
 	// Write updated approvals
 	if err := config.WriteProjectDecisions(project, approvals); err != nil {
@@ -92,15 +92,15 @@ func (p *ConfigPersisterImpl) AddDomainToGlobal(domain string) error {
 	}
 
 	// Check if domain already exists in approvals
-	for _, d := range approvals.Domains {
-		if d == domain {
+	for _, e := range approvals.Proxy.Allow {
+		if e.Domain == domain {
 			// Domain already present, no need to add
 			return nil
 		}
 	}
 
 	// Append new domain
-	approvals.Domains = append(approvals.Domains, domain)
+	approvals.Proxy.Allow = append(approvals.Proxy.Allow, config.AllowEntry{Domain: domain})
 
 	// Write updated approvals
 	if err := config.WriteGlobalDecisions(approvals); err != nil {
@@ -179,15 +179,15 @@ func (p *ConfigPersisterImpl) AddPatternToProject(project, pattern string) error
 	}
 
 	// Check if pattern already exists in approvals
-	for _, existing := range approvals.Patterns {
-		if existing == pattern {
+	for _, e := range approvals.Proxy.Allow {
+		if e.Pattern == pattern {
 			// Pattern already present, no need to add
 			return nil
 		}
 	}
 
 	// Append new pattern
-	approvals.Patterns = append(approvals.Patterns, pattern)
+	approvals.Proxy.Allow = append(approvals.Proxy.Allow, config.AllowEntry{Pattern: pattern})
 
 	// Write updated approvals
 	if err := config.WriteProjectDecisions(project, approvals); err != nil {
@@ -223,15 +223,15 @@ func (p *ConfigPersisterImpl) AddPatternToGlobal(pattern string) error {
 	}
 
 	// Check if pattern already exists in approvals
-	for _, existing := range approvals.Patterns {
-		if existing == pattern {
+	for _, e := range approvals.Proxy.Allow {
+		if e.Pattern == pattern {
 			// Pattern already present, no need to add
 			return nil
 		}
 	}
 
 	// Append new pattern
-	approvals.Patterns = append(approvals.Patterns, pattern)
+	approvals.Proxy.Allow = append(approvals.Proxy.Allow, config.AllowEntry{Pattern: pattern})
 
 	// Write updated approvals
 	if err := config.WriteGlobalDecisions(approvals); err != nil {

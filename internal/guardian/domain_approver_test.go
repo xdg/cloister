@@ -628,11 +628,13 @@ func TestRequestApproval_DenialProjectScope(t *testing.T) {
 	if loadErr != nil {
 		t.Fatalf("Failed to load project decisions: %v", loadErr)
 	}
-	if len(decisions.DeniedDomains) != 1 || decisions.DeniedDomains[0] != "evil.example.com" {
-		t.Errorf("Expected DeniedDomains=[evil.example.com], got %v", decisions.DeniedDomains)
+	deniedDomains := decisions.DeniedDomains()
+	if len(deniedDomains) != 1 || deniedDomains[0] != "evil.example.com" {
+		t.Errorf("Expected DeniedDomains=[evil.example.com], got %v", deniedDomains)
 	}
-	if len(decisions.DeniedPatterns) != 0 {
-		t.Errorf("Expected empty DeniedPatterns, got %v", decisions.DeniedPatterns)
+	deniedPatterns := decisions.DeniedPatterns()
+	if len(deniedPatterns) != 0 {
+		t.Errorf("Expected empty DeniedPatterns, got %v", deniedPatterns)
 	}
 }
 
@@ -691,11 +693,13 @@ func TestRequestApproval_DenialGlobalScope(t *testing.T) {
 	if loadErr != nil {
 		t.Fatalf("Failed to load global decisions: %v", loadErr)
 	}
-	if len(decisions.DeniedDomains) != 1 || decisions.DeniedDomains[0] != "evil.example.com" {
-		t.Errorf("Expected DeniedDomains=[evil.example.com], got %v", decisions.DeniedDomains)
+	deniedDomains := decisions.DeniedDomains()
+	if len(deniedDomains) != 1 || deniedDomains[0] != "evil.example.com" {
+		t.Errorf("Expected DeniedDomains=[evil.example.com], got %v", deniedDomains)
 	}
-	if len(decisions.DeniedPatterns) != 0 {
-		t.Errorf("Expected empty DeniedPatterns, got %v", decisions.DeniedPatterns)
+	deniedPatterns := decisions.DeniedPatterns()
+	if len(deniedPatterns) != 0 {
+		t.Errorf("Expected empty DeniedPatterns, got %v", deniedPatterns)
 	}
 }
 
@@ -750,16 +754,18 @@ func TestRequestApproval_DenialWithWildcard(t *testing.T) {
 		t.Errorf("Expected Approved=false for denial, got true")
 	}
 
-	// Verify the pattern was persisted to DeniedPatterns (not DeniedDomains)
+	// Verify the pattern was persisted to Proxy.Deny (not as a domain)
 	decisions, loadErr := config.LoadProjectDecisions("test-project")
 	if loadErr != nil {
 		t.Fatalf("Failed to load project decisions: %v", loadErr)
 	}
-	if len(decisions.DeniedPatterns) != 1 || decisions.DeniedPatterns[0] != "*.evil.example.com" {
-		t.Errorf("Expected DeniedPatterns=[*.evil.example.com], got %v", decisions.DeniedPatterns)
+	deniedPatterns := decisions.DeniedPatterns()
+	if len(deniedPatterns) != 1 || deniedPatterns[0] != "*.evil.example.com" {
+		t.Errorf("Expected DeniedPatterns=[*.evil.example.com], got %v", deniedPatterns)
 	}
-	if len(decisions.DeniedDomains) != 0 {
-		t.Errorf("Expected empty DeniedDomains, got %v", decisions.DeniedDomains)
+	deniedDomains := decisions.DeniedDomains()
+	if len(deniedDomains) != 0 {
+		t.Errorf("Expected empty DeniedDomains, got %v", deniedDomains)
 	}
 }
 

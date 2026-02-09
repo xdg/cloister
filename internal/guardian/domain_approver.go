@@ -250,19 +250,24 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 }
 
 // persistDenial writes a denial to the project or global decisions file.
-// If isPattern is true, the target is added to DeniedPatterns; otherwise to
-// DeniedDomains. Duplicate entries are skipped via appendUnique.
+// If isPattern is true, the target is added as a Pattern entry to Proxy.Deny;
+// otherwise as a Domain entry. Duplicate entries are skipped.
 func (d *DomainApproverImpl) persistDenial(scope, project, target string, isPattern bool) error {
+	entry := config.AllowEntry{}
+	if isPattern {
+		entry.Pattern = target
+	} else {
+		entry.Domain = target
+	}
+
 	switch scope {
 	case "project":
 		decisions, err := config.LoadProjectDecisions(project)
 		if err != nil {
 			return fmt.Errorf("load project decisions: %w", err)
 		}
-		if isPattern {
-			decisions.DeniedPatterns = appendUnique(decisions.DeniedPatterns, target)
-		} else {
-			decisions.DeniedDomains = appendUnique(decisions.DeniedDomains, target)
+		if !containsDenyEntry(decisions.Proxy.Deny, entry) {
+			decisions.Proxy.Deny = append(decisions.Proxy.Deny, entry)
 		}
 		return config.WriteProjectDecisions(project, decisions)
 	case "global":
@@ -270,15 +275,23 @@ func (d *DomainApproverImpl) persistDenial(scope, project, target string, isPatt
 		if err != nil {
 			return fmt.Errorf("load global decisions: %w", err)
 		}
-		if isPattern {
-			decisions.DeniedPatterns = appendUnique(decisions.DeniedPatterns, target)
-		} else {
-			decisions.DeniedDomains = appendUnique(decisions.DeniedDomains, target)
+		if !containsDenyEntry(decisions.Proxy.Deny, entry) {
+			decisions.Proxy.Deny = append(decisions.Proxy.Deny, entry)
 		}
 		return config.WriteGlobalDecisions(decisions)
 	default:
 		return fmt.Errorf("unknown scope: %s", scope)
 	}
+}
+
+// containsDenyEntry checks if an AllowEntry already exists in the slice.
+func containsDenyEntry(entries []config.AllowEntry, entry config.AllowEntry) bool {
+	for _, e := range entries {
+		if e.Domain == entry.Domain && e.Pattern == entry.Pattern {
+			return true
+		}
+	}
+	return false
 }
 
 // updateDenylistCache updates the in-memory AllowlistCache denylist after a

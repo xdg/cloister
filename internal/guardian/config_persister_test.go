@@ -17,7 +17,9 @@ func TestAddDomainToProject_WritesAndReloads(t *testing.T) {
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
 	initialApprovals := &config.Decisions{
-		Domains: []string{"example.com"},
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: "example.com"}},
+		},
 	}
 	if err := config.WriteProjectDecisions(projectName, initialApprovals); err != nil {
 		t.Fatalf("WriteProjectDecisions() error = %v", err)
@@ -49,16 +51,17 @@ func TestAddDomainToProject_WritesAndReloads(t *testing.T) {
 	}
 
 	// Check that both original and new domain are present
-	if !slices.Contains(approvals.Domains, "example.com") {
+	allowedDomains := approvals.AllowedDomains()
+	if !slices.Contains(allowedDomains, "example.com") {
 		t.Error("domain 'example.com' should be present in approvals")
 	}
-	if !slices.Contains(approvals.Domains, "docs.example.com") {
+	if !slices.Contains(allowedDomains, "docs.example.com") {
 		t.Error("domain 'docs.example.com' should be present in approvals")
 	}
 
 	// Verify total count
-	if len(approvals.Domains) != 2 {
-		t.Errorf("approvals.Domains length = %d, want 2", len(approvals.Domains))
+	if len(allowedDomains) != 2 {
+		t.Errorf("AllowedDomains() length = %d, want 2", len(allowedDomains))
 	}
 }
 
@@ -72,7 +75,9 @@ func TestAddDomainToProject_NoDuplicate(t *testing.T) {
 	projectName := "test-project"
 	existingDomain := "example.com"
 	initialApprovals := &config.Decisions{
-		Domains: []string{existingDomain},
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: existingDomain}},
+		},
 	}
 	if err := config.WriteProjectDecisions(projectName, initialApprovals); err != nil {
 		t.Fatalf("WriteProjectDecisions() error = %v", err)
@@ -102,12 +107,13 @@ func TestAddDomainToProject_NoDuplicate(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
-	if len(approvals.Domains) != 1 {
-		t.Errorf("approvals.Domains length = %d, want 1 (no duplicate)", len(approvals.Domains))
+	allowedDomains := approvals.AllowedDomains()
+	if len(allowedDomains) != 1 {
+		t.Errorf("AllowedDomains() length = %d, want 1 (no duplicate)", len(allowedDomains))
 	}
 
-	if approvals.Domains[0] != existingDomain {
-		t.Errorf("approvals.Domains[0] = %q, want %q", approvals.Domains[0], existingDomain)
+	if allowedDomains[0] != existingDomain {
+		t.Errorf("AllowedDomains()[0] = %q, want %q", allowedDomains[0], existingDomain)
 	}
 }
 
@@ -135,8 +141,9 @@ func TestAddDomainToProject_NoReloadNotifier(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
-	if len(approvals.Domains) != 1 {
-		t.Errorf("approvals.Domains length = %d, want 1", len(approvals.Domains))
+	allowedDomains := approvals.AllowedDomains()
+	if len(allowedDomains) != 1 {
+		t.Errorf("AllowedDomains() length = %d, want 1", len(allowedDomains))
 	}
 }
 
@@ -169,12 +176,13 @@ func TestAddDomainToProject_CreatesApprovalFileIfMissing(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
-	if len(approvals.Domains) != 1 {
-		t.Errorf("approvals.Domains length = %d, want 1", len(approvals.Domains))
+	allowedDomains := approvals.AllowedDomains()
+	if len(allowedDomains) != 1 {
+		t.Errorf("AllowedDomains() length = %d, want 1", len(allowedDomains))
 	}
 
-	if approvals.Domains[0] != newDomain {
-		t.Errorf("approvals.Domains[0] = %q, want %q", approvals.Domains[0], newDomain)
+	if allowedDomains[0] != newDomain {
+		t.Errorf("AllowedDomains()[0] = %q, want %q", allowedDomains[0], newDomain)
 	}
 }
 
@@ -186,7 +194,9 @@ func TestAddDomainToGlobal_WritesAndReloads(t *testing.T) {
 
 	// Set up initial approval file with one existing domain
 	initialApprovals := &config.Decisions{
-		Domains: []string{"golang.org"},
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: "golang.org"}},
+		},
 	}
 	if err := config.WriteGlobalDecisions(initialApprovals); err != nil {
 		t.Fatalf("WriteGlobalDecisions() error = %v", err)
@@ -218,16 +228,17 @@ func TestAddDomainToGlobal_WritesAndReloads(t *testing.T) {
 	}
 
 	// Check that both original and new domain are present
-	if !slices.Contains(approvals.Domains, "golang.org") {
+	allowedDomains := approvals.AllowedDomains()
+	if !slices.Contains(allowedDomains, "golang.org") {
 		t.Error("domain 'golang.org' should be present in approvals")
 	}
-	if !slices.Contains(approvals.Domains, "docs.golang.org") {
+	if !slices.Contains(allowedDomains, "docs.golang.org") {
 		t.Error("domain 'docs.golang.org' should be present in approvals")
 	}
 
 	// Verify total count
-	if len(approvals.Domains) != 2 {
-		t.Errorf("approvals.Domains length = %d, want 2", len(approvals.Domains))
+	if len(allowedDomains) != 2 {
+		t.Errorf("AllowedDomains() length = %d, want 2", len(allowedDomains))
 	}
 }
 
@@ -240,7 +251,9 @@ func TestAddDomainToGlobal_NoDuplicate(t *testing.T) {
 	// Set up initial approval file with one existing domain
 	existingDomain := "golang.org"
 	initialApprovals := &config.Decisions{
-		Domains: []string{existingDomain},
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: existingDomain}},
+		},
 	}
 	if err := config.WriteGlobalDecisions(initialApprovals); err != nil {
 		t.Fatalf("WriteGlobalDecisions() error = %v", err)
@@ -270,12 +283,13 @@ func TestAddDomainToGlobal_NoDuplicate(t *testing.T) {
 		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
-	if len(approvals.Domains) != 1 {
-		t.Errorf("approvals.Domains length = %d, want 1 (no duplicate)", len(approvals.Domains))
+	allowedDomains := approvals.AllowedDomains()
+	if len(allowedDomains) != 1 {
+		t.Errorf("AllowedDomains() length = %d, want 1 (no duplicate)", len(allowedDomains))
 	}
 
-	if approvals.Domains[0] != existingDomain {
-		t.Errorf("approvals.Domains[0] = %q, want %q", approvals.Domains[0], existingDomain)
+	if allowedDomains[0] != existingDomain {
+		t.Errorf("AllowedDomains()[0] = %q, want %q", allowedDomains[0], existingDomain)
 	}
 }
 
@@ -301,12 +315,13 @@ func TestAddDomainToGlobal_NoReloadNotifier(t *testing.T) {
 		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
-	if len(approvals.Domains) != 1 {
-		t.Errorf("approvals.Domains length = %d, want 1", len(approvals.Domains))
+	allowedDomains := approvals.AllowedDomains()
+	if len(allowedDomains) != 1 {
+		t.Errorf("AllowedDomains() length = %d, want 1", len(allowedDomains))
 	}
 
-	if approvals.Domains[0] != "example.com" {
-		t.Errorf("approvals.Domains[0] = %q, want %q", approvals.Domains[0], "example.com")
+	if allowedDomains[0] != "example.com" {
+		t.Errorf("AllowedDomains()[0] = %q, want %q", allowedDomains[0], "example.com")
 	}
 }
 
@@ -337,12 +352,13 @@ func TestAddDomainToGlobal_CreatesApprovalFileIfMissing(t *testing.T) {
 		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
-	if len(approvals.Domains) != 1 {
-		t.Errorf("approvals.Domains length = %d, want 1", len(approvals.Domains))
+	allowedDomains := approvals.AllowedDomains()
+	if len(allowedDomains) != 1 {
+		t.Errorf("AllowedDomains() length = %d, want 1", len(allowedDomains))
 	}
 
-	if approvals.Domains[0] != newDomain {
-		t.Errorf("approvals.Domains[0] = %q, want %q", approvals.Domains[0], newDomain)
+	if allowedDomains[0] != newDomain {
+		t.Errorf("AllowedDomains()[0] = %q, want %q", allowedDomains[0], newDomain)
 	}
 }
 
@@ -370,13 +386,14 @@ func TestAddDomainToProject_MultipleAdditions(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
-	if len(approvals.Domains) != len(domains) {
-		t.Errorf("approvals.Domains length = %d, want %d", len(approvals.Domains), len(domains))
+	allowedDomains := approvals.AllowedDomains()
+	if len(allowedDomains) != len(domains) {
+		t.Errorf("AllowedDomains() length = %d, want %d", len(allowedDomains), len(domains))
 	}
 
 	// Verify each domain is present
 	for _, domain := range domains {
-		if !slices.Contains(approvals.Domains, domain) {
+		if !slices.Contains(allowedDomains, domain) {
 			t.Errorf("domain %q should be present in approvals", domain)
 		}
 	}
@@ -393,7 +410,9 @@ func TestAddPatternToProject_WritesAndReloads(t *testing.T) {
 	// Set up initial approval file with one existing domain
 	projectName := "test-project"
 	initialApprovals := &config.Decisions{
-		Domains: []string{"example.com"},
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: "example.com"}},
+		},
 	}
 	if err := config.WriteProjectDecisions(projectName, initialApprovals); err != nil {
 		t.Fatalf("WriteProjectDecisions() error = %v", err)
@@ -425,19 +444,21 @@ func TestAddPatternToProject_WritesAndReloads(t *testing.T) {
 	}
 
 	// Check that domain is still present and pattern was added
-	if !slices.Contains(approvals.Domains, "example.com") {
+	allowedDomains := approvals.AllowedDomains()
+	allowedPatterns := approvals.AllowedPatterns()
+	if !slices.Contains(allowedDomains, "example.com") {
 		t.Error("domain 'example.com' should be present in approvals")
 	}
-	if !slices.Contains(approvals.Patterns, "*.example.com") {
+	if !slices.Contains(allowedPatterns, "*.example.com") {
 		t.Error("pattern '*.example.com' should be present in approvals")
 	}
 
 	// Verify counts
-	if len(approvals.Domains) != 1 {
-		t.Errorf("approvals.Domains length = %d, want 1", len(approvals.Domains))
+	if len(allowedDomains) != 1 {
+		t.Errorf("AllowedDomains() length = %d, want 1", len(allowedDomains))
 	}
-	if len(approvals.Patterns) != 1 {
-		t.Errorf("approvals.Patterns length = %d, want 1", len(approvals.Patterns))
+	if len(allowedPatterns) != 1 {
+		t.Errorf("AllowedPatterns() length = %d, want 1", len(allowedPatterns))
 	}
 }
 
@@ -451,7 +472,9 @@ func TestAddPatternToProject_NoDuplicate(t *testing.T) {
 	projectName := "test-project"
 	existingPattern := "*.example.com"
 	initialApprovals := &config.Decisions{
-		Patterns: []string{existingPattern},
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Pattern: existingPattern}},
+		},
 	}
 	if err := config.WriteProjectDecisions(projectName, initialApprovals); err != nil {
 		t.Fatalf("WriteProjectDecisions() error = %v", err)
@@ -481,12 +504,13 @@ func TestAddPatternToProject_NoDuplicate(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
-	if len(approvals.Patterns) != 1 {
-		t.Errorf("approvals.Patterns length = %d, want 1 (no duplicate)", len(approvals.Patterns))
+	allowedPatterns := approvals.AllowedPatterns()
+	if len(allowedPatterns) != 1 {
+		t.Errorf("AllowedPatterns() length = %d, want 1 (no duplicate)", len(allowedPatterns))
 	}
 
-	if approvals.Patterns[0] != existingPattern {
-		t.Errorf("approvals.Patterns[0] = %q, want %q", approvals.Patterns[0], existingPattern)
+	if allowedPatterns[0] != existingPattern {
+		t.Errorf("AllowedPatterns()[0] = %q, want %q", allowedPatterns[0], existingPattern)
 	}
 }
 
@@ -529,7 +553,9 @@ func TestAddPatternToGlobal_WritesAndReloads(t *testing.T) {
 
 	// Set up initial approval file with one existing domain
 	initialApprovals := &config.Decisions{
-		Domains: []string{"golang.org"},
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: "golang.org"}},
+		},
 	}
 	if err := config.WriteGlobalDecisions(initialApprovals); err != nil {
 		t.Fatalf("WriteGlobalDecisions() error = %v", err)
@@ -561,10 +587,12 @@ func TestAddPatternToGlobal_WritesAndReloads(t *testing.T) {
 	}
 
 	// Check that domain is still present and pattern was added
-	if !slices.Contains(approvals.Domains, "golang.org") {
+	allowedDomains := approvals.AllowedDomains()
+	allowedPatterns := approvals.AllowedPatterns()
+	if !slices.Contains(allowedDomains, "golang.org") {
 		t.Error("domain 'golang.org' should be present in approvals")
 	}
-	if !slices.Contains(approvals.Patterns, "*.googleapis.com") {
+	if !slices.Contains(allowedPatterns, "*.googleapis.com") {
 		t.Error("pattern '*.googleapis.com' should be present in approvals")
 	}
 }
@@ -578,7 +606,9 @@ func TestAddPatternToGlobal_NoDuplicate(t *testing.T) {
 	// Set up initial approval file with one existing pattern
 	existingPattern := "*.googleapis.com"
 	initialApprovals := &config.Decisions{
-		Patterns: []string{existingPattern},
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Pattern: existingPattern}},
+		},
 	}
 	if err := config.WriteGlobalDecisions(initialApprovals); err != nil {
 		t.Fatalf("WriteGlobalDecisions() error = %v", err)
@@ -608,12 +638,13 @@ func TestAddPatternToGlobal_NoDuplicate(t *testing.T) {
 		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
 
-	if len(approvals.Patterns) != 1 {
-		t.Errorf("approvals.Patterns length = %d, want 1 (no duplicate)", len(approvals.Patterns))
+	allowedPatterns := approvals.AllowedPatterns()
+	if len(allowedPatterns) != 1 {
+		t.Errorf("AllowedPatterns() length = %d, want 1 (no duplicate)", len(allowedPatterns))
 	}
 
-	if approvals.Patterns[0] != existingPattern {
-		t.Errorf("approvals.Patterns[0] = %q, want %q", approvals.Patterns[0], existingPattern)
+	if allowedPatterns[0] != existingPattern {
+		t.Errorf("AllowedPatterns()[0] = %q, want %q", allowedPatterns[0], existingPattern)
 	}
 }
 
@@ -670,7 +701,7 @@ func TestAddDomainToProject_StaticConfigUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
-	if !slices.Contains(approvals.Domains, "new.example.com") {
+	if !slices.Contains(approvals.AllowedDomains(), "new.example.com") {
 		t.Error("domain 'new.example.com' should be present in approval file")
 	}
 }
@@ -724,7 +755,7 @@ func TestAddDomainToGlobal_StaticConfigUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
-	if !slices.Contains(approvals.Domains, "new.golang.org") {
+	if !slices.Contains(approvals.AllowedDomains(), "new.golang.org") {
 		t.Error("domain 'new.golang.org' should be present in approval file")
 	}
 }
@@ -780,7 +811,7 @@ func TestAddPatternToProject_StaticConfigUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
-	if !slices.Contains(approvals.Patterns, "*.example.com") {
+	if !slices.Contains(approvals.AllowedPatterns(), "*.example.com") {
 		t.Error("pattern '*.example.com' should be present in approval file")
 	}
 }
@@ -834,7 +865,7 @@ func TestAddPatternToGlobal_StaticConfigUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadGlobalDecisions() error = %v", err)
 	}
-	if !slices.Contains(approvals.Patterns, "*.googleapis.com") {
+	if !slices.Contains(approvals.AllowedPatterns(), "*.googleapis.com") {
 		t.Error("pattern '*.googleapis.com' should be present in approval file")
 	}
 }
@@ -857,10 +888,11 @@ func TestAddDomainToProject_StripsPort(t *testing.T) {
 	}
 
 	// Domain should be stored without port
-	if !slices.Contains(approvals.Domains, "example.com") {
-		t.Errorf("expected 'example.com' (without port), got: %v", approvals.Domains)
+	allowedDomains := approvals.AllowedDomains()
+	if !slices.Contains(allowedDomains, "example.com") {
+		t.Errorf("expected 'example.com' (without port), got: %v", allowedDomains)
 	}
-	if slices.Contains(approvals.Domains, "example.com:443") {
+	if slices.Contains(allowedDomains, "example.com:443") {
 		t.Error("domain should not include port")
 	}
 }
@@ -883,8 +915,9 @@ func TestAddDomainToGlobal_StripsPort(t *testing.T) {
 	}
 
 	// Domain should be stored without port
-	if !slices.Contains(approvals.Domains, "api.example.com") {
-		t.Errorf("expected 'api.example.com' (without port), got: %v", approvals.Domains)
+	allowedDomains := approvals.AllowedDomains()
+	if !slices.Contains(allowedDomains, "api.example.com") {
+		t.Errorf("expected 'api.example.com' (without port), got: %v", allowedDomains)
 	}
 }
 

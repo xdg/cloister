@@ -420,15 +420,15 @@ proxy:
 The `decisionsToAllowEntries` function becomes trivial (decisions already contain
 `AllowEntry` slices), but the call sites need updating.
 
-- [ ] Replace `decisionsToAllowEntries()` with direct access to `decisions.Proxy.Allow` and `decisions.Proxy.Deny`
-- [ ] Update global allowlist construction: `globalDecisions.Proxy.Allow` instead of iterating `Domains`/`Patterns`
-- [ ] Update global denylist construction: `globalDecisions.Proxy.Deny` instead of iterating `DeniedDomains`/`DeniedPatterns`
-- [ ] Update `loadProjectAllowlist` closure: use `projectDecisions.Proxy.Allow`
-- [ ] Update `loadProjectDenylist` closure: use `projectDecisions.Proxy.Deny`
-- [ ] Update config reloader (SIGHUP handler): same changes as above
-- [ ] Update `ConfigPersisterImpl.ReloadNotifier` closure: same changes
-- [ ] Delete the now-unnecessary `decisionsToAllowEntries()` function
-- [ ] **Test**: `make test` passes (existing `guardian_helpers_test.go` for `decisionsToAllowEntries` either removed or updated)
+- [x] Replace `decisionsToAllowEntries()` with direct access to `decisions.Proxy.Allow` and `decisions.Proxy.Deny`
+- [x] Update global allowlist construction: `globalDecisions.Proxy.Allow` instead of iterating `Domains`/`Patterns`
+- [x] Update global denylist construction: `globalDecisions.Proxy.Deny` instead of iterating `DeniedDomains`/`DeniedPatterns`
+- [x] Update `loadProjectAllowlist` closure: use `projectDecisions.Proxy.Allow`
+- [x] Update `loadProjectDenylist` closure: use `projectDecisions.Proxy.Deny`
+- [x] Update config reloader (SIGHUP handler): same changes as above
+- [x] Update `ConfigPersisterImpl.ReloadNotifier` closure: same changes
+- [x] Delete the now-unnecessary `decisionsToAllowEntries()` function
+- [x] **Test**: `make test` passes (existing `guardian_helpers_test.go` for `decisionsToAllowEntries` either removed or updated)
 
 ### 6.6 Update guardian domain approver and config persister
 
@@ -436,19 +436,19 @@ The `persistDenial` method in `domain_approver.go` writes to flat fields on `Dec
 The `ConfigPersisterImpl` methods write to `Decisions.Domains` / `Decisions.Patterns`.
 Both need to write to the new nested structure.
 
-- [ ] Update `domain_approver.go` `persistDenial()`:
+- [x] Update `domain_approver.go` `persistDenial()`:
   - Replace `decisions.DeniedDomains = appendUnique(...)` → append `AllowEntry{Domain: target}` to `decisions.Proxy.Deny`
   - Replace `decisions.DeniedPatterns = appendUnique(...)` → append `AllowEntry{Pattern: target}` to `decisions.Proxy.Deny`
   - Add dedup check against existing `decisions.Proxy.Deny` entries
-- [ ] Update `config_persister.go` `AddDomainToProject` / `AddDomainToGlobal`:
+- [x] Update `config_persister.go` `AddDomainToProject` / `AddDomainToGlobal`:
   - Replace `approvals.Domains = append(...)` → append `AllowEntry{Domain: domain}` to `approvals.Proxy.Allow`
   - Dedup check against `approvals.Proxy.Allow`
-- [ ] Update `config_persister.go` `AddPatternToProject` / `AddPatternToGlobal`:
+- [x] Update `config_persister.go` `AddPatternToProject` / `AddPatternToGlobal`:
   - Replace `approvals.Patterns = append(...)` → append `AllowEntry{Pattern: pattern}` to `approvals.Proxy.Allow`
   - Dedup check against `approvals.Proxy.Allow`
-- [ ] Update `domain_approver_test.go`: change assertions from `decisions.DeniedDomains` to `decisions.Proxy.Deny` entries
-- [ ] Update `config_persister_test.go` and `config_persister_validation_test.go`: change assertions from `approvals.Domains`/`approvals.Patterns` to `approvals.Proxy.Allow` entries
-- [ ] **Test**: `make test` passes with all domain approver and config persister tests
+- [x] Update `domain_approver_test.go`: change assertions from `decisions.DeniedDomains` to `decisions.Proxy.Deny` entries
+- [x] Update `config_persister_test.go` and `config_persister_validation_test.go`: change assertions from `approvals.Domains`/`approvals.Patterns` to `approvals.Proxy.Allow` entries
+- [x] **Test**: `make test` passes with all domain approver and config persister tests
 
 ### 6.7 Update E2E tests
 

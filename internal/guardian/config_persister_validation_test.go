@@ -146,12 +146,13 @@ func TestReloadNotifier_PanicSafety(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error = %v", err)
 	}
 
-	if len(approvals.Domains) != 1 {
-		t.Errorf("approvals.Domains length = %d, want 1", len(approvals.Domains))
+	allowedDomains := approvals.AllowedDomains()
+	if len(allowedDomains) != 1 {
+		t.Errorf("AllowedDomains() length = %d, want 1", len(allowedDomains))
 	}
 
-	if approvals.Domains[0] != "example.com" {
-		t.Errorf("approvals.Domains[0] = %q, want 'example.com'", approvals.Domains[0])
+	if allowedDomains[0] != "example.com" {
+		t.Errorf("AllowedDomains()[0] = %q, want 'example.com'", allowedDomains[0])
 	}
 }
 
@@ -182,7 +183,7 @@ func TestReloadNotifier_GlobalPanicSafety(t *testing.T) {
 
 	// Check that example.com was added
 	found := false
-	for _, d := range approvals.Domains {
+	for _, d := range approvals.AllowedDomains() {
 		if d == "example.com" {
 			found = true
 			break

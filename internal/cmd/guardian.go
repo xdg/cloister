@@ -269,23 +269,20 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		globalDecisions = &config.Decisions{}
 	}
 	globalAllow := cfg.Proxy.Allow
-	if len(globalDecisions.Domains) > 0 || len(globalDecisions.Patterns) > 0 {
-		allowEntries, _ := decisionsToAllowEntries(globalDecisions)
-		globalAllow = append(globalAllow, allowEntries...)
+	if len(globalDecisions.Proxy.Allow) > 0 {
+		globalAllow = append(globalAllow, globalDecisions.Proxy.Allow...)
 	}
 	globalAllowlist := guardian.NewAllowlistFromConfig(globalAllow)
 	staticCount := len(cfg.Proxy.Allow)
-	approvedCount := len(globalDecisions.Domains) + len(globalDecisions.Patterns)
+	approvedCount := len(globalDecisions.Proxy.Allow)
 	clog.Info("loaded global allowlist: %d static + %d approved = %d total",
 		staticCount, approvedCount, len(globalAllow))
 
 	// Build global denylist from decisions
 	var globalDenylist *guardian.Allowlist
-	if len(globalDecisions.DeniedDomains) > 0 || len(globalDecisions.DeniedPatterns) > 0 {
-		_, denyEntries := decisionsToAllowEntries(globalDecisions)
-		globalDenylist = guardian.NewAllowlistFromConfig(denyEntries)
-		clog.Info("loaded global denylist: %d domains + %d patterns",
-			len(globalDecisions.DeniedDomains), len(globalDecisions.DeniedPatterns))
+	if len(globalDecisions.Proxy.Deny) > 0 {
+		globalDenylist = guardian.NewAllowlistFromConfig(globalDecisions.Proxy.Deny)
+		clog.Info("loaded global denylist: %d entries", len(globalDecisions.Proxy.Deny))
 	}
 
 	// Create allowlist cache for per-project allowlists
@@ -327,20 +324,18 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 		// Check if there's anything project-specific to merge
 		hasProjectConfig := len(projectCfg.Proxy.Allow) > 0
-		hasProjectDecisions := len(projectDecisions.Domains) > 0 || len(projectDecisions.Patterns) > 0
+		hasProjectDecisions := len(projectDecisions.Proxy.Allow) > 0
 		if !hasProjectConfig && !hasProjectDecisions {
 			return nil
 		}
 
 		// Merge: global config + project config + global decisions + project decisions
 		merged := config.MergeAllowlists(cfg.Proxy.Allow, projectCfg.Proxy.Allow)
-		if len(globalDecisions.Domains) > 0 || len(globalDecisions.Patterns) > 0 {
-			allowEntries, _ := decisionsToAllowEntries(globalDecisions)
-			merged = append(merged, allowEntries...)
+		if len(globalDecisions.Proxy.Allow) > 0 {
+			merged = append(merged, globalDecisions.Proxy.Allow...)
 		}
 		if hasProjectDecisions {
-			allowEntries, _ := decisionsToAllowEntries(projectDecisions)
-			merged = append(merged, allowEntries...)
+			merged = append(merged, projectDecisions.Proxy.Allow...)
 		}
 		allowlist := guardian.NewAllowlistFromConfig(merged)
 		clog.Info("loaded allowlist for project %s (%d entries)", projectName, len(allowlist.Domains()))
@@ -354,12 +349,11 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			clog.Warn("failed to load project decisions (deny) for %s: %v", projectName, err)
 			return nil
 		}
-		if len(projectDecisions.DeniedDomains) == 0 && len(projectDecisions.DeniedPatterns) == 0 {
+		if len(projectDecisions.Proxy.Deny) == 0 {
 			return nil
 		}
-		_, denyEntries := decisionsToAllowEntries(projectDecisions)
-		denylist := guardian.NewAllowlistFromConfig(denyEntries)
-		clog.Info("loaded denylist for project %s (%d entries)", projectName, len(denyEntries))
+		denylist := guardian.NewAllowlistFromConfig(projectDecisions.Proxy.Deny)
+		clog.Info("loaded denylist for project %s (%d entries)", projectName, len(projectDecisions.Proxy.Deny))
 		return denylist
 	}
 
@@ -424,17 +418,15 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 		// Build new global allowlist with decisions
 		globalAllow := newCfg.Proxy.Allow
-		if len(globalDecisions.Domains) > 0 || len(globalDecisions.Patterns) > 0 {
-			allowEntries, _ := decisionsToAllowEntries(globalDecisions)
-			globalAllow = append(globalAllow, allowEntries...)
+		if len(globalDecisions.Proxy.Allow) > 0 {
+			globalAllow = append(globalAllow, globalDecisions.Proxy.Allow...)
 		}
 		newGlobal := guardian.NewAllowlistFromConfig(globalAllow)
 		allowlistCache.SetGlobal(newGlobal)
 
 		// Rebuild global denylist from decisions
-		if len(globalDecisions.DeniedDomains) > 0 || len(globalDecisions.DeniedPatterns) > 0 {
-			_, denyEntries := decisionsToAllowEntries(globalDecisions)
-			allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(denyEntries))
+		if len(globalDecisions.Proxy.Deny) > 0 {
+			allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(globalDecisions.Proxy.Deny))
 		} else {
 			allowlistCache.SetGlobalDeny(nil)
 		}
@@ -554,16 +546,14 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			}
 			globalDecisions = newGlobalDecisions
 			globalAllow := cfg.Proxy.Allow
-			if len(globalDecisions.Domains) > 0 || len(globalDecisions.Patterns) > 0 {
-				allowEntries, _ := decisionsToAllowEntries(globalDecisions)
-				globalAllow = append(globalAllow, allowEntries...)
+			if len(globalDecisions.Proxy.Allow) > 0 {
+				globalAllow = append(globalAllow, globalDecisions.Proxy.Allow...)
 			}
 			allowlistCache.SetGlobal(guardian.NewAllowlistFromConfig(globalAllow))
 
 			// Rebuild global denylist
-			if len(globalDecisions.DeniedDomains) > 0 || len(globalDecisions.DeniedPatterns) > 0 {
-				_, denyEntries := decisionsToAllowEntries(globalDecisions)
-				allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(denyEntries))
+			if len(globalDecisions.Proxy.Deny) > 0 {
+				allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(globalDecisions.Proxy.Deny))
 			} else {
 				allowlistCache.SetGlobalDeny(nil)
 			}
@@ -803,25 +793,6 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%d days, %d hours", days, hours)
 	}
 	return fmt.Sprintf("%d days", days)
-}
-
-// decisionsToAllowEntries converts a Decisions struct to allow and deny AllowEntry slices.
-func decisionsToAllowEntries(decisions *config.Decisions) (allow []config.AllowEntry, deny []config.AllowEntry) {
-	allow = make([]config.AllowEntry, 0, len(decisions.Domains)+len(decisions.Patterns))
-	for _, d := range decisions.Domains {
-		allow = append(allow, config.AllowEntry{Domain: d})
-	}
-	for _, p := range decisions.Patterns {
-		allow = append(allow, config.AllowEntry{Pattern: p})
-	}
-	deny = make([]config.AllowEntry, 0, len(decisions.DeniedDomains)+len(decisions.DeniedPatterns))
-	for _, d := range decisions.DeniedDomains {
-		deny = append(deny, config.AllowEntry{Domain: d})
-	}
-	for _, p := range decisions.DeniedPatterns {
-		deny = append(deny, config.AllowEntry{Pattern: p})
-	}
-	return allow, deny
 }
 
 // extractPatterns extracts pattern strings from a slice of CommandPattern.
