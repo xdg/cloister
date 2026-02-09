@@ -452,11 +452,11 @@ Both need to write to the new nested structure.
 
 ### 6.7 Update E2E tests
 
-- [ ] Update `test/e2e/domain_denial_test.go`:
+- [x] Update `test/e2e/domain_denial_test.go`:
   - Replace `decisions.DeniedDomains` → check `decisions.Proxy.Deny` for domain entries
   - Replace `decisions.DeniedPatterns` → check `decisions.Proxy.Deny` for pattern entries
   - Replace `config.Decisions{DeniedDomains: ...}` → `config.Decisions{Proxy: config.DecisionsProxy{Deny: ...}}`
-- [ ] Update `test/e2e/domain_approval_persistence_test.go`:
+- [x] Update `test/e2e/domain_approval_persistence_test.go`:
   - Replace `approvals.Domains` → check `approvals.Proxy.Allow` for domain entries
 - [ ] **Test**: `make test-e2e` passes (requires Docker + guardian)
 

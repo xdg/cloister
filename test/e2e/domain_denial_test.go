@@ -73,7 +73,7 @@ func TestDomainDenial_GlobalScope(t *testing.T) {
 		t.Fatalf("Failed to load global decisions: %v", err)
 	}
 	found := false
-	for _, d := range decisions.DeniedDomains {
+	for _, d := range decisions.DeniedDomains() {
 		if d == testDomain || d == testDomain+":443" {
 			found = true
 			break
@@ -81,7 +81,7 @@ func TestDomainDenial_GlobalScope(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("Expected domain %q in global decisions denied_domains, got: %v",
-			testDomain, decisions.DeniedDomains)
+			testDomain, decisions.DeniedDomains())
 	}
 
 	// Give the guardian a moment to reload after config write
@@ -191,7 +191,7 @@ func TestDomainDenial_SessionScope_BlocksSubsequentRequests(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load global decisions: %v", err)
 	}
-	for _, d := range decisions.DeniedDomains {
+	for _, d := range decisions.DeniedDomains() {
 		if d == testDomain || d == testDomain+":443" {
 			t.Errorf("Session-scoped denial should NOT be persisted to global decisions, but found %q", d)
 		}
@@ -333,7 +333,7 @@ func TestDomainDenial_Wildcard(t *testing.T) {
 		t.Fatalf("Failed to load global decisions: %v", err)
 	}
 	foundPattern := false
-	for _, p := range decisions.DeniedPatterns {
+	for _, p := range decisions.DeniedPatterns() {
 		if p == expectedPattern {
 			foundPattern = true
 			break
@@ -341,7 +341,7 @@ func TestDomainDenial_Wildcard(t *testing.T) {
 	}
 	if !foundPattern {
 		t.Errorf("Expected pattern %q in global decisions denied_patterns, got: %v",
-			expectedPattern, decisions.DeniedPatterns)
+			expectedPattern, decisions.DeniedPatterns())
 	}
 
 	// Give the guardian a moment to reload after config write
@@ -387,8 +387,10 @@ func TestDomainDenial_DenyWinsOverAllow(t *testing.T) {
 	// Write a project decisions file that has the domain in BOTH allowed and denied lists.
 	// The token was registered with project "test-project" by createAuthenticatedTestContainer.
 	decisions := &config.Decisions{
-		Domains:       []string{testDomain},
-		DeniedDomains: []string{testDomain},
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: testDomain}},
+			Deny:  []config.AllowEntry{{Domain: testDomain}},
+		},
 	}
 	if err := config.WriteProjectDecisions("test-project", decisions); err != nil {
 		t.Fatalf("Failed to write project decisions: %v", err)
@@ -456,7 +458,7 @@ func TestDomainDenial_LoadDecisionsOnStartup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load existing global decisions: %v", err)
 	}
-	existing.DeniedDomains = append(existing.DeniedDomains, testDomain)
+	existing.Proxy.Deny = append(existing.Proxy.Deny, config.AllowEntry{Domain: testDomain})
 	if err := config.WriteGlobalDecisions(existing); err != nil {
 		t.Fatalf("Failed to write global decisions: %v", err)
 	}

@@ -202,7 +202,7 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 
 	// Check that the test domain is in the approved list
 	found := false
-	for _, d := range approvals.Domains {
+	for _, d := range approvals.AllowedDomains() {
 		if d == testDomain || d == testDomain+":443" {
 			found = true
 			break
@@ -210,7 +210,7 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("Expected domain %q in project approvals at %s, got domains: %v",
-			testDomain, projectApprovalPath, approvals.Domains)
+			testDomain, projectApprovalPath, approvals.AllowedDomains())
 	}
 
 	// Verify static project config was NOT modified
@@ -289,7 +289,7 @@ func TestDomainApprovalPersistence_GlobalScope(t *testing.T) {
 
 	// Check that the test domain is in the approved list
 	found := false
-	for _, d := range approvals.Domains {
+	for _, d := range approvals.AllowedDomains() {
 		if d == testDomain || d == testDomain+":443" {
 			found = true
 			break
@@ -297,7 +297,7 @@ func TestDomainApprovalPersistence_GlobalScope(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("Expected domain %q in global approvals at %s, got domains: %v",
-			testDomain, globalApprovalPath, approvals.Domains)
+			testDomain, globalApprovalPath, approvals.AllowedDomains())
 	}
 
 	// Verify static global config was NOT modified

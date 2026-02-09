@@ -343,12 +343,3 @@ func (d *DomainApproverImpl) updateDenylistCache(scope, project, target string, 
 	}
 }
 
-// appendUnique appends value to slice if not already present.
-func appendUnique(slice []string, value string) []string {
-	for _, s := range slice {
-		if s == value {
-			return slice
-		}
-	}
-	return append(slice, value)
-}
