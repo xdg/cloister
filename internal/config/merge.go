@@ -68,18 +68,28 @@ func mergeSlices[T any](global, project []T, key func(T) string) []T {
 	return result
 }
 
+// allowEntryKey returns a dedup key for an AllowEntry that distinguishes
+// domain entries from pattern entries. Without this, pattern-only entries
+// (which have empty Domain) would all collide on the empty string.
+func allowEntryKey(e AllowEntry) string {
+	if e.Pattern != "" {
+		return "p:" + e.Pattern
+	}
+	return "d:" + e.Domain
+}
+
 // MergeAllowlists combines global and project allowlist entries.
 // Project entries ADD to global (don't replace).
-// Entries are deduplicated by domain.
+// Entries are deduplicated by domain or pattern.
 func MergeAllowlists(global, project []AllowEntry) []AllowEntry {
-	return mergeSlices(global, project, func(e AllowEntry) string { return e.Domain })
+	return mergeSlices(global, project, allowEntryKey)
 }
 
 // MergeDenylists combines global and project denylist entries.
 // Project entries ADD to global (don't replace).
-// Entries are deduplicated by domain.
+// Entries are deduplicated by domain or pattern.
 func MergeDenylists(global, project []AllowEntry) []AllowEntry {
-	return mergeSlices(global, project, func(e AllowEntry) string { return e.Domain })
+	return mergeSlices(global, project, allowEntryKey)
 }
 
 // MergeCommandPatterns combines global and project command patterns.

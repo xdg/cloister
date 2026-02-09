@@ -358,10 +358,10 @@ decision files.
 The current key function `func(e AllowEntry) string { return e.Domain }` causes all
 pattern-only entries (where Domain is "") to collide. Fix both merge functions.
 
-- [ ] Change `MergeAllowlists` key function to `func(e AllowEntry) string { if e.Pattern != "" { return "p:" + e.Pattern }; return "d:" + e.Domain }`
-- [ ] Use the same key function in `MergeDenylists`
-- [ ] **Test**: Unit test — merge two lists each containing pattern-only entries; verify all patterns survive
-- [ ] **Test**: Unit test — merge lists with mix of domain and pattern entries; verify correct dedup
+- [x] Change `MergeAllowlists` key function to `func(e AllowEntry) string { if e.Pattern != "" { return "p:" + e.Pattern }; return "d:" + e.Domain }`
+- [x] Use the same key function in `MergeDenylists`
+- [x] **Test**: Unit test — merge two lists each containing pattern-only entries; verify all patterns survive
+- [x] **Test**: Unit test — merge lists with mix of domain and pattern entries; verify correct dedup
 
 ### 6.4 Restructure `Decisions` type to mirror static config
 

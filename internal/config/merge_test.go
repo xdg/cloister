@@ -629,6 +629,100 @@ func TestResolveConfig_GlobalOnlyManualApprove(t *testing.T) {
 	}
 }
 
+func TestMergeAllowlists_PatternOnlyEntries(t *testing.T) {
+	global := []AllowEntry{
+		{Pattern: "*.foo.com"},
+	}
+	project := []AllowEntry{
+		{Pattern: "*.bar.com"},
+	}
+
+	result := MergeAllowlists(global, project)
+	if len(result) != 2 {
+		t.Fatalf("len(result) = %d, want 2", len(result))
+	}
+	if result[0].Pattern != "*.foo.com" {
+		t.Errorf("result[0].Pattern = %q, want %q", result[0].Pattern, "*.foo.com")
+	}
+	if result[1].Pattern != "*.bar.com" {
+		t.Errorf("result[1].Pattern = %q, want %q", result[1].Pattern, "*.bar.com")
+	}
+}
+
+func TestMergeAllowlists_MixedDomainAndPattern(t *testing.T) {
+	global := []AllowEntry{
+		{Domain: "a.com"},
+		{Pattern: "*.b.com"},
+	}
+	project := []AllowEntry{
+		{Domain: "a.com"},    // Duplicate domain
+		{Pattern: "*.c.com"}, // Unique pattern
+	}
+
+	result := MergeAllowlists(global, project)
+	if len(result) != 3 {
+		t.Fatalf("len(result) = %d, want 3", len(result))
+	}
+
+	// a.com (deduped), *.b.com, *.c.com
+	if result[0].Domain != "a.com" {
+		t.Errorf("result[0].Domain = %q, want %q", result[0].Domain, "a.com")
+	}
+	if result[1].Pattern != "*.b.com" {
+		t.Errorf("result[1].Pattern = %q, want %q", result[1].Pattern, "*.b.com")
+	}
+	if result[2].Pattern != "*.c.com" {
+		t.Errorf("result[2].Pattern = %q, want %q", result[2].Pattern, "*.c.com")
+	}
+}
+
+func TestMergeDenylists_PatternOnlyEntries(t *testing.T) {
+	global := []AllowEntry{
+		{Pattern: "*.evil.com"},
+	}
+	project := []AllowEntry{
+		{Pattern: "*.malicious.net"},
+	}
+
+	result := MergeDenylists(global, project)
+	if len(result) != 2 {
+		t.Fatalf("len(result) = %d, want 2", len(result))
+	}
+	if result[0].Pattern != "*.evil.com" {
+		t.Errorf("result[0].Pattern = %q, want %q", result[0].Pattern, "*.evil.com")
+	}
+	if result[1].Pattern != "*.malicious.net" {
+		t.Errorf("result[1].Pattern = %q, want %q", result[1].Pattern, "*.malicious.net")
+	}
+}
+
+func TestMergeDenylists_MixedDomainAndPattern(t *testing.T) {
+	global := []AllowEntry{
+		{Domain: "evil.com"},
+		{Pattern: "*.malware.net"},
+	}
+	project := []AllowEntry{
+		{Domain: "evil.com"},        // Duplicate domain
+		{Pattern: "*.phishing.org"}, // Unique pattern
+	}
+
+	result := MergeDenylists(global, project)
+	if len(result) != 3 {
+		t.Fatalf("len(result) = %d, want 3", len(result))
+	}
+
+	// evil.com (deduped), *.malware.net, *.phishing.org
+	if result[0].Domain != "evil.com" {
+		t.Errorf("result[0].Domain = %q, want %q", result[0].Domain, "evil.com")
+	}
+	if result[1].Pattern != "*.malware.net" {
+		t.Errorf("result[1].Pattern = %q, want %q", result[1].Pattern, "*.malware.net")
+	}
+	if result[2].Pattern != "*.phishing.org" {
+		t.Errorf("result[2].Pattern = %q, want %q", result[2].Pattern, "*.phishing.org")
+	}
+}
+
 func TestResolveConfig_WithDeny(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
