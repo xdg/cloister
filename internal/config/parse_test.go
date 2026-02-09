@@ -176,17 +176,17 @@ func TestParseProjectConfig_Valid(t *testing.T) {
 	if cfg.Proxy.Allow[0].Domain != "internal-docs.company.com" {
 		t.Errorf("Proxy.Allow[0].Domain = %q, want %q", cfg.Proxy.Allow[0].Domain, "internal-docs.company.com")
 	}
-	if len(cfg.Commands.AutoApprove) != 1 {
-		t.Errorf("len(Commands.AutoApprove) = %d, want 1", len(cfg.Commands.AutoApprove))
+	if len(cfg.Hostexec.AutoApprove) != 1 {
+		t.Errorf("len(Hostexec.AutoApprove) = %d, want 1", len(cfg.Hostexec.AutoApprove))
 	}
-	if cfg.Commands.AutoApprove[0].Pattern != "^make test$" {
-		t.Errorf("Commands.AutoApprove[0].Pattern = %q, want %q", cfg.Commands.AutoApprove[0].Pattern, "^make test$")
+	if cfg.Hostexec.AutoApprove[0].Pattern != "^make test$" {
+		t.Errorf("Hostexec.AutoApprove[0].Pattern = %q, want %q", cfg.Hostexec.AutoApprove[0].Pattern, "^make test$")
 	}
-	if len(cfg.Commands.ManualApprove) != 1 {
-		t.Errorf("len(Commands.ManualApprove) = %d, want 1", len(cfg.Commands.ManualApprove))
+	if len(cfg.Hostexec.ManualApprove) != 1 {
+		t.Errorf("len(Hostexec.ManualApprove) = %d, want 1", len(cfg.Hostexec.ManualApprove))
 	}
-	if cfg.Commands.ManualApprove[0].Pattern != "^./deploy\\.sh.*$" {
-		t.Errorf("Commands.ManualApprove[0].Pattern = %q, want %q", cfg.Commands.ManualApprove[0].Pattern, "^./deploy\\.sh.*$")
+	if cfg.Hostexec.ManualApprove[0].Pattern != "^./deploy\\.sh.*$" {
+		t.Errorf("Hostexec.ManualApprove[0].Pattern = %q, want %q", cfg.Hostexec.ManualApprove[0].Pattern, "^./deploy\\.sh.*$")
 	}
 }
 
@@ -209,11 +209,11 @@ func TestParseProjectConfig_Empty(t *testing.T) {
 	if len(cfg.Proxy.Allow) != 0 {
 		t.Errorf("len(Proxy.Allow) = %d, want 0", len(cfg.Proxy.Allow))
 	}
-	if len(cfg.Commands.AutoApprove) != 0 {
-		t.Errorf("len(Commands.AutoApprove) = %d, want 0", len(cfg.Commands.AutoApprove))
+	if len(cfg.Hostexec.AutoApprove) != 0 {
+		t.Errorf("len(Hostexec.AutoApprove) = %d, want 0", len(cfg.Hostexec.AutoApprove))
 	}
-	if len(cfg.Commands.ManualApprove) != 0 {
-		t.Errorf("len(Commands.ManualApprove) = %d, want 0", len(cfg.Commands.ManualApprove))
+	if len(cfg.Hostexec.ManualApprove) != 0 {
+		t.Errorf("len(Hostexec.ManualApprove) = %d, want 0", len(cfg.Hostexec.ManualApprove))
 	}
 }
 

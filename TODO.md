@@ -329,19 +329,19 @@ decision files.
 
 ### 6.1 Rename project `commands` → `hostexec`
 
-- [ ] In `internal/config/types.go`: rename `ProjectCommandsConfig` → `ProjectHostexecConfig`
-- [ ] In `internal/config/types.go`: rename `ProjectConfig.Commands` field → `Hostexec` with YAML tag `hostexec`
-- [ ] Update `internal/config/merge.go` `ResolveConfig()`: change `project.Commands.*` → `project.Hostexec.*`
-- [ ] Update `internal/config/validate.go` `ValidateProjectConfig()`: change `cfg.Commands.*` → `cfg.Hostexec.*`, update error prefix strings from `"commands.*"` → `"hostexec.*"`
-- [ ] Update all YAML literals in test files (`commands:` → `hostexec:`) in:
+- [x] In `internal/config/types.go`: rename `ProjectCommandsConfig` → `ProjectHostexecConfig`
+- [x] In `internal/config/types.go`: rename `ProjectConfig.Commands` field → `Hostexec` with YAML tag `hostexec`
+- [x] Update `internal/config/merge.go` `ResolveConfig()`: change `project.Commands.*` → `project.Hostexec.*`
+- [x] Update `internal/config/validate.go` `ValidateProjectConfig()`: change `cfg.Commands.*` → `cfg.Hostexec.*`, update error prefix strings from `"commands.*"` → `"hostexec.*"`
+- [x] Update all YAML literals in test files (`commands:` → `hostexec:`) in:
   - `internal/config/types_test.go`
   - `internal/config/parse_test.go`
   - `internal/config/load_test.go`
   - `internal/config/merge_test.go`
   - `internal/config/validate_test.go`
   - `internal/config/defaults_test.go`
-- [ ] Update all Go references (`cfg.Commands.*` → `cfg.Hostexec.*`, `ProjectCommandsConfig` → `ProjectHostexecConfig`) in the same test files
-- [ ] **Test**: `make test` passes with all renames
+- [x] Update all Go references (`cfg.Commands.*` → `cfg.Hostexec.*`, `ProjectCommandsConfig` → `ProjectHostexecConfig`) in the same test files
+- [x] **Test**: `make test` passes with all renames
 
 ### 6.2 Add `proxy.deny` to static config types
 

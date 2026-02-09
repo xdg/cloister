@@ -139,8 +139,8 @@ func ResolveConfig(projectName string) (*EffectiveConfig, error) {
 	effective.Allow = MergeAllowlists(global.Proxy.Allow, project.Proxy.Allow)
 
 	// Merge command patterns (global + project)
-	effective.AutoApprove = MergeCommandPatterns(global.Hostexec.AutoApprove, project.Commands.AutoApprove)
-	effective.ManualApprove = MergeCommandPatterns(global.Hostexec.ManualApprove, project.Commands.ManualApprove)
+	effective.AutoApprove = MergeCommandPatterns(global.Hostexec.AutoApprove, project.Hostexec.AutoApprove)
+	effective.ManualApprove = MergeCommandPatterns(global.Hostexec.ManualApprove, project.Hostexec.ManualApprove)
 
 	return effective, nil
 }

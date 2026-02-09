@@ -98,7 +98,7 @@ type ProjectConfig struct {
 	Root     string                `yaml:"root,omitempty"`
 	Refs     []string              `yaml:"refs,omitempty"`
 	Proxy    ProjectProxyConfig    `yaml:"proxy,omitempty"`
-	Commands ProjectCommandsConfig `yaml:"commands,omitempty"`
+	Hostexec ProjectHostexecConfig `yaml:"hostexec,omitempty"`
 }
 
 // ProjectProxyConfig contains project-specific proxy settings that are
@@ -107,9 +107,9 @@ type ProjectProxyConfig struct {
 	Allow []AllowEntry `yaml:"allow,omitempty"`
 }
 
-// ProjectCommandsConfig contains project-specific command patterns that are
+// ProjectHostexecConfig contains project-specific command patterns that are
 // merged with global patterns.
-type ProjectCommandsConfig struct {
+type ProjectHostexecConfig struct {
 	AutoApprove   []CommandPattern `yaml:"auto_approve,omitempty"`
 	ManualApprove []CommandPattern `yaml:"manual_approve,omitempty"`
 }

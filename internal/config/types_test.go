@@ -72,7 +72,7 @@ proxy:
   allow:
     - domain: "internal-docs.company.com"
 
-commands:
+hostexec:
   auto_approve:
     - pattern: "^make test$"
   manual_approve:
@@ -209,17 +209,17 @@ func TestProjectConfigUnmarshal(t *testing.T) {
 	if cfg.Proxy.Allow[0].Domain != "internal-docs.company.com" {
 		t.Errorf("Proxy.Allow[0].Domain = %q, want %q", cfg.Proxy.Allow[0].Domain, "internal-docs.company.com")
 	}
-	if len(cfg.Commands.AutoApprove) != 1 {
-		t.Errorf("len(Commands.AutoApprove) = %d, want 1", len(cfg.Commands.AutoApprove))
+	if len(cfg.Hostexec.AutoApprove) != 1 {
+		t.Errorf("len(Hostexec.AutoApprove) = %d, want 1", len(cfg.Hostexec.AutoApprove))
 	}
-	if cfg.Commands.AutoApprove[0].Pattern != "^make test$" {
-		t.Errorf("Commands.AutoApprove[0].Pattern = %q, want %q", cfg.Commands.AutoApprove[0].Pattern, "^make test$")
+	if cfg.Hostexec.AutoApprove[0].Pattern != "^make test$" {
+		t.Errorf("Hostexec.AutoApprove[0].Pattern = %q, want %q", cfg.Hostexec.AutoApprove[0].Pattern, "^make test$")
 	}
-	if len(cfg.Commands.ManualApprove) != 1 {
-		t.Errorf("len(Commands.ManualApprove) = %d, want 1", len(cfg.Commands.ManualApprove))
+	if len(cfg.Hostexec.ManualApprove) != 1 {
+		t.Errorf("len(Hostexec.ManualApprove) = %d, want 1", len(cfg.Hostexec.ManualApprove))
 	}
-	if cfg.Commands.ManualApprove[0].Pattern != "^./deploy\\.sh.*$" {
-		t.Errorf("Commands.ManualApprove[0].Pattern = %q, want %q", cfg.Commands.ManualApprove[0].Pattern, "^./deploy\\.sh.*$")
+	if cfg.Hostexec.ManualApprove[0].Pattern != "^./deploy\\.sh.*$" {
+		t.Errorf("Hostexec.ManualApprove[0].Pattern = %q, want %q", cfg.Hostexec.ManualApprove[0].Pattern, "^./deploy\\.sh.*$")
 	}
 }
 
@@ -513,7 +513,7 @@ func TestProjectConfigRoundTrip(t *testing.T) {
 				{Domain: "internal.example.com"},
 			},
 		},
-		Commands: ProjectCommandsConfig{
+		Hostexec: ProjectHostexecConfig{
 			AutoApprove: []CommandPattern{
 				{Pattern: "^make build$"},
 			},
@@ -545,10 +545,10 @@ func TestProjectConfigRoundTrip(t *testing.T) {
 	if len(roundTripped.Proxy.Allow) != len(original.Proxy.Allow) {
 		t.Errorf("len(Proxy.Allow) = %d, want %d", len(roundTripped.Proxy.Allow), len(original.Proxy.Allow))
 	}
-	if len(roundTripped.Commands.AutoApprove) != len(original.Commands.AutoApprove) {
-		t.Errorf("len(Commands.AutoApprove) = %d, want %d", len(roundTripped.Commands.AutoApprove), len(original.Commands.AutoApprove))
+	if len(roundTripped.Hostexec.AutoApprove) != len(original.Hostexec.AutoApprove) {
+		t.Errorf("len(Hostexec.AutoApprove) = %d, want %d", len(roundTripped.Hostexec.AutoApprove), len(original.Hostexec.AutoApprove))
 	}
-	if len(roundTripped.Commands.ManualApprove) != len(original.Commands.ManualApprove) {
-		t.Errorf("len(Commands.ManualApprove) = %d, want %d", len(roundTripped.Commands.ManualApprove), len(original.Commands.ManualApprove))
+	if len(roundTripped.Hostexec.ManualApprove) != len(original.Hostexec.ManualApprove) {
+		t.Errorf("len(Hostexec.ManualApprove) = %d, want %d", len(roundTripped.Hostexec.ManualApprove), len(original.Hostexec.ManualApprove))
 	}
 }

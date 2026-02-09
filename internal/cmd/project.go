@@ -169,10 +169,10 @@ func runProjectShow(cmd *cobra.Command, args []string) error {
 	}
 
 	// Print auto-approve patterns if any
-	if len(cfg.Commands.AutoApprove) > 0 {
+	if len(cfg.Hostexec.AutoApprove) > 0 {
 		term.Println()
 		term.Println("Auto-Approve Patterns:")
-		for _, pattern := range cfg.Commands.AutoApprove {
+		for _, pattern := range cfg.Hostexec.AutoApprove {
 			term.Printf("  - %s\n", pattern.Pattern)
 		}
 	}

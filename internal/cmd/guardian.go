@@ -386,13 +386,13 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}
 
 		// Check if there's anything project-specific to merge
-		if len(projectCfg.Commands.AutoApprove) == 0 && len(projectCfg.Commands.ManualApprove) == 0 {
+		if len(projectCfg.Hostexec.AutoApprove) == 0 && len(projectCfg.Hostexec.ManualApprove) == 0 {
 			return nil
 		}
 
 		// Merge: global + project patterns
-		mergedAuto := config.MergeCommandPatterns(cfg.Hostexec.AutoApprove, projectCfg.Commands.AutoApprove)
-		mergedManual := config.MergeCommandPatterns(cfg.Hostexec.ManualApprove, projectCfg.Commands.ManualApprove)
+		mergedAuto := config.MergeCommandPatterns(cfg.Hostexec.AutoApprove, projectCfg.Hostexec.AutoApprove)
+		mergedManual := config.MergeCommandPatterns(cfg.Hostexec.ManualApprove, projectCfg.Hostexec.ManualApprove)
 		matcher := patterns.NewRegexMatcher(extractPatterns(mergedAuto), extractPatterns(mergedManual))
 		clog.Info("loaded command patterns for project %s (%d auto-approve, %d manual-approve)",
 			projectName, len(mergedAuto), len(mergedManual))

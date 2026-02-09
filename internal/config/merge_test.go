@@ -222,7 +222,7 @@ proxy:
   allow:
     - domain: "custom.myproject.com"
     - domain: "internal.corp.net"
-commands:
+hostexec:
   auto_approve:
     - pattern: "^make test$"
     - pattern: "^npm run build$"
@@ -362,7 +362,7 @@ proxy:
   allow:
     - domain: "golang.org"
     - domain: "unique.project.com"
-commands:
+hostexec:
   auto_approve:
     - pattern: "^docker ps.*$"
     - pattern: "^project-specific$"
@@ -415,7 +415,7 @@ func TestResolveConfig_ManualApprovePatterns(t *testing.T) {
 	projectContent := `
 remote: "git@github.com:example/manual-test.git"
 root: "/projects/manual-test"
-commands:
+hostexec:
   manual_approve:
     - pattern: "^./deploy\\.sh.*$"
     - pattern: "^terraform apply.*$"
@@ -472,7 +472,7 @@ func TestResolveConfig_ManualApproveDedup(t *testing.T) {
 	// Create project config with overlapping manual_approve pattern
 	projectContent := `
 remote: "git@github.com:example/dedup-manual.git"
-commands:
+hostexec:
   manual_approve:
     - pattern: "^gh pr (view|list|status|checks|diff)( .+)?$"
     - pattern: "^project-specific-manual$"

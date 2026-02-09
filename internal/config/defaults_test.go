@@ -210,7 +210,7 @@ func TestDefaultProjectConfig(t *testing.T) {
 	if len(cfg.Proxy.Allow) != 0 {
 		t.Error("DefaultProjectConfig() Proxy.Allow is not empty")
 	}
-	if len(cfg.Commands.AutoApprove) != 0 {
-		t.Error("DefaultProjectConfig() Commands.AutoApprove is not empty")
+	if len(cfg.Hostexec.AutoApprove) != 0 {
+		t.Error("DefaultProjectConfig() Hostexec.AutoApprove is not empty")
 	}
 }

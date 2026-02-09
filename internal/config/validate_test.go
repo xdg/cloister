@@ -345,7 +345,7 @@ func TestValidateProjectConfig_Valid(t *testing.T) {
 				{Domain: "internal-docs.company.com"},
 			},
 		},
-		Commands: ProjectCommandsConfig{
+		Hostexec: ProjectHostexecConfig{
 			AutoApprove: []CommandPattern{
 				{Pattern: "^make test$"},
 				{Pattern: "^./scripts/lint\\.sh$"},
@@ -377,36 +377,36 @@ func TestValidateProjectConfig_InvalidRegex(t *testing.T) {
 		{
 			name: "unclosed bracket",
 			cfg: &ProjectConfig{
-				Commands: ProjectCommandsConfig{
+				Hostexec: ProjectHostexecConfig{
 					AutoApprove: []CommandPattern{
 						{Pattern: "[invalid"},
 					},
 				},
 			},
-			wantErr: "commands.auto_approve[0].pattern: invalid regex",
+			wantErr: "hostexec.auto_approve[0].pattern: invalid regex",
 		},
 		{
 			name: "unclosed group",
 			cfg: &ProjectConfig{
-				Commands: ProjectCommandsConfig{
+				Hostexec: ProjectHostexecConfig{
 					AutoApprove: []CommandPattern{
 						{Pattern: "^valid$"},
 						{Pattern: "(unclosed"},
 					},
 				},
 			},
-			wantErr: "commands.auto_approve[1].pattern: invalid regex",
+			wantErr: "hostexec.auto_approve[1].pattern: invalid regex",
 		},
 		{
 			name: "invalid escape sequence",
 			cfg: &ProjectConfig{
-				Commands: ProjectCommandsConfig{
+				Hostexec: ProjectHostexecConfig{
 					AutoApprove: []CommandPattern{
 						{Pattern: "\\k<invalid>"},
 					},
 				},
 			},
-			wantErr: "commands.auto_approve[0].pattern: invalid regex",
+			wantErr: "hostexec.auto_approve[0].pattern: invalid regex",
 		},
 	}
 
@@ -426,7 +426,7 @@ func TestValidateProjectConfig_InvalidRegex(t *testing.T) {
 func TestValidateProjectConfig_EmptyPattern(t *testing.T) {
 	// Empty patterns should be valid (they're no-ops)
 	cfg := &ProjectConfig{
-		Commands: ProjectCommandsConfig{
+		Hostexec: ProjectHostexecConfig{
 			AutoApprove: []CommandPattern{
 				{Pattern: ""},
 				{Pattern: "^valid$"},
@@ -442,7 +442,7 @@ func TestValidateProjectConfig_EmptyPattern(t *testing.T) {
 
 func TestValidateProjectConfig_ManualApproveValid(t *testing.T) {
 	cfg := &ProjectConfig{
-		Commands: ProjectCommandsConfig{
+		Hostexec: ProjectHostexecConfig{
 			ManualApprove: []CommandPattern{
 				{Pattern: "^./deploy\\.sh.*$"},
 				{Pattern: "^terraform apply.*$"},
@@ -465,25 +465,25 @@ func TestValidateProjectConfig_ManualApproveInvalidRegex(t *testing.T) {
 		{
 			name: "unclosed bracket in manual_approve",
 			cfg: &ProjectConfig{
-				Commands: ProjectCommandsConfig{
+				Hostexec: ProjectHostexecConfig{
 					ManualApprove: []CommandPattern{
 						{Pattern: "[invalid"},
 					},
 				},
 			},
-			wantErr: "commands.manual_approve[0].pattern: invalid regex",
+			wantErr: "hostexec.manual_approve[0].pattern: invalid regex",
 		},
 		{
 			name: "unclosed group in manual_approve",
 			cfg: &ProjectConfig{
-				Commands: ProjectCommandsConfig{
+				Hostexec: ProjectHostexecConfig{
 					ManualApprove: []CommandPattern{
 						{Pattern: "^valid$"},
 						{Pattern: "(unclosed"},
 					},
 				},
 			},
-			wantErr: "commands.manual_approve[1].pattern: invalid regex",
+			wantErr: "hostexec.manual_approve[1].pattern: invalid regex",
 		},
 	}
 

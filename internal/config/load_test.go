@@ -261,7 +261,7 @@ refs:
 proxy:
   allow:
     - domain: "custom.example.com"
-commands:
+hostexec:
   auto_approve:
     - pattern: "^make test$"
 `
@@ -312,11 +312,11 @@ commands:
 	}
 
 	// Verify command patterns
-	if len(cfg.Commands.AutoApprove) != 1 {
-		t.Fatalf("len(cfg.Commands.AutoApprove) = %d, want 1", len(cfg.Commands.AutoApprove))
+	if len(cfg.Hostexec.AutoApprove) != 1 {
+		t.Fatalf("len(cfg.Hostexec.AutoApprove) = %d, want 1", len(cfg.Hostexec.AutoApprove))
 	}
-	if cfg.Commands.AutoApprove[0].Pattern != "^make test$" {
-		t.Errorf("cfg.Commands.AutoApprove[0].Pattern = %q, want %q", cfg.Commands.AutoApprove[0].Pattern, "^make test$")
+	if cfg.Hostexec.AutoApprove[0].Pattern != "^make test$" {
+		t.Errorf("cfg.Hostexec.AutoApprove[0].Pattern = %q, want %q", cfg.Hostexec.AutoApprove[0].Pattern, "^make test$")
 	}
 }
 
@@ -332,7 +332,7 @@ func TestLoadProjectConfig_InvalidRegex(t *testing.T) {
 
 	// Config with invalid regex pattern
 	configContent := `
-commands:
+hostexec:
   auto_approve:
     - pattern: "[invalid(regex"
 `
