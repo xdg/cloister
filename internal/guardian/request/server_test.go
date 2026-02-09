@@ -231,7 +231,7 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 
 	mockExec := &mockCommandExecutor{}
 
-	server := NewServer(lookup, matcher, mockExec, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), mockExec, nil)
 	server.Addr = ":0" // Use random port
 
 	if err := server.Start(); err != nil {
@@ -279,6 +279,12 @@ func TestServer_ListenAddrBeforeStart(t *testing.T) {
 	if addr != "" {
 		t.Errorf("expected empty addr before Start, got %q", addr)
 	}
+}
+
+// mockPatternLookup wraps a PatternMatcher as a PatternLookup that ignores
+// the project name. Used to adapt existing tests to the PatternLookup API.
+func mockPatternLookup(m PatternMatcher) PatternLookup {
+	return func(string) PatternMatcher { return m }
 }
 
 // mockPatternMatcher implements PatternMatcher for testing
@@ -336,7 +342,7 @@ func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, mockExec, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"docker", "compose", "ps"}}
@@ -385,7 +391,7 @@ func TestServer_HandleRequest_ManualApprove_NilQueue(t *testing.T) {
 	}
 
 	// Server with nil queue - should deny manual approval requests
-	server := NewServer(lookup, matcher, nil, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"docker", "compose", "up", "-d"}}
@@ -427,7 +433,7 @@ func TestServer_HandleRequest_Deny(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, nil, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"rm", "-rf", "/"}}
@@ -515,7 +521,7 @@ func TestServer_HandleRequest_ManualApprove_BlocksUntilApproval(t *testing.T) {
 
 	// Create server with an approval queue and executor
 	queue := approval.NewQueue()
-	server := NewServer(lookup, matcher, mockExec, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), mockExec, nil)
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
@@ -607,7 +613,7 @@ func TestServer_HandleRequest_ManualApprove_Timeout(t *testing.T) {
 
 	// Create server with a very short timeout queue
 	queue := approval.NewQueueWithTimeout(100 * time.Millisecond)
-	server := NewServer(lookup, matcher, nil, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), nil, nil)
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
@@ -670,7 +676,7 @@ func TestServer_HandleRequest_ManualApprove_Denied(t *testing.T) {
 
 	// Create server with an approval queue
 	queue := approval.NewQueue()
-	server := NewServer(lookup, matcher, nil, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), nil, nil)
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
@@ -794,7 +800,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorCalled(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, mockExec, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
@@ -841,7 +847,7 @@ func TestServer_HandleRequest_AutoApprove_NilExecutor(t *testing.T) {
 	}
 
 	// Server with nil executor should return error
-	server := NewServer(lookup, matcher, nil, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
@@ -885,7 +891,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorError(t *testing.T) {
 		err: errors.New("connection refused"),
 	}
 
-	server := NewServer(lookup, matcher, mockExec, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
@@ -936,7 +942,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorTimeout(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, mockExec, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"slow", "command"}}
@@ -990,7 +996,7 @@ func TestServer_HandleRequest_AutoApprove_CommandFailed(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, mockExec, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"failing", "command"}}
@@ -1168,7 +1174,7 @@ func TestServer_HandleRequest_AuditLogging_AutoApprove(t *testing.T) {
 	var auditBuf bytes.Buffer
 	auditLogger := audit.NewLogger(&auditBuf)
 
-	server := NewServer(lookup, matcher, mockExec, auditLogger)
+	server := NewServer(lookup, mockPatternLookup(matcher), mockExec, auditLogger)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
@@ -1226,7 +1232,7 @@ func TestServer_HandleRequest_AuditLogging_Deny(t *testing.T) {
 	var auditBuf bytes.Buffer
 	auditLogger := audit.NewLogger(&auditBuf)
 
-	server := NewServer(lookup, matcher, nil, auditLogger)
+	server := NewServer(lookup, mockPatternLookup(matcher), nil, auditLogger)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	// Send a command that doesn't match any pattern
@@ -1320,7 +1326,7 @@ func TestServer_HandleRequest_AuditLogging_Timeout(t *testing.T) {
 
 	// Create server with a very short timeout queue
 	queue := approval.NewQueueWithTimeout(100 * time.Millisecond)
-	server := NewServer(lookup, matcher, nil, auditLogger)
+	server := NewServer(lookup, mockPatternLookup(matcher), nil, auditLogger)
 	server.Queue = queue
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
@@ -1384,7 +1390,7 @@ func TestServer_HandleRequest_AuditLogging_NilLogger(t *testing.T) {
 	}
 
 	// Create server with nil audit logger
-	server := NewServer(lookup, matcher, mockExec, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), mockExec, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
@@ -1423,7 +1429,7 @@ func TestServer_HandleRequest_NULByteRejected(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, nil, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	// Request with NUL byte embedded in argument
@@ -1468,7 +1474,7 @@ func TestServer_HandleRequest_CmdFieldIgnored(t *testing.T) {
 		},
 	}
 
-	server := NewServer(lookup, matcher, nil, nil)
+	server := NewServer(lookup, mockPatternLookup(matcher), nil, nil)
 	handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
 
 	// Malicious request: cmd claims "docker ps" but args say "rm -rf /"
@@ -1497,5 +1503,87 @@ func TestServer_HandleRequest_CmdFieldIgnored(t *testing.T) {
 	}
 	if !strings.Contains(resp.Reason, "does not match") {
 		t.Errorf("expected reason to contain 'does not match', got %q", resp.Reason)
+	}
+}
+
+// TestServer_HandleRequest_ProjectSpecificPatterns verifies that
+// different projects get different pattern matchers via PatternLookup.
+func TestServer_HandleRequest_ProjectSpecificPatterns(t *testing.T) {
+	projectAToken := "token-project-a"
+	projectBToken := "token-project-b"
+
+	lookup := mockTokenLookup(map[string]TokenInfo{
+		projectAToken: {CloisterName: "cloister-a", ProjectName: "project-a"},
+		projectBToken: {CloisterName: "cloister-b", ProjectName: "project-b"},
+	})
+
+	// Project A allows "make test"; project B does not
+	matcherA := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"make test": {Action: patterns.AutoApprove, Pattern: "^make test$"},
+		},
+	}
+	matcherB := &mockPatternMatcher{
+		results: map[string]patterns.MatchResult{
+			"npm test": {Action: patterns.AutoApprove, Pattern: "^npm test$"},
+		},
+	}
+
+	patternLookup := func(projectName string) PatternMatcher {
+		switch projectName {
+		case "project-a":
+			return matcherA
+		case "project-b":
+			return matcherB
+		default:
+			return nil
+		}
+	}
+
+	mockExec := &mockCommandExecutor{}
+	server := NewServer(lookup, patternLookup, mockExec, nil)
+
+	// Helper to make a request and decode the response
+	doRequest := func(tok string, args []string) CommandResponse {
+		t.Helper()
+		cmdReq := CommandRequest{Args: args}
+		body, _ := json.Marshal(cmdReq)
+		req := httptest.NewRequest(http.MethodPost, "/request", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set(TokenHeader, tok)
+
+		handler := AuthMiddleware(lookup)(http.HandlerFunc(server.handleRequest))
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+
+		var resp CommandResponse
+		if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+			t.Fatalf("failed to decode response: %v", err)
+		}
+		return resp
+	}
+
+	// "make test" should be auto-approved for project-a
+	resp := doRequest(projectAToken, []string{"make", "test"})
+	if resp.Status != "auto_approved" {
+		t.Errorf("project-a: expected auto_approved for 'make test', got %q", resp.Status)
+	}
+
+	// "make test" should be denied for project-b (not in its patterns)
+	resp = doRequest(projectBToken, []string{"make", "test"})
+	if resp.Status != "denied" {
+		t.Errorf("project-b: expected denied for 'make test', got %q", resp.Status)
+	}
+
+	// "npm test" should be auto-approved for project-b
+	resp = doRequest(projectBToken, []string{"npm", "test"})
+	if resp.Status != "auto_approved" {
+		t.Errorf("project-b: expected auto_approved for 'npm test', got %q", resp.Status)
+	}
+
+	// "npm test" should be denied for project-a (not in its patterns)
+	resp = doRequest(projectAToken, []string{"npm", "test"})
+	if resp.Status != "denied" {
+		t.Errorf("project-a: expected denied for 'npm test', got %q", resp.Status)
 	}
 }

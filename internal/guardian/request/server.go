@@ -30,6 +30,11 @@ type PatternMatcher interface {
 	Match(cmd string) patterns.MatchResult
 }
 
+// PatternLookup returns the PatternMatcher for a given project name.
+// The returned matcher should reflect merged global + project patterns.
+// If nil is returned, all commands for that project require manual approval.
+type PatternLookup func(projectName string) PatternMatcher
+
 // CommandExecutor executes approved commands on the host via the executor socket.
 // This interface wraps the executor client for testability.
 type CommandExecutor interface {
@@ -47,9 +52,9 @@ type Server struct {
 	// TokenLookup validates tokens and returns associated info.
 	TokenLookup TokenLookup
 
-	// PatternMatcher matches commands against approval patterns.
+	// PatternLookup returns the pattern matcher for a given project.
 	// If nil, all commands require manual approval.
-	PatternMatcher PatternMatcher
+	PatternLookup PatternLookup
 
 	// CommandExecutor executes approved commands via the host executor socket.
 	// If nil, commands will return a "not implemented" response.
@@ -69,13 +74,13 @@ type Server struct {
 }
 
 // NewServer creates a new request server.
-// The tokenLookup is required; patternMatcher, commandExecutor, and auditLogger may be nil.
+// The tokenLookup is required; patternLookup, commandExecutor, and auditLogger may be nil.
 // (commandExecutor is optional during initial setup; auditLogger enables audit logging if provided).
-func NewServer(tokenLookup TokenLookup, patternMatcher PatternMatcher, commandExecutor CommandExecutor, auditLogger *audit.Logger) *Server {
+func NewServer(tokenLookup TokenLookup, patternLookup PatternLookup, commandExecutor CommandExecutor, auditLogger *audit.Logger) *Server {
 	return &Server{
 		Addr:            fmt.Sprintf(":%d", DefaultRequestPort),
 		TokenLookup:     tokenLookup,
-		PatternMatcher:  patternMatcher,
+		PatternLookup:   patternLookup,
 		CommandExecutor: commandExecutor,
 		AuditLogger:     auditLogger,
 	}
@@ -203,8 +208,14 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	// Log REQUEST event
 	_ = s.AuditLogger.LogRequest(info.ProjectName, "", info.CloisterName, cmd)
 
+	// Look up the pattern matcher for this project
+	var matcher PatternMatcher
+	if s.PatternLookup != nil {
+		matcher = s.PatternLookup(info.ProjectName)
+	}
+
 	// If no pattern matcher is configured, deny all commands
-	if s.PatternMatcher == nil {
+	if matcher == nil {
 		_ = s.AuditLogger.LogDeny(info.ProjectName, "", info.CloisterName, cmd, "no approval patterns configured")
 		s.writeJSON(w, http.StatusOK, CommandResponse{
 			Status: "denied",
@@ -214,7 +225,7 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Match command against configured patterns
-	result := s.PatternMatcher.Match(cmd)
+	result := matcher.Match(cmd)
 
 	switch result.Action {
 	case patterns.AutoApprove:

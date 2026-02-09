@@ -367,6 +367,44 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	allowlistCache.SetProjectLoader(loadProjectAllowlist)
 	allowlistCache.SetDenylistLoader(loadProjectDenylist)
 
+	// Create pattern matcher from global config hostexec patterns
+	autoApprovePatterns := extractPatterns(cfg.Hostexec.AutoApprove)
+	manualApprovePatterns := extractPatterns(cfg.Hostexec.ManualApprove)
+	regexMatcher := patterns.NewRegexMatcher(autoApprovePatterns, manualApprovePatterns)
+	clog.Info("loaded approval patterns: %d auto-approve, %d manual-approve",
+		len(autoApprovePatterns), len(manualApprovePatterns))
+
+	// Create pattern cache for per-project command patterns
+	patternCache := guardian.NewPatternCache(regexMatcher)
+
+	// Create project pattern loader that merges project config with global
+	loadProjectPatterns := func(projectName string) patterns.Matcher {
+		projectCfg, err := config.LoadProjectConfig(projectName)
+		if err != nil {
+			clog.Warn("failed to load project config for patterns %s: %v", projectName, err)
+			return nil
+		}
+
+		// Check if there's anything project-specific to merge
+		if len(projectCfg.Commands.AutoApprove) == 0 && len(projectCfg.Commands.ManualApprove) == 0 {
+			return nil
+		}
+
+		// Merge: global + project patterns
+		mergedAuto := config.MergeCommandPatterns(cfg.Hostexec.AutoApprove, projectCfg.Commands.AutoApprove)
+		mergedManual := config.MergeCommandPatterns(cfg.Hostexec.ManualApprove, projectCfg.Commands.ManualApprove)
+		matcher := patterns.NewRegexMatcher(extractPatterns(mergedAuto), extractPatterns(mergedManual))
+		clog.Info("loaded command patterns for project %s (%d auto-approve, %d manual-approve)",
+			projectName, len(mergedAuto), len(mergedManual))
+		return matcher
+	}
+	patternCache.SetProjectLoader(loadProjectPatterns)
+
+	// Create pattern lookup function for the request server
+	patternLookup := func(projectName string) request.PatternMatcher {
+		return patternCache.GetProject(projectName)
+	}
+
 	// Set up config reloader for SIGHUP
 	proxy.SetConfigReloader(func() (*guardian.Allowlist, error) {
 		newCfg, err := config.LoadGlobalConfig()
@@ -410,6 +448,16 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 				allowlistCache.SetProject(info.ProjectName, allowlist)
 			}
 		}
+
+		// Rebuild global pattern matcher and clear project pattern cache
+		newAutoApprove := extractPatterns(newCfg.Hostexec.AutoApprove)
+		newManualApprove := extractPatterns(newCfg.Hostexec.ManualApprove)
+		newRegexMatcher := patterns.NewRegexMatcher(newAutoApprove, newManualApprove)
+		patternCache.SetGlobal(newRegexMatcher)
+		patternCache.Clear()
+		clog.Info("reloaded approval patterns: %d auto-approve, %d manual-approve",
+			len(newAutoApprove), len(newManualApprove))
+
 		return newGlobal, nil
 	})
 
@@ -449,13 +497,6 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			ProjectName:  info.ProjectName,
 		}, true
 	}
-
-	// Create pattern matcher from global config hostexec patterns
-	autoApprovePatterns := extractPatterns(cfg.Hostexec.AutoApprove)
-	manualApprovePatterns := extractPatterns(cfg.Hostexec.ManualApprove)
-	regexMatcher := patterns.NewRegexMatcher(autoApprovePatterns, manualApprovePatterns)
-	clog.Info("loaded approval patterns: %d auto-approve, %d manual-approve",
-		len(autoApprovePatterns), len(manualApprovePatterns))
 
 	// Create the approval queue for pending requests
 	approvalQueue := approval.NewQueue()
@@ -535,6 +576,9 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 					allowlistCache.SetProject(info.ProjectName, allowlist)
 				}
 			}
+
+			// Clear project pattern cache (reloaded lazily on next request)
+			patternCache.Clear()
 		},
 	}
 
@@ -567,7 +611,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	reqServer := request.NewServer(requestTokenLookup, regexMatcher, execClient, auditLogger)
+	reqServer := request.NewServer(requestTokenLookup, patternLookup, execClient, auditLogger)
 	reqServer.Queue = approvalQueue
 
 	// Create the approval server for the web UI (localhost only)
