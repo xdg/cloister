@@ -458,18 +458,18 @@ Both need to write to the new nested structure.
   - Replace `config.Decisions{DeniedDomains: ...}` → `config.Decisions{Proxy: config.DecisionsProxy{Deny: ...}}`
 - [x] Update `test/e2e/domain_approval_persistence_test.go`:
   - Replace `approvals.Domains` → check `approvals.Proxy.Allow` for domain entries
-- [ ] **Test**: `make test-e2e` passes (requires Docker + guardian)
+- [x] **Test**: `make test-e2e` passes (requires Docker + guardian)
 
 ### 6.8 Wire static deny config into guardian startup
 
 Now that static config has `proxy.deny`, the guardian needs to load it alongside
 decision-file denylists.
 
-- [ ] In `runGuardianProxy()`: build global denylist from both `cfg.Proxy.Deny` (static) and `globalDecisions.Proxy.Deny` (decisions)
-- [ ] In `loadProjectDenylist`: merge `projectCfg.Proxy.Deny` (static) with `projectDecisions.Proxy.Deny` (decisions)
-- [ ] In config reloader: same merging for deny
-- [ ] **Test**: Unit test — global static deny + decision deny are both loaded
-- [ ] **Test**: Unit test — project static deny merges with project decision deny
+- [x] In `runGuardianProxy()`: build global denylist from both `cfg.Proxy.Deny` (static) and `globalDecisions.Proxy.Deny` (decisions)
+- [x] In `loadProjectDenylist`: merge `projectCfg.Proxy.Deny` (static) with `projectDecisions.Proxy.Deny` (decisions)
+- [x] In config reloader: same merging for deny
+- [x] **Test**: Unit test — global static deny + decision deny are both loaded
+- [x] **Test**: Unit test — project static deny merges with project decision deny
 
 ---
 

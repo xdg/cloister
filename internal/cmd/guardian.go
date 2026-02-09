@@ -278,11 +278,13 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	clog.Info("loaded global allowlist: %d static + %d approved = %d total",
 		staticCount, approvedCount, len(globalAllow))
 
-	// Build global denylist from decisions
+	// Build global denylist from static config + decisions
 	var globalDenylist *guardian.Allowlist
-	if len(globalDecisions.Proxy.Deny) > 0 {
-		globalDenylist = guardian.NewAllowlistFromConfig(globalDecisions.Proxy.Deny)
-		clog.Info("loaded global denylist: %d entries", len(globalDecisions.Proxy.Deny))
+	globalDeny := config.MergeDenylists(cfg.Proxy.Deny, globalDecisions.Proxy.Deny)
+	if len(globalDeny) > 0 {
+		globalDenylist = guardian.NewAllowlistFromConfig(globalDeny)
+		clog.Info("loaded global denylist: %d static + %d decisions = %d total",
+			len(cfg.Proxy.Deny), len(globalDecisions.Proxy.Deny), len(globalDeny))
 	}
 
 	// Create allowlist cache for per-project allowlists
@@ -344,16 +346,26 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 
 	// Create project denylist loader
 	loadProjectDenylist := func(projectName string) *guardian.Allowlist {
+		projectCfg, err := config.LoadProjectConfig(projectName)
+		if err != nil {
+			clog.Warn("failed to load project config (deny) for %s: %v", projectName, err)
+			return nil
+		}
+
 		projectDecisions, err := config.LoadProjectDecisions(projectName)
 		if err != nil {
 			clog.Warn("failed to load project decisions (deny) for %s: %v", projectName, err)
+			projectDecisions = &config.Decisions{}
+		}
+
+		// Merge static project deny + project decision deny
+		projectDeny := config.MergeDenylists(projectCfg.Proxy.Deny, projectDecisions.Proxy.Deny)
+		if len(projectDeny) == 0 {
 			return nil
 		}
-		if len(projectDecisions.Proxy.Deny) == 0 {
-			return nil
-		}
-		denylist := guardian.NewAllowlistFromConfig(projectDecisions.Proxy.Deny)
-		clog.Info("loaded denylist for project %s (%d entries)", projectName, len(projectDecisions.Proxy.Deny))
+		denylist := guardian.NewAllowlistFromConfig(projectDeny)
+		clog.Info("loaded denylist for project %s: %d static + %d decisions = %d total",
+			projectName, len(projectCfg.Proxy.Deny), len(projectDecisions.Proxy.Deny), len(projectDeny))
 		return denylist
 	}
 
@@ -424,9 +436,10 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		newGlobal := guardian.NewAllowlistFromConfig(globalAllow)
 		allowlistCache.SetGlobal(newGlobal)
 
-		// Rebuild global denylist from decisions
-		if len(globalDecisions.Proxy.Deny) > 0 {
-			allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(globalDecisions.Proxy.Deny))
+		// Rebuild global denylist from static config + decisions
+		newGlobalDeny := config.MergeDenylists(newCfg.Proxy.Deny, globalDecisions.Proxy.Deny)
+		if len(newGlobalDeny) > 0 {
+			allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(newGlobalDeny))
 		} else {
 			allowlistCache.SetGlobalDeny(nil)
 		}
@@ -551,9 +564,10 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 			}
 			allowlistCache.SetGlobal(guardian.NewAllowlistFromConfig(globalAllow))
 
-			// Rebuild global denylist
-			if len(globalDecisions.Proxy.Deny) > 0 {
-				allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(globalDecisions.Proxy.Deny))
+			// Rebuild global denylist from static config + decisions
+			reloadGlobalDeny := config.MergeDenylists(cfg.Proxy.Deny, globalDecisions.Proxy.Deny)
+			if len(reloadGlobalDeny) > 0 {
+				allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(reloadGlobalDeny))
 			} else {
 				allowlistCache.SetGlobalDeny(nil)
 			}

@@ -201,6 +201,126 @@ func TestMergeStaticAndDecisions_DenyEntries(t *testing.T) {
 	}
 }
 
+func TestMergeStaticAndDecisions_GlobalDenyMergesStaticAndDecisions(t *testing.T) {
+	// Simulates the global denylist merging pattern from runGuardianProxy:
+	// globalDeny := config.MergeDenylists(cfg.Proxy.Deny, globalDecisions.Proxy.Deny)
+	staticDeny := []config.AllowEntry{
+		{Domain: "static-blocked.example.com"},
+		{Pattern: "*.static-evil.com"},
+	}
+	decisions := &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Deny: []config.AllowEntry{
+				{Domain: "decision-blocked.example.com"},
+				{Pattern: "*.decision-evil.com"},
+			},
+		},
+	}
+
+	globalDeny := config.MergeDenylists(staticDeny, decisions.Proxy.Deny)
+
+	if len(globalDeny) != 4 {
+		t.Fatalf("expected 4 deny entries, got %d", len(globalDeny))
+	}
+
+	// Static entries come first (MergeDenylists preserves order: global then project)
+	if globalDeny[0].Domain != "static-blocked.example.com" {
+		t.Errorf("globalDeny[0].Domain = %q, want %q", globalDeny[0].Domain, "static-blocked.example.com")
+	}
+	if globalDeny[1].Pattern != "*.static-evil.com" {
+		t.Errorf("globalDeny[1].Pattern = %q, want %q", globalDeny[1].Pattern, "*.static-evil.com")
+	}
+
+	// Decision entries come after
+	if globalDeny[2].Domain != "decision-blocked.example.com" {
+		t.Errorf("globalDeny[2].Domain = %q, want %q", globalDeny[2].Domain, "decision-blocked.example.com")
+	}
+	if globalDeny[3].Pattern != "*.decision-evil.com" {
+		t.Errorf("globalDeny[3].Pattern = %q, want %q", globalDeny[3].Pattern, "*.decision-evil.com")
+	}
+}
+
+func TestMergeStaticAndDecisions_GlobalDenyDeduplicates(t *testing.T) {
+	// When static and decisions share an entry, it should be deduplicated.
+	staticDeny := []config.AllowEntry{
+		{Domain: "blocked.example.com"},
+	}
+	decisions := &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Deny: []config.AllowEntry{
+				{Domain: "blocked.example.com"}, // duplicate
+				{Domain: "other-blocked.com"},
+			},
+		},
+	}
+
+	globalDeny := config.MergeDenylists(staticDeny, decisions.Proxy.Deny)
+
+	if len(globalDeny) != 2 {
+		t.Fatalf("expected 2 deny entries (deduped), got %d", len(globalDeny))
+	}
+
+	if globalDeny[0].Domain != "blocked.example.com" {
+		t.Errorf("globalDeny[0].Domain = %q, want %q", globalDeny[0].Domain, "blocked.example.com")
+	}
+	if globalDeny[1].Domain != "other-blocked.com" {
+		t.Errorf("globalDeny[1].Domain = %q, want %q", globalDeny[1].Domain, "other-blocked.com")
+	}
+}
+
+func TestMergeStaticAndDecisions_ProjectDenyMergesStaticAndDecisions(t *testing.T) {
+	// Simulates the project denylist merging pattern from loadProjectDenylist:
+	// projectDeny := config.MergeDenylists(projectCfg.Proxy.Deny, projectDecisions.Proxy.Deny)
+	projectStaticDeny := []config.AllowEntry{
+		{Domain: "project-static-blocked.com"},
+	}
+	projectDecisions := &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Deny: []config.AllowEntry{
+				{Domain: "project-decision-blocked.com"},
+				{Pattern: "*.project-evil.com"},
+			},
+		},
+	}
+
+	projectDeny := config.MergeDenylists(projectStaticDeny, projectDecisions.Proxy.Deny)
+
+	if len(projectDeny) != 3 {
+		t.Fatalf("expected 3 deny entries, got %d", len(projectDeny))
+	}
+
+	// Project static entries first
+	if projectDeny[0].Domain != "project-static-blocked.com" {
+		t.Errorf("projectDeny[0].Domain = %q, want %q", projectDeny[0].Domain, "project-static-blocked.com")
+	}
+
+	// Project decision entries after
+	if projectDeny[1].Domain != "project-decision-blocked.com" {
+		t.Errorf("projectDeny[1].Domain = %q, want %q", projectDeny[1].Domain, "project-decision-blocked.com")
+	}
+	if projectDeny[2].Pattern != "*.project-evil.com" {
+		t.Errorf("projectDeny[2].Pattern = %q, want %q", projectDeny[2].Pattern, "*.project-evil.com")
+	}
+}
+
+func TestMergeStaticAndDecisions_DenyStaticOnlyNoDecisions(t *testing.T) {
+	// When there are static deny entries but no decision deny entries,
+	// static entries should still be included.
+	staticDeny := []config.AllowEntry{
+		{Domain: "static-only.example.com"},
+	}
+	decisions := &config.Decisions{}
+
+	globalDeny := config.MergeDenylists(staticDeny, decisions.Proxy.Deny)
+
+	if len(globalDeny) != 1 {
+		t.Fatalf("expected 1 deny entry, got %d", len(globalDeny))
+	}
+	if globalDeny[0].Domain != "static-only.example.com" {
+		t.Errorf("globalDeny[0].Domain = %q, want %q", globalDeny[0].Domain, "static-only.example.com")
+	}
+}
+
 func TestMergeStaticAndDecisions_AllowAndDeny(t *testing.T) {
 	decisions := &config.Decisions{
 		Proxy: config.DecisionsProxy{
