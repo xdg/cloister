@@ -13,6 +13,9 @@ type EffectiveConfig struct {
 	// Merged allowlist (global + project)
 	Allow []AllowEntry
 
+	// Merged denylist (global + project)
+	Deny []AllowEntry
+
 	// Request server settings
 	RequestListen  string
 	RequestTimeout string
@@ -72,6 +75,13 @@ func MergeAllowlists(global, project []AllowEntry) []AllowEntry {
 	return mergeSlices(global, project, func(e AllowEntry) string { return e.Domain })
 }
 
+// MergeDenylists combines global and project denylist entries.
+// Project entries ADD to global (don't replace).
+// Entries are deduplicated by domain.
+func MergeDenylists(global, project []AllowEntry) []AllowEntry {
+	return mergeSlices(global, project, func(e AllowEntry) string { return e.Domain })
+}
+
 // MergeCommandPatterns combines global and project command patterns.
 // Project patterns ADD to global (don't replace).
 // Patterns are deduplicated by pattern string.
@@ -101,6 +111,9 @@ func ResolveConfig(projectName string) (*EffectiveConfig, error) {
 
 		// Start with global allowlist
 		Allow: global.Proxy.Allow,
+
+		// Start with global denylist
+		Deny: global.Proxy.Deny,
 
 		// Request server settings
 		RequestListen:  global.Request.Listen,
@@ -137,6 +150,9 @@ func ResolveConfig(projectName string) (*EffectiveConfig, error) {
 
 	// Merge allowlists (global + project)
 	effective.Allow = MergeAllowlists(global.Proxy.Allow, project.Proxy.Allow)
+
+	// Merge denylists (global + project)
+	effective.Deny = MergeDenylists(global.Proxy.Deny, project.Proxy.Deny)
 
 	// Merge command patterns (global + project)
 	effective.AutoApprove = MergeCommandPatterns(global.Hostexec.AutoApprove, project.Hostexec.AutoApprove)

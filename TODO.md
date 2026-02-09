@@ -345,13 +345,13 @@ decision files.
 
 ### 6.2 Add `proxy.deny` to static config types
 
-- [ ] Add `Deny []AllowEntry` field to `ProxyConfig` with YAML tag `deny,omitempty`
-- [ ] Add `Deny []AllowEntry` field to `ProjectProxyConfig` with YAML tag `deny,omitempty`
-- [ ] Add `MergeDenylists` function in `internal/config/merge.go` (parallel to `MergeAllowlists`)
-- [ ] Update `EffectiveConfig` in `merge.go`: add `Deny []AllowEntry` field
-- [ ] Update `ResolveConfig()` in `merge.go`: merge deny lists from global + project config
-- [ ] **Test**: Unit test for `MergeDenylists` merging global and project deny entries
-- [ ] **Test**: Unit test for `ResolveConfig` populating `Deny` field
+- [x] Add `Deny []AllowEntry` field to `ProxyConfig` with YAML tag `deny,omitempty`
+- [x] Add `Deny []AllowEntry` field to `ProjectProxyConfig` with YAML tag `deny,omitempty`
+- [x] Add `MergeDenylists` function in `internal/config/merge.go` (parallel to `MergeAllowlists`)
+- [x] Update `EffectiveConfig` in `merge.go`: add `Deny []AllowEntry` field
+- [x] Update `ResolveConfig()` in `merge.go`: merge deny lists from global + project config
+- [x] **Test**: Unit test for `MergeDenylists` merging global and project deny entries
+- [x] **Test**: Unit test for `ResolveConfig` populating `Deny` field
 
 ### 6.3 Fix `MergeAllowlists` / `MergeDenylists` dedup key
 

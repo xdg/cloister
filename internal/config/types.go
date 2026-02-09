@@ -18,6 +18,7 @@ type GlobalConfig struct {
 type ProxyConfig struct {
 	Listen                 string       `yaml:"listen,omitempty"`
 	Allow                  []AllowEntry `yaml:"allow,omitempty"`
+	Deny                   []AllowEntry `yaml:"deny,omitempty"`
 	UnlistedDomainBehavior string       `yaml:"unlisted_domain_behavior,omitempty"`
 	ApprovalTimeout        string       `yaml:"approval_timeout,omitempty"`
 	RateLimit              int          `yaml:"rate_limit,omitempty"`
@@ -105,6 +106,7 @@ type ProjectConfig struct {
 // merged with the global allowlist.
 type ProjectProxyConfig struct {
 	Allow []AllowEntry `yaml:"allow,omitempty"`
+	Deny  []AllowEntry `yaml:"deny,omitempty"`
 }
 
 // ProjectHostexecConfig contains project-specific command patterns that are

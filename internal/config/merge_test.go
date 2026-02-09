@@ -165,6 +165,90 @@ func TestMergeCommandPatterns_Empty(t *testing.T) {
 	}
 }
 
+func TestMergeDenylists_Empty(t *testing.T) {
+	result := MergeDenylists(nil, nil)
+	if result != nil {
+		t.Errorf("MergeDenylists(nil, nil) = %v, want nil", result)
+	}
+
+	result = MergeDenylists([]AllowEntry{}, []AllowEntry{})
+	if result != nil {
+		t.Errorf("MergeDenylists([], []) = %v, want nil", result)
+	}
+}
+
+func TestMergeDenylists_Merge(t *testing.T) {
+	global := []AllowEntry{
+		{Domain: "evil.com"},
+		{Domain: "malware.net"},
+	}
+	project := []AllowEntry{
+		{Domain: "banned.example.com"},
+		{Domain: "phishing.org"},
+	}
+
+	result := MergeDenylists(global, project)
+	if len(result) != 4 {
+		t.Fatalf("len(result) = %d, want 4", len(result))
+	}
+
+	// Verify order: global entries first, then project entries
+	expected := []string{"evil.com", "malware.net", "banned.example.com", "phishing.org"}
+	for i, want := range expected {
+		if result[i].Domain != want {
+			t.Errorf("result[%d].Domain = %q, want %q", i, result[i].Domain, want)
+		}
+	}
+}
+
+func TestMergeDenylists_WithPatterns(t *testing.T) {
+	global := []AllowEntry{
+		{Domain: "evil.com"},
+		{Pattern: "*.malware.net"},
+	}
+	project := []AllowEntry{
+		{Domain: "banned.example.com"},
+	}
+
+	result := MergeDenylists(global, project)
+	if len(result) != 3 {
+		t.Fatalf("len(result) = %d, want 3", len(result))
+	}
+
+	if result[0].Domain != "evil.com" {
+		t.Errorf("result[0].Domain = %q, want %q", result[0].Domain, "evil.com")
+	}
+	if result[1].Pattern != "*.malware.net" {
+		t.Errorf("result[1].Pattern = %q, want %q", result[1].Pattern, "*.malware.net")
+	}
+	if result[2].Domain != "banned.example.com" {
+		t.Errorf("result[2].Domain = %q, want %q", result[2].Domain, "banned.example.com")
+	}
+}
+
+func TestMergeDenylists_Dedup(t *testing.T) {
+	global := []AllowEntry{
+		{Domain: "evil.com"},
+		{Domain: "banned.example.com"},
+	}
+	project := []AllowEntry{
+		{Domain: "evil.com"},           // Duplicate
+		{Domain: "project-banned.com"}, // Unique
+	}
+
+	result := MergeDenylists(global, project)
+	if len(result) != 3 {
+		t.Fatalf("len(result) = %d, want 3", len(result))
+	}
+
+	expected := []string{"evil.com", "banned.example.com", "project-banned.com"}
+	for i, want := range expected {
+		if result[i].Domain != want {
+			t.Errorf("result[%d].Domain = %q, want %q", i, result[i].Domain, want)
+		}
+	}
+}
+
 func TestResolveConfig_GlobalOnly(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
@@ -542,5 +626,89 @@ func TestResolveConfig_GlobalOnlyManualApprove(t *testing.T) {
 	}
 	if !foundGhIssue {
 		t.Error("cfg.ManualApprove should contain global pattern '^gh issue (view|list)( .+)?$'")
+	}
+}
+
+func TestResolveConfig_WithDeny(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	// Write global config with a deny entry
+	globalDir := filepath.Join(tmpDir, "cloister")
+	if err := os.MkdirAll(globalDir, 0700); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	globalContent := `
+proxy:
+  deny:
+    - domain: "evil.com"
+    - pattern: "*.malware.net"
+`
+	globalPath := filepath.Join(globalDir, "config.yaml")
+	if err := os.WriteFile(globalPath, []byte(globalContent), 0600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	// Create project config with additional deny entries
+	projectsDir := filepath.Join(globalDir, "projects")
+	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+		t.Fatalf("os.MkdirAll() error = %v", err)
+	}
+	projectContent := `
+remote: "git@github.com:example/denytest.git"
+proxy:
+  deny:
+    - domain: "banned.example.com"
+    - domain: "evil.com"
+`
+	projectPath := filepath.Join(projectsDir, "denytest.yaml")
+	if err := os.WriteFile(projectPath, []byte(projectContent), 0600); err != nil {
+		t.Fatalf("os.WriteFile() error = %v", err)
+	}
+
+	// Test global-only (no project)
+	cfg, err := ResolveConfig("")
+	if err != nil {
+		t.Fatalf("ResolveConfig(\"\") error = %v", err)
+	}
+	if len(cfg.Deny) != 2 {
+		t.Fatalf("global-only cfg.Deny len = %d, want 2", len(cfg.Deny))
+	}
+	if cfg.Deny[0].Domain != "evil.com" {
+		t.Errorf("cfg.Deny[0].Domain = %q, want %q", cfg.Deny[0].Domain, "evil.com")
+	}
+	if cfg.Deny[1].Pattern != "*.malware.net" {
+		t.Errorf("cfg.Deny[1].Pattern = %q, want %q", cfg.Deny[1].Pattern, "*.malware.net")
+	}
+
+	// Test with project (merged + deduped)
+	cfg, err = ResolveConfig("denytest")
+	if err != nil {
+		t.Fatalf("ResolveConfig(\"denytest\") error = %v", err)
+	}
+
+	// Global has evil.com + *.malware.net, project has banned.example.com + evil.com (dup)
+	// Merged should be 3 entries (evil.com deduped)
+	if len(cfg.Deny) != 3 {
+		t.Fatalf("merged cfg.Deny len = %d, want 3", len(cfg.Deny))
+	}
+
+	// Verify order: global first, then unique project entries
+	expected := []struct {
+		domain  string
+		pattern string
+	}{
+		{domain: "evil.com"},
+		{pattern: "*.malware.net"},
+		{domain: "banned.example.com"},
+	}
+	for i, want := range expected {
+		if want.domain != "" && cfg.Deny[i].Domain != want.domain {
+			t.Errorf("cfg.Deny[%d].Domain = %q, want %q", i, cfg.Deny[i].Domain, want.domain)
+		}
+		if want.pattern != "" && cfg.Deny[i].Pattern != want.pattern {
+			t.Errorf("cfg.Deny[%d].Pattern = %q, want %q", i, cfg.Deny[i].Pattern, want.pattern)
+		}
 	}
 }
