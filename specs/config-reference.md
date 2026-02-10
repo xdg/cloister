@@ -42,6 +42,11 @@ proxy:
     - domain: "api.openai.com"
     - domain: "generativelanguage.googleapis.com"
 
+  # Denylisted destinations (blocked even if in allowlist)
+  deny:
+    - domain: "known-bad-site.example.com"
+    - pattern: "*.malware-cdn.example.com"
+
   # Behavior when request hits an unlisted domain
   # "request_approval" - hold connection, create approval request, wait for human
   # "reject" - immediately return 403
@@ -198,9 +203,11 @@ proxy:
   allow:
     - domain: "internal-docs.company.com"
     - domain: "private-registry.company.com"
+  deny:
+    - domain: "blocked-service.company.com"
 
 # Project-specific command patterns (merged with global patterns)
-commands:
+hostexec:
   auto_approve:
     - pattern: "^make test$"
     - pattern: "^./scripts/lint\\.sh$"
@@ -217,26 +224,22 @@ Domains approved or denied via the web UI are stored in a separate `decisions/` 
 # or
 # ~/.config/cloister/decisions/projects/<name>.yaml
 
-# Allowlist: Exact domains approved via the web UI
-domains:
-  - docs.example.com
-  - internal-api.company.com
-  - pkg.go.dev
+# Proxy decisions: domains/patterns approved or denied via the web UI
+proxy:
+  # Allowlist: Domains and patterns approved via the web UI
+  allow:
+    - domain: docs.example.com
+    - domain: internal-api.company.com
+    - domain: pkg.go.dev
+    - pattern: "*.cdn.example.com"
+    - pattern: "*.s3.amazonaws.com"
 
-# Allowlist: Wildcard patterns approved via the web UI
-patterns:
-  - "*.cdn.example.com"
-  - "*.s3.amazonaws.com"
-
-# Denylist: Exact domains denied via the web UI
-denied_domains:
-  - malware-cdn.example.com
-  - known-bad-site.io
-
-# Denylist: Wildcard patterns denied via the web UI
-denied_patterns:
-  - "*.sketchy.io"
-  - "*.suspicious-ads.com"
+  # Denylist: Domains and patterns denied via the web UI
+  deny:
+    - domain: malware-cdn.example.com
+    - domain: known-bad-site.io
+    - pattern: "*.sketchy.io"
+    - pattern: "*.suspicious-ads.com"
 ```
 
 ### Wildcard Pattern Semantics
@@ -256,19 +259,19 @@ At load time, all config sources are merged with these precedence rules:
 
 **Merge order (least to most specific):**
 1. Global config (`~/.config/cloister/config.yaml`)
-2. Project config (`~/.config/cloister/projects/<name>/config.yaml`)
+2. Project config (`~/.config/cloister/projects/<name>.yaml`)
 3. Global decisions (`~/.config/cloister/decisions/global.yaml`)
 4. Project decisions (`~/.config/cloister/decisions/projects/<name>.yaml`)
 5. Session allowlist (in-memory, token-scoped, ephemeral)
 
 **Evaluation order (per request):**
-1. **Exact deny** — Domain in `denied_domains` → blocked
-2. **Pattern deny** — Domain matches `denied_patterns` → blocked
-3. **Exact allow** — Domain in `domains` → allowed
-4. **Pattern allow** — Domain matches `patterns` → allowed
+1. **Exact deny** — Domain in deny list (domain entries) → blocked
+2. **Pattern deny** — Domain matches deny list (pattern entries) → blocked
+3. **Exact allow** — Domain in allow list (domain entries) → allowed
+4. **Pattern allow** — Domain matches allow list (pattern entries) → allowed
 5. **Default** — No match → queued for human approval
 
-**Key principle:** Denials override approvals at all scope levels. If `evil.com` appears in both `domains` (allowlist) and `denied_domains` (denylist), it's blocked. This ensures security-first behavior even with conflicting configuration.
+**Key principle:** Deny entries override allow entries at all scope levels. If `evil.com` appears in both `proxy.allow` and `proxy.deny`, it's blocked. This ensures security-first behavior even with conflicting configuration.
 
 ### File Management
 
@@ -276,11 +279,11 @@ At load time, all config sources are merged with these precedence rules:
 
 **Consolidation:** To clean up accumulated decision files, move entries from a decision file into the corresponding static config file:
 - `decisions/global.yaml` → `config.yaml`
-- `decisions/projects/<name>.yaml` → `projects/<name>/config.yaml`
+- `decisions/projects/<name>.yaml` → `projects/<name>.yaml`
 
-Then delete the decision file. This is optional — both sources are merged at load time, so functionality is identical.
+Then delete the decision file. This is optional — both sources are merged at load time, so functionality is identical. Decision files now use the same `proxy.allow`/`proxy.deny` structure as static config files, so entries can be moved between them without restructuring.
 
-**Security note:** Static config files (`config.yaml`, `projects/<name>/config.yaml`) are read-only to the guardian container. Only files in `decisions/` are writable by the guardian. This prevents a compromised guardian from modifying the base configuration.
+**Security note:** Static config files (`config.yaml`, `projects/<name>.yaml`) are read-only to the guardian container. Only files in `decisions/` are writable by the guardian. This prevents a compromised guardian from modifying the base configuration.
 
 ---
 

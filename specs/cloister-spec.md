@@ -235,17 +235,17 @@ The proxy allowlist system supports both exact domain matches and wildcard patte
   - Patterns are stored separately from exact domains for clarity in config files
 
 **Precedence rules** (evaluated in order):
-1. **Exact deny** — Domain in `denied_domains` → blocked
-2. **Pattern deny** — Domain matches `denied_patterns` → blocked
-3. **Exact allow** — Domain in `domains` → allowed
-4. **Pattern allow** — Domain matches `patterns` → allowed
+1. **Exact deny** — Domain in `proxy.deny` (domain entries) → blocked
+2. **Pattern deny** — Domain matches `proxy.deny` (pattern entries) → blocked
+3. **Exact allow** — Domain in `proxy.allow` (domain entries) → allowed
+4. **Pattern allow** — Domain matches `proxy.allow` (pattern entries) → allowed
 5. **Default** — No match → queued for human approval (or blocked if approval disabled)
 
 Key principle: **Denials override approvals at all levels.** If `evil.com` appears in both allowlist and denylist, it's blocked. This ensures security-first behavior even with conflicting rules.
 
 **Scope hierarchy** (merged at load time):
 - Global config (`~/.config/cloister/config.yaml`)
-- Project config (`~/.config/cloister/projects/<name>/config.yaml`)
+- Project config (`~/.config/cloister/projects/<name>.yaml`)
 - Global decisions (`~/.config/cloister/decisions/global.yaml`)
 - Project decisions (`~/.config/cloister/decisions/projects/<name>.yaml`)
 - Session allowlist (in-memory, token-scoped)
@@ -367,7 +367,7 @@ Configuration is stored in `~/.config/cloister/`:
 - `projects/<name>.yaml` — Per-project overrides (additional allowlists, refs)
 - `decisions/` — Domain decisions from web UI (merged with static config at load time)
 
-Allowlists are built from: global config + project config + global approvals + project approvals.
+Allowlists are built from: global config + project config + global decisions + project decisions.
 
 See [config-reference.md](config-reference.md) for full schema documentation.
 

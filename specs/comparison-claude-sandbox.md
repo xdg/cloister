@@ -198,7 +198,7 @@ This works well for the "well-meaning but overeager AI" threat model. The AI can
 ### Cloister
 - **Explicit hostexec workflow**: Commands requiring host resources go through approval server
 - **Web UI for review**: Pending requests queue in browser interface
-- **Three persistence levels**: Session-only, project-scoped, global-scoped (approval files separate from static config)
+- **Three persistence levels**: Session-only, project-scoped, global-scoped (decision files separate from static config)
 - **Pattern-based auto-approval**: `^go mod tidy$` can auto-approve; `^git .*` can auto-deny
 
 This treats host command execution as a privilege requiring explicit grant, not a default with exceptions.

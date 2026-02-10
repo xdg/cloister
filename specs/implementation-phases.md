@@ -144,8 +144,8 @@ portion.
 **Verification:**
 - Request to unlisted domain → appears in approval UI
 - "Allow (session)" → request succeeds, subsequent requests auto-allowed until stop
-- "Save to project" → persisted to approval file, survives restart, static config unchanged
-- "Save to global" → persisted to approval file, survives restart, static config unchanged
+- "Save to project" → persisted to decision file, survives restart, static config unchanged
+- "Save to global" → persisted to decision file, survives restart, static config unchanged
 - "Deny" → request fails with 403
 - Timeout → request fails with 403
 

@@ -370,14 +370,14 @@ Approve a pending domain request with specified scope and optional wildcard patt
 **Scope options:**
 - `"once"` — Forward this request only, don't add to any allowlist (stateless approval)
 - `"session"` — Add to in-memory allowlist, expires when cloister stops
-- `"project"` — Persist to `~/.config/cloister/decisions/projects/<name>.yaml` under `domains` or `patterns`
-- `"global"` — Persist to `~/.config/cloister/decisions/global.yaml` under `domains` or `patterns`
+- `"project"` — Persist to `~/.config/cloister/decisions/projects/<name>.yaml` under `proxy.allow`
+- `"global"` — Persist to `~/.config/cloister/decisions/global.yaml` under `proxy.allow`
 
 **Wildcard behavior:**
 - If `wildcard: true` and domain is `api.example.com`, the pattern `*.example.com` is added to the appropriate allowlist
 - Wildcard patterns match one subdomain level: `*.example.com` matches `api.example.com` but NOT `api.v2.example.com`
 - The pattern `*.example.com` also matches the apex domain `example.com` for convenience
-- Wildcard patterns are stored in the `patterns` field; exact domains in the `domains` field
+- Both wildcard patterns (as `pattern:` entries) and exact domains (as `domain:` entries) are stored in the `proxy.allow` or `proxy.deny` list
 
 **Response:**
 ```json
@@ -415,8 +415,8 @@ Deny a pending domain request with specified scope and optional wildcard pattern
 **Scope options:**
 - `"once"` — Reject this request only, don't add to any denylist (stateless denial)
 - `"session"` — Add to in-memory denylist, expires when cloister stops
-- `"project"` — Persist to `~/.config/cloister/decisions/projects/<name>.yaml` under `denied_domains` or `denied_patterns`
-- `"global"` — Persist to `~/.config/cloister/decisions/global.yaml` under `denied_domains` or `denied_patterns`
+- `"project"` — Persist to `~/.config/cloister/decisions/projects/<name>.yaml` under `proxy.deny`
+- `"global"` — Persist to `~/.config/cloister/decisions/global.yaml` under `proxy.deny`
 
 **Precedence:** Denials override approvals at all scope levels. If a domain appears in both allowlist and denylist, it's blocked.
 
@@ -550,7 +550,7 @@ All pending requests appear in a single chronological list, with the most recent
 3. Request appears in UI with all decision options
 4. User clicks button (e.g., **Allow → Project**)
 5. UI sends POST to `/approve-domain/{id}` with `{"scope": "project", "wildcard": false}`
-6. Backend adds domain to `~/.config/cloister/decisions/projects/my-api.yaml` under `domains:`
+6. Backend adds domain to `~/.config/cloister/decisions/projects/my-api.yaml` under `proxy.allow`
 7. Proxy forwards request to upstream server
 8. UI shows confirmation, e.g:
    ```
@@ -562,7 +562,7 @@ All pending requests appear in a single chronological list, with the most recent
 1. Same steps 1-4 as approval
 2. User clicks button (e.g., **Deny → Global**)
 3. UI sends POST to `/deny-domain/{id}` with `{"scope": "global", "wildcard": false}`
-4. Backend adds domain to `~/.config/cloister/decisions/global.yaml` under `denied_domains:`
+4. Backend adds domain to `~/.config/cloister/decisions/global.yaml` under `proxy.deny`
 5. Proxy returns 403 Forbidden to agent
 6. UI shows confirmation, e.g.:
    ```
@@ -574,7 +574,7 @@ All pending requests appear in a single chronological list, with the most recent
 - Domain: `assets.cdn.example.com`
 - Checkbox: ✓ Apply to wildcard pattern
 - Click: **Allow → Project**
-- Result: Adds `*.cdn.example.com` to `patterns:` in project config
+- Result: Adds `*.cdn.example.com` to `proxy.allow` in project decisions
 - Effect: All subdomains match (`assets.cdn.example.com`, `images.cdn.example.com`, etc.)
 
 **Timeout behavior:**

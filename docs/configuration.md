@@ -8,8 +8,8 @@ Cloister uses YAML configuration files to control network allowlists, hostexec p
 |------|---------|
 | `~/.config/cloister/config.yaml` | Global defaults |
 | `~/.config/cloister/projects/<name>.yaml` | Per-project overrides |
-| `~/.config/cloister/approvals/global.yaml` | Globally approved domains (from web UI) |
-| `~/.config/cloister/approvals/projects/<name>.yaml` | Per-project approved domains (from web UI) |
+| `~/.config/cloister/decisions/global.yaml` | Globally approved/denied domains (from web UI) |
+| `~/.config/cloister/decisions/projects/<name>.yaml` | Per-project approved/denied domains (from web UI) |
 
 ## Global Configuration
 
@@ -57,7 +57,7 @@ proxy:
     - domain: internal-registry.company.com
 
 # Project-specific command patterns
-commands:
+hostexec:
   auto_approve:
     - pattern: "^docker compose up"
     - pattern: "^docker compose down"
@@ -100,28 +100,30 @@ proxy:
 
 ### Approved Domains
 
-Domains approved via the web UI are stored separately from static config files:
+Domains approved or denied via the web UI are stored separately from static config files:
 
 ```
-~/.config/cloister/approvals/
-├── global.yaml                # Globally approved domains
+~/.config/cloister/decisions/
+├── global.yaml                # Globally approved/denied domains
 └── projects/
-    └── my-api.yaml            # Per-project approved domains
+    └── my-api.yaml            # Per-project approved/denied domains
 ```
 
-This separation ensures the guardian container only has write access to approval data, not your static configuration. At load time, static config and approval files are merged automatically.
+This separation ensures the guardian container only has write access to decision data, not your static configuration. At load time, static config and decision files are merged automatically.
 
-**Approval file format:**
+**Decision file format:**
 ```yaml
-# Example: ~/.config/cloister/approvals/projects/my-api.yaml
-domains:
-  - docs.example.com
-  - internal-api.company.com
-patterns:
-  - "*.cdn.example.com"
+# Example: ~/.config/cloister/decisions/projects/my-api.yaml
+proxy:
+  allow:
+    - domain: docs.example.com
+    - domain: internal-api.company.com
+    - pattern: "*.cdn.example.com"
+  deny:
+    - domain: known-bad-site.example.com
 ```
 
-To consolidate approvals into static config, move entries from an approval file into the corresponding config file (e.g., from `approvals/global.yaml` into `config.yaml`), then delete the approval file.
+To consolidate decisions into static config, move entries from a decision file into the corresponding config file (e.g., from `decisions/global.yaml` into `config.yaml`), then delete the decision file.
 
 ### Unlisted Domain Behavior
 

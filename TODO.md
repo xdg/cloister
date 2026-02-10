@@ -292,7 +292,7 @@ Verify end-to-end workflows and update remaining documentation.
 - [x] Update package comments in `internal/config/decisions.go`
 - [x] Update function comments in `internal/guardian/domain_approver.go`
 - [x] Update comments in `internal/guardian/proxy.go` for evaluation order
-- [ ] **Test**: Manual - `go doc` output shows updated terminology
+- [x] **Test**: Manual - `go doc` output shows updated terminology
 
 ### 5.4 Migration path for existing users
 
@@ -479,22 +479,22 @@ Update all documentation to reflect the config consistency changes.
 
 ### 7.1 Update config-reference.md
 
-- [ ] Change project config example: `commands:` → `hostexec:`
-- [ ] Add `proxy.deny` to both global and project config schemas
-- [ ] Update decision file schema to new `proxy.allow`/`proxy.deny` format
-- [ ] Update the "Consolidation" section to reflect that moving entries between decision files and static config no longer requires restructuring
-- [ ] Update precedence rules if needed (static deny should merge with decision deny)
+- [x] Change project config example: `commands:` → `hostexec:`
+- [x] Add `proxy.deny` to both global and project config schemas
+- [x] Update decision file schema to new `proxy.allow`/`proxy.deny` format
+- [x] Update the "Consolidation" section to reflect that moving entries between decision files and static config no longer requires restructuring
+- [x] Update precedence rules if needed (static deny should merge with decision deny)
 
 ### 7.2 Update CLAUDE.md
 
-- [ ] Update the "Internal Packages" table if any package descriptions changed
-- [ ] Ensure config field references are accurate
+- [x] Update the "Internal Packages" table if any package descriptions changed
+- [x] Ensure config field references are accurate
 
 ### 7.3 Update other spec files
 
-- [ ] Grep specs/ for references to `commands:` in project config context → update to `hostexec:`
-- [ ] Grep specs/ for references to old decisions format (`denied_domains`, `denied_patterns`, flat `domains`/`patterns`) → update to new nested format
-- [ ] **Test**: Manual review of all spec files for consistency
+- [x] Grep specs/ for references to `commands:` in project config context → update to `hostexec:`
+- [x] Grep specs/ for references to old decisions format (`denied_domains`, `denied_patterns`, flat `domains`/`patterns`) → update to new nested format
+- [x] **Test**: Manual review of all spec files for consistency
 
 ---
 

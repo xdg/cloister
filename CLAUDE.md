@@ -105,10 +105,10 @@ Tests are split into three tiers based on what they require:
 | `internal/agent` | Agent interface and utilities for AI agent setup in containers. Defines the `Agent` interface, provides helper functions (`CopyDirToContainer`, `WriteFileToContainer`, `MergeJSONConfig`), and includes the `ClaudeAgent` implementation. |
 | `internal/cloister` | High-level orchestration for starting/stopping cloister containers with guardian integration. Coordinates token registration, container creation, and agent setup. |
 | `internal/cmd` | CLI command implementations using cobra. Handles `start`, `stop`, `list`, `config`, `project`, and `guardian` subcommands. |
-| `internal/config` | Configuration types, YAML parsing, validation, and merging. Manages global config (`~/.config/cloister/config.yaml`), per-project configs, and approval file I/O (`~/.config/cloister/approvals/`). |
+| `internal/config` | Configuration types, YAML parsing, validation, and merging. Manages global config (`~/.config/cloister/config.yaml`), per-project configs, and decision file I/O (`~/.config/cloister/decisions/`). |
 | `internal/container` | Docker container lifecycle management. Creates containers with security constraints, manages start/stop/attach operations. |
 | `internal/docker` | Low-level Docker CLI wrapper. Provides `Run`, `RunJSON`, `RunJSONLines` helpers and network management for `cloister-net`. |
-| `internal/guardian` | HTTP CONNECT proxy server with domain allowlist, token validation API, and per-project allowlist caching with approval file merging. Runs inside the guardian container. |
+| `internal/guardian` | HTTP CONNECT proxy server with domain allowlist, token validation API, and per-project allowlist caching with decision file merging. Runs inside the guardian container. |
 | `internal/project` | Git repository detection and project registry. Tracks known projects in `~/.config/cloister/projects.yaml` with remote URLs and paths. |
 | `internal/testutil` | Shared test helpers for Docker/guardian tests. Provides `RequireDocker`, `RequireGuardian`, `CleanupContainer`, and unique name generators. |
 | `internal/token` | Cryptographic token generation, in-memory registry, and disk persistence. Also provides proxy environment variable configuration for containers. |
