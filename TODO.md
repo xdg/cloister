@@ -563,8 +563,8 @@ The proxy returns 403 before dialing upstream for denied domains, and the
 
 Build a reusable test helper that wires up the full stack.
 
-- [ ] Create `internal/guardian/proxy_approval_test.go` (unit test, no build tags)
-- [ ] Implement `mockTunnelHandler` for tests:
+- [x] Create `internal/guardian/proxy_approval_test.go` (unit test, no build tags)
+- [x] Implement `mockTunnelHandler` for tests:
   ```go
   type mockTunnelHandler struct {
       mu    sync.Mutex
@@ -582,7 +582,7 @@ Build a reusable test helper that wires up the full stack.
       conn.Close()
   }
   ```
-- [ ] Implement `proxyTestHarness` struct and `newProxyTestHarness(t)` constructor:
+- [x] Implement `proxyTestHarness` struct and `newProxyTestHarness(t)` constructor:
   ```go
   type proxyTestHarness struct {
       Proxy          *ProxyServer
@@ -597,13 +597,13 @@ Build a reusable test helper that wires up the full stack.
   SessionDenylist, AllowlistCache, ConfigPersisterImpl, approval.Server,
   mockTunnelHandler, mockTokenValidator, TokenLookup. Starts both servers, registers
   t.Cleanup to stop them.
-- [ ] Implement `harness.sendCONNECT(domain string) (statusCode int, err error)` helper
+- [x] Implement `harness.sendCONNECT(domain string) (statusCode int, err error)` helper
   that sends an authenticated CONNECT request through the proxy and returns the status
-- [ ] Implement `harness.pendingDomainID() (string, error)` helper that polls
+- [x] Implement `harness.pendingDomainID() (string, error)` helper that polls
   `/pending-domains` until one request appears and returns its ID
-- [ ] Implement `harness.approveDomain(id, scope string, pattern string) error` helper
-- [ ] Implement `harness.denyDomain(id, scope string, wildcard bool) error` helper
-- [ ] **Test**: Verify harness setup/teardown works — create harness, send CONNECT to
+- [x] Implement `harness.approveDomain(id, scope string, pattern string) error` helper
+- [x] Implement `harness.denyDomain(id, scope string, wildcard bool) error` helper
+- [x] **Test**: Verify harness setup/teardown works — create harness, send CONNECT to
   unlisted domain, verify it blocks, deny it, verify 403 returned
 
 ### 9.2 Allow flow tests
