@@ -498,6 +498,209 @@ Update all documentation to reflect the config consistency changes.
 
 ---
 
+## Phase 8: TunnelHandler Dependency Injection
+
+Extract the tunnel establishment logic from `handleConnect` into an injectable
+interface so integration tests can exercise the full proxy decision pipeline
+(deny/allow/approve → persist → remember) without dialing upstream.
+
+### 8.1 Define TunnelHandler interface and extract default implementation
+
+- [ ] Define interface in `internal/guardian/proxy.go`:
+  ```go
+  // TunnelHandler handles the upstream connection after the proxy decides
+  // to allow a CONNECT request. The proxy calls ServeTunnel only when the
+  // domain passes all deny/allow/approval checks.
+  type TunnelHandler interface {
+      ServeTunnel(w http.ResponseWriter, r *http.Request, targetHostPort string)
+  }
+  ```
+- [ ] Extract lines 452-520 of `handleConnect` (dial, hijack, bidirectional copy)
+  into a private method `dialAndTunnel(w, r, targetHostPort)`
+- [ ] Add `TunnelHandler` field to `ProxyServer` struct
+- [ ] Update `handleConnect` to dispatch:
+  ```go
+  if p.TunnelHandler != nil {
+      p.TunnelHandler.ServeTunnel(w, r, targetHostPort)
+  } else {
+      p.dialAndTunnel(w, r, targetHostPort)
+  }
+  ```
+- [ ] **Test**: `make test` passes — all existing proxy tests use nil TunnelHandler
+  and hit the `dialAndTunnel` fallback, so no test changes needed
+
+### 8.2 Wire TunnelHandler in production
+
+- [ ] No production wiring needed — nil TunnelHandler uses `dialAndTunnel`, which
+  is the current behavior. Production code is unchanged.
+- [ ] Verify `internal/cmd/guardian.go` does NOT set `TunnelHandler` (it stays nil)
+
+---
+
+## Phase 9: Proxy-Through Persistence Integration Tests
+
+Full integration tests that send CONNECT requests through the real proxy, approve/deny
+via the real approval server HTTP endpoints, and verify both the proxy response and
+the on-disk persistence. All tests run without Docker using in-process servers on
+dynamic ports and `t.TempDir()` for config.
+
+### Design
+
+Each test follows this pattern:
+1. Set up: proxy (`:0`) + approval server (`127.0.0.1:0`) + real DomainApprover +
+   real ConfigPersister + AllowlistCache + SessionAllowlist/Denylist + temp XDG dir
+2. Send CONNECT through proxy in a goroutine (blocks until decision)
+3. Read `/pending-domains` on approval server to get the request ID
+4. POST to `/approve-domain/{id}` or `/deny-domain/{id}` with scope/wildcard JSON
+5. Wait for CONNECT goroutine — verify HTTP status (200 vs 403)
+6. Verify decisions file on disk (for project/global scopes)
+7. Send second CONNECT to verify the decision is remembered without re-prompting
+
+The proxy returns 403 before dialing upstream for denied domains, and the
+`TunnelHandler` mock handles allowed domains — no real upstream needed.
+
+### 9.1 Test harness
+
+Build a reusable test helper that wires up the full stack.
+
+- [ ] Create `internal/guardian/proxy_approval_test.go` (unit test, no build tags)
+- [ ] Implement `mockTunnelHandler` for tests:
+  ```go
+  type mockTunnelHandler struct {
+      mu    sync.Mutex
+      calls []string // records targetHostPort of each call
+  }
+  func (m *mockTunnelHandler) ServeTunnel(w http.ResponseWriter, r *http.Request, target string) {
+      m.mu.Lock()
+      m.calls = append(m.calls, target)
+      m.mu.Unlock()
+      // Hijack and send 200 Connection Established, then close
+      hijacker, ok := w.(http.Hijacker)
+      if !ok { http.Error(w, "cannot hijack", 500); return }
+      conn, _, _ := hijacker.Hijack()
+      conn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
+      conn.Close()
+  }
+  ```
+- [ ] Implement `proxyTestHarness` struct and `newProxyTestHarness(t)` constructor:
+  ```go
+  type proxyTestHarness struct {
+      Proxy          *ProxyServer
+      ApprovalServer *approval.Server
+      ConfigDir      string // t.TempDir() set as XDG_CONFIG_HOME
+      Token          string
+      ProjectName    string
+      TunnelHandler  *mockTunnelHandler
+  }
+  ```
+  Constructor wires: ProxyServer, DomainApproverImpl, DomainQueue, SessionAllowlist,
+  SessionDenylist, AllowlistCache, ConfigPersisterImpl, approval.Server,
+  mockTunnelHandler, mockTokenValidator, TokenLookup. Starts both servers, registers
+  t.Cleanup to stop them.
+- [ ] Implement `harness.sendCONNECT(domain string) (statusCode int, err error)` helper
+  that sends an authenticated CONNECT request through the proxy and returns the status
+- [ ] Implement `harness.pendingDomainID() (string, error)` helper that polls
+  `/pending-domains` until one request appears and returns its ID
+- [ ] Implement `harness.approveDomain(id, scope string, pattern string) error` helper
+- [ ] Implement `harness.denyDomain(id, scope string, wildcard bool) error` helper
+- [ ] **Test**: Verify harness setup/teardown works — create harness, send CONNECT to
+  unlisted domain, verify it blocks, deny it, verify 403 returned
+
+### 9.2 Allow flow tests
+
+- [ ] **Test**: allow-once — CONNECT → approve scope=once → 200 → second CONNECT
+  to same domain → re-prompted (not remembered)
+- [ ] **Test**: allow-session — CONNECT → approve scope=session → 200 → second
+  CONNECT → 200 without prompting → verify no decisions file written
+- [ ] **Test**: allow-project — CONNECT → approve scope=project → 200 → verify
+  decisions file contains domain in `proxy.allow` → second CONNECT → 200 without
+  prompting (served from cache, not re-read from disk)
+- [ ] **Test**: allow-global — CONNECT → approve scope=global → 200 → verify
+  global decisions file updated
+- [ ] **Test**: allow-project-wildcard — CONNECT to `api.example.com` → approve
+  scope=project with pattern=`*.example.com` → verify decisions file has pattern →
+  CONNECT to `cdn.example.com` → 200 without prompting
+
+### 9.3 Deny flow tests
+
+- [ ] **Test**: deny-once — CONNECT → deny scope=once → 403 → second CONNECT
+  to same domain → re-prompted (not remembered)
+- [ ] **Test**: deny-session — CONNECT → deny scope=session → 403 → second
+  CONNECT → 403 without prompting → verify no decisions file written
+- [ ] **Test**: deny-project — CONNECT → deny scope=project → 403 → verify
+  decisions file contains domain in `proxy.deny` → second CONNECT → 403 without
+  prompting (proxy checks denylist cache before reaching approval queue)
+- [ ] **Test**: deny-global — CONNECT → deny scope=global → 403 → verify
+  global decisions file updated → second CONNECT → 403 without prompting
+- [ ] **Test**: deny-project-wildcard — CONNECT to `api.evil.com` → deny
+  scope=project with wildcard=true → verify decisions file has `*.evil.com`
+  pattern in `proxy.deny` → CONNECT to `cdn.evil.com` → 403 without prompting
+
+### 9.4 Startup persistence tests
+
+Verify that decisions files written by previous sessions are loaded and
+respected immediately on startup, without any approval prompts.
+
+- [ ] **Test**: pre-existing project allow — write decisions file with
+  `proxy.allow: [{domain: pre-allowed.com}]` before starting harness →
+  CONNECT to `pre-allowed.com` → 200 without prompting
+- [ ] **Test**: pre-existing global deny — write global decisions file with
+  `proxy.deny: [{domain: pre-denied.com}]` before starting harness →
+  CONNECT to `pre-denied.com` → 403 without prompting → verify DomainApprover
+  was NOT called (denylist short-circuits)
+- [ ] **Test**: pre-existing deny pattern — write decisions file with
+  `proxy.deny: [{pattern: "*.evil.com"}]` → CONNECT to `api.evil.com` →
+  403 without prompting
+- [ ] **Test**: deny overrides allow — write decisions file with both
+  `proxy.allow: [{domain: conflict.com}]` and `proxy.deny: [{domain: conflict.com}]`
+  → CONNECT → 403 (deny wins per precedence order)
+
+### 9.5 Edge cases
+
+- [ ] **Test**: invalid domain — CONNECT to domain with invalid characters →
+  403 with "invalid domain" message, NOT queued for approval
+- [ ] **Test**: port stripping consistency — CONNECT to `example.com:443` →
+  approve as project → decisions file contains `example.com` (no port) →
+  CONNECT to `example.com:8443` → 200 without re-prompting (same domain,
+  different port)
+- [ ] **Test**: duplicate CONNECT during pending approval — two concurrent
+  CONNECT requests for same domain → only one approval prompt → both
+  unblock on single approve/deny
+
+---
+
+## Phase 10: Bug Fixes from Phase 9 Test Failures
+
+This phase is a placeholder. Implement Phase 9 tests first; some will likely
+fail and expose the real persistence bugs observed in manual testing. Fix the
+bugs here, driven by the failing tests.
+
+Known symptoms to investigate if tests don't reproduce them:
+- Deny-project/deny-global not writing to decisions files
+- Existing global deny decisions not respected on startup
+- Allow-project not persisting to disk (remembered in-session only)
+- Domains rejected as "invalid method" after some denial operations
+
+### Likely failure modes to look for
+
+- **Approval server `handleDenyDomain` not calling ConfigPersister**: The deny
+  handler broadcasts a DomainResponse to the DomainApprover but may not trigger
+  persistence — unlike `handleApproveDomain` which calls ConfigPersister directly.
+  The DomainApprover's `persistDenial` must be called and must succeed.
+- **AllowlistCache not updated after persistence**: After writing to decisions
+  file, the in-memory denylist cache must also be updated. If `updateDenylistCache`
+  is only called on success but persistence silently fails, the cache stays stale.
+- **Guardian startup not loading denylists from decisions files**: The
+  `loadProjectDenylist` closure may not be reading decisions files, or the
+  AllowlistCache may not have its denylist loader set.
+- **Method Not Allowed (405)**: The proxy only accepts CONNECT. If something
+  causes the proxy to receive a non-CONNECT request (e.g., redirect, malformed
+  request, HTTP/2 downgrade), it returns 405. Check if the approval flow
+  corrupts proxy state in a way that causes subsequent requests to be
+  misrouted.
+
+---
+
 ## Future Phases (Deferred)
 
 ### Undo functionality
