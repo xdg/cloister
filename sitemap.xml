@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+    <url>
+         <loc>https://xdg.github.io/cloister/command-reference/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+    <url>
+         <loc>https://xdg.github.io/cloister/configuration/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+    <url>
+         <loc>https://xdg.github.io/cloister/credentials/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+    <url>
+         <loc>https://xdg.github.io/cloister/getting-started/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+    <url>
+         <loc>https://xdg.github.io/cloister/host-commands/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+    <url>
+         <loc>https://xdg.github.io/cloister/troubleshooting/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+    <url>
+         <loc>https://xdg.github.io/cloister/working-with-cloisters/</loc>
+         <lastmod>2026-02-12</lastmod>
+    </url>
+</urlset>
