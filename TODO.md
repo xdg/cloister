@@ -657,13 +657,13 @@ respected immediately on startup, without any approval prompts.
 
 ### 9.5 Edge cases
 
-- [ ] **Test**: invalid domain — CONNECT to domain with invalid characters →
+- [x] **Test**: invalid domain — CONNECT to domain with invalid characters →
   403 with "invalid domain" message, NOT queued for approval
-- [ ] **Test**: port stripping consistency — CONNECT to `example.com:443` →
+- [x] **Test**: port stripping consistency — CONNECT to `example.com:443` →
   approve as project → decisions file contains `example.com` (no port) →
   CONNECT to `example.com:8443` → 200 without re-prompting (same domain,
   different port)
-- [ ] **Test**: duplicate CONNECT during pending approval — two concurrent
+- [x] **Test**: duplicate CONNECT during pending approval — two concurrent
   CONNECT requests for same domain → only one approval prompt → both
   unblock on single approve/deny
 

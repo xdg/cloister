@@ -1187,3 +1187,259 @@ func TestProxyApproval_DenyOverridesAllow(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusForbidden, statusCode)
 	}
 }
+
+// sendCONNECTPort sends an authenticated CONNECT request with a custom port
+// through the proxy and returns the HTTP status code from the proxy's response.
+func (h *proxyTestHarness) sendCONNECTPort(domain string, port int) (int, error) {
+	h.t.Helper()
+
+	proxyAddr := h.Proxy.ListenAddr()
+	conn, err := net.DialTimeout("tcp", proxyAddr, 5*time.Second)
+	if err != nil {
+		return 0, fmt.Errorf("dial proxy: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Build CONNECT request with auth using the custom port
+	target := fmt.Sprintf("%s:%d", domain, port)
+	auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + h.Token))
+	req := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\nProxy-Authorization: Basic %s\r\n\r\n",
+		target, target, auth)
+
+	if err := conn.SetDeadline(time.Now().Add(15 * time.Second)); err != nil {
+		return 0, fmt.Errorf("set deadline: %w", err)
+	}
+	if _, err := conn.Write([]byte(req)); err != nil {
+		return 0, fmt.Errorf("write CONNECT: %w", err)
+	}
+
+	// Read response
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		return 0, fmt.Errorf("read response: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	return resp.StatusCode, nil
+}
+
+// pendingDomainCount polls the approval server's /pending-domains endpoint
+// and returns the number of pending requests.
+func (h *proxyTestHarness) pendingDomainCount() (int, error) {
+	h.t.Helper()
+
+	approvalAddr := h.ApprovalServer.ListenAddr()
+	url := fmt.Sprintf("http://%s/pending-domains", approvalAddr)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("GET /pending-domains: %w", err)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		return 0, fmt.Errorf("read body: %w", err)
+	}
+
+	var result struct {
+		Requests []struct {
+			ID string `json:"id"`
+		} `json:"requests"`
+	}
+	if err := json.Unmarshal(body, &result); err != nil {
+		return 0, fmt.Errorf("unmarshal: %w", err)
+	}
+	return len(result.Requests), nil
+}
+
+// TestProxyApproval_InvalidDomain verifies that a CONNECT request to an
+// invalid domain returns 403 immediately without being queued for approval.
+// ValidateDomain rejects empty hostnames (among other things).
+func TestProxyApproval_InvalidDomain(t *testing.T) {
+	h := newProxyTestHarness(t)
+
+	// CONNECT to ":443" — after stripPort the domain is "", which
+	// ValidateDomain rejects with "domain is empty". This triggers
+	// the "Forbidden - invalid domain" code path.
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECTPort("", 443)
+	}()
+
+	// Should return quickly without blocking for approval.
+	select {
+	case <-done:
+		// good — returned without blocking
+	case <-time.After(3 * time.Second):
+		t.Fatal("CONNECT to invalid domain should not block for approval")
+	}
+
+	if connectErr != nil {
+		t.Fatalf("sendCONNECTPort() error: %v", connectErr)
+	}
+	if statusCode != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, statusCode)
+	}
+
+	// Verify the tunnel handler was NOT called.
+	calls := h.TunnelHandler.getCalls()
+	if len(calls) != 0 {
+		t.Errorf("expected 0 tunnel handler calls, got %d: %v", len(calls), calls)
+	}
+}
+
+// TestProxyApproval_PortStrippingConsistency verifies that port is stripped
+// before persisting decisions: approve via :443 stores domain only, and a
+// subsequent CONNECT on a different port (:8443) is allowed without re-prompting.
+func TestProxyApproval_PortStrippingConsistency(t *testing.T) {
+	h := newProxyTestHarness(t)
+	domain := "port-test.example.com"
+
+	// First CONNECT (default :443 via sendCONNECT): should block until approved.
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT(domain)
+	}()
+
+	id, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	// Approve with scope=project so the decision is persisted.
+	if err := h.approveDomain(id, "project", ""); err != nil {
+		t.Fatalf("approveDomain() error: %v", err)
+	}
+
+	<-done
+	if connectErr != nil {
+		t.Fatalf("first sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusOK {
+		t.Fatalf("first CONNECT: expected status %d, got %d", http.StatusOK, statusCode)
+	}
+
+	// Verify the project decisions file contains the domain WITHOUT port.
+	decisions, err := config.LoadProjectDecisions(h.ProjectName)
+	if err != nil {
+		t.Fatalf("LoadProjectDecisions() error: %v", err)
+	}
+	allowedDomains := decisions.AllowedDomains()
+	found := false
+	for _, d := range allowedDomains {
+		if d == domain {
+			found = true
+		}
+		// Ensure no port-suffixed entry leaked through.
+		if d == domain+":443" || d == domain+":8443" {
+			t.Errorf("decisions file should not contain port-suffixed domain, got: %q", d)
+		}
+	}
+	if !found {
+		t.Fatalf("expected domain %q in project decisions allow list, got: %v", domain, allowedDomains)
+	}
+
+	// Second CONNECT on a different port (:8443): should return 200 immediately
+	// because port is stripped and the domain is already allowed.
+	var statusCode2 int
+	var connectErr2 error
+	done2 := make(chan struct{})
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECTPort(domain, 8443)
+	}()
+
+	select {
+	case <-done2:
+		// good — returned without blocking
+	case <-time.After(3 * time.Second):
+		t.Fatal("second CONNECT on different port should not block (same domain, port stripped)")
+	}
+
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECTPort() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusOK {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusOK, statusCode2)
+	}
+}
+
+// TestProxyApproval_DuplicateCONNECTDuringPending verifies that two concurrent
+// CONNECT requests for the same domain produce only one approval prompt, and
+// both unblock when a single approval decision is made.
+func TestProxyApproval_DuplicateCONNECTDuringPending(t *testing.T) {
+	h := newProxyTestHarness(t)
+	domain := "dedup-test.example.com"
+
+	// Launch two concurrent CONNECT requests for the same domain.
+	var statusCode1 int
+	var connectErr1 error
+	done1 := make(chan struct{})
+	go func() {
+		defer close(done1)
+		statusCode1, connectErr1 = h.sendCONNECT(domain)
+	}()
+
+	var statusCode2 int
+	var connectErr2 error
+	done2 := make(chan struct{})
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECT(domain)
+	}()
+
+	// Wait for at least one request to appear in the pending queue.
+	id, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	// Brief pause to let both requests reach the queue.
+	time.Sleep(200 * time.Millisecond)
+
+	// Verify exactly 1 pending entry (deduplication).
+	count, err := h.pendingDomainCount()
+	if err != nil {
+		t.Fatalf("pendingDomainCount() error: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 pending domain request (deduplication), got %d", count)
+	}
+
+	// Approve the single entry — both goroutines should unblock.
+	if err := h.approveDomain(id, "once", ""); err != nil {
+		t.Fatalf("approveDomain() error: %v", err)
+	}
+
+	// Wait for both to complete.
+	select {
+	case <-done1:
+	case <-time.After(5 * time.Second):
+		t.Fatal("first CONNECT did not unblock after approval")
+	}
+	select {
+	case <-done2:
+	case <-time.After(5 * time.Second):
+		t.Fatal("second CONNECT did not unblock after approval")
+	}
+
+	if connectErr1 != nil {
+		t.Fatalf("first sendCONNECT() error: %v", connectErr1)
+	}
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode1 != http.StatusOK {
+		t.Errorf("first CONNECT: expected status %d, got %d", http.StatusOK, statusCode1)
+	}
+	if statusCode2 != http.StatusOK {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusOK, statusCode2)
+	}
+}
