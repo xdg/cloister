@@ -213,7 +213,8 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	// This prevents the bug where a second Start() for the same project
 	// would generate a new token, overwrite the existing token on disk,
 	// then delete it during error cleanup — breaking both sessions.
-	containerName := container.GenerateContainerName(opts.ProjectName)
+	cloisterName := container.GenerateCloisterName(opts.ProjectName)
+	containerName := container.CloisterNameToContainerName(cloisterName)
 	exists, err := deps.manager.ContainerExists(containerName)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to check container status: %w", err)
@@ -235,15 +236,15 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	if err != nil {
 		return "", "", err
 	}
-	if err := store.SaveFull(containerName, tok, opts.ProjectName, opts.ProjectPath); err != nil {
+	if err := store.SaveFull(cloisterName, tok, opts.ProjectName, opts.ProjectPath); err != nil {
 		return "", "", err
 	}
 
 	// Step 5: Register the token with guardian (with project name for per-project allowlist)
 	// Include worktree path for hostexec workdir validation
-	if err := deps.guardian.RegisterTokenFull(tok, containerName, opts.ProjectName, opts.ProjectPath); err != nil {
+	if err := deps.guardian.RegisterTokenFull(tok, cloisterName, opts.ProjectName, opts.ProjectPath); err != nil {
 		// Clean up persisted token on failure
-		_ = store.Remove(containerName)
+		_ = store.Remove(cloisterName)
 		return "", "", err
 	}
 
@@ -252,7 +253,7 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		if err != nil {
 			// Best effort cleanup - ignore revocation errors
 			_ = deps.guardian.RevokeToken(tok)
-			_ = store.Remove(containerName)
+			_ = store.Remove(cloisterName)
 		}
 	}()
 
@@ -380,8 +381,10 @@ func Stop(containerName string, tok string, options ...Option) error {
 	}
 
 	// Step 2: Remove the token from disk (best effort)
+	// Store files are keyed by cloister name, not container name.
 	if store, err := getTokenStore(); err == nil {
-		_ = store.Remove(containerName)
+		cloisterName := container.ContainerNameToCloisterName(containerName)
+		_ = store.Remove(cloisterName)
 	}
 
 	// Step 3: Stop and remove the container
