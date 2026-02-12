@@ -641,17 +641,17 @@ Build a reusable test helper that wires up the full stack.
 Verify that decisions files written by previous sessions are loaded and
 respected immediately on startup, without any approval prompts.
 
-- [ ] **Test**: pre-existing project allow — write decisions file with
+- [x] **Test**: pre-existing project allow — write decisions file with
   `proxy.allow: [{domain: pre-allowed.com}]` before starting harness →
   CONNECT to `pre-allowed.com` → 200 without prompting
-- [ ] **Test**: pre-existing global deny — write global decisions file with
+- [x] **Test**: pre-existing global deny — write global decisions file with
   `proxy.deny: [{domain: pre-denied.com}]` before starting harness →
   CONNECT to `pre-denied.com` → 403 without prompting → verify DomainApprover
   was NOT called (denylist short-circuits)
-- [ ] **Test**: pre-existing deny pattern — write decisions file with
+- [x] **Test**: pre-existing deny pattern — write decisions file with
   `proxy.deny: [{pattern: "*.evil.com"}]` → CONNECT to `api.evil.com` →
   403 without prompting
-- [ ] **Test**: deny overrides allow — write decisions file with both
+- [x] **Test**: deny overrides allow — write decisions file with both
   `proxy.allow: [{domain: conflict.com}]` and `proxy.deny: [{domain: conflict.com}]`
   → CONNECT → 403 (deny wins per precedence order)
 

@@ -1010,3 +1010,180 @@ func TestProxyApproval_DenyProjectWildcard(t *testing.T) {
 		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode2)
 	}
 }
+
+// TestProxyApproval_PreExistingProjectAllow verifies that a project decisions file
+// written before the proxy starts is loaded lazily and allows the domain immediately
+// without prompting.
+func TestProxyApproval_PreExistingProjectAllow(t *testing.T) {
+	h := newProxyTestHarness(t)
+
+	// Write project decisions file with a pre-allowed domain.
+	// The harness already set XDG_CONFIG_HOME to a temp dir, and the
+	// AllowlistCache project loader is lazy, so writing the file before
+	// the first CONNECT is sufficient.
+	err := config.WriteProjectDecisions(h.ProjectName, &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: "pre-allowed.example.com"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteProjectDecisions() error: %v", err)
+	}
+
+	// Send CONNECT — should return 200 immediately (no approval prompt).
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT("pre-allowed.example.com")
+	}()
+
+	select {
+	case <-done:
+		// good — returned without blocking
+	case <-time.After(3 * time.Second):
+		t.Fatal("CONNECT should not block for a pre-existing project allow entry")
+	}
+
+	if connectErr != nil {
+		t.Fatalf("sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, statusCode)
+	}
+}
+
+// TestProxyApproval_PreExistingGlobalDeny verifies that a global decisions file
+// with a deny entry written before the proxy starts causes immediate 403 responses
+// without invoking the DomainApprover.
+func TestProxyApproval_PreExistingGlobalDeny(t *testing.T) {
+	h := newProxyTestHarness(t)
+
+	// Write global decisions file with a denied domain.
+	err := config.WriteGlobalDecisions(&config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Deny: []config.AllowEntry{{Domain: "pre-denied.example.com"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteGlobalDecisions() error: %v", err)
+	}
+
+	// Load it back and update the cache (the harness initialized with empty global denylist).
+	decisions, err := config.LoadGlobalDecisions()
+	if err != nil {
+		t.Fatalf("LoadGlobalDecisions() error: %v", err)
+	}
+	h.Proxy.AllowlistCache.SetGlobalDeny(NewAllowlistFromConfig(decisions.Proxy.Deny))
+
+	// Send CONNECT — should return 403 immediately (no approval prompt).
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT("pre-denied.example.com")
+	}()
+
+	select {
+	case <-done:
+		// good — returned without blocking
+	case <-time.After(3 * time.Second):
+		t.Fatal("CONNECT should not block for a pre-existing global deny entry")
+	}
+
+	if connectErr != nil {
+		t.Fatalf("sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, statusCode)
+	}
+
+	// Verify the tunnel handler was NOT called (denylist short-circuits before tunneling).
+	calls := h.TunnelHandler.getCalls()
+	if len(calls) != 0 {
+		t.Errorf("expected 0 tunnel handler calls, got %d: %v", len(calls), calls)
+	}
+}
+
+// TestProxyApproval_PreExistingDenyPattern verifies that a deny pattern in a
+// project decisions file written before the proxy starts blocks matching domains
+// immediately without prompting.
+func TestProxyApproval_PreExistingDenyPattern(t *testing.T) {
+	h := newProxyTestHarness(t)
+
+	// Write project decisions file with a deny pattern.
+	err := config.WriteProjectDecisions(h.ProjectName, &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Deny: []config.AllowEntry{{Pattern: "*.evil-startup.com"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteProjectDecisions() error: %v", err)
+	}
+
+	// Send CONNECT to a subdomain that matches the pattern — should return 403 immediately.
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT("api.evil-startup.com")
+	}()
+
+	select {
+	case <-done:
+		// good — returned without blocking
+	case <-time.After(3 * time.Second):
+		t.Fatal("CONNECT should not block for a pre-existing deny pattern match")
+	}
+
+	if connectErr != nil {
+		t.Fatalf("sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, statusCode)
+	}
+}
+
+// TestProxyApproval_DenyOverridesAllow verifies that when both allow and deny
+// entries exist for the same domain in a project decisions file, the deny
+// entry takes precedence and the domain is blocked.
+func TestProxyApproval_DenyOverridesAllow(t *testing.T) {
+	h := newProxyTestHarness(t)
+
+	// Write project decisions file with both allow and deny for the same domain.
+	err := config.WriteProjectDecisions(h.ProjectName, &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: "conflict.example.com"}},
+			Deny:  []config.AllowEntry{{Domain: "conflict.example.com"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteProjectDecisions() error: %v", err)
+	}
+
+	// Send CONNECT — deny should win, returning 403 immediately.
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT("conflict.example.com")
+	}()
+
+	select {
+	case <-done:
+		// good — returned without blocking
+	case <-time.After(3 * time.Second):
+		t.Fatal("CONNECT should not block when deny overrides allow")
+	}
+
+	if connectErr != nil {
+		t.Fatalf("sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusForbidden {
+		t.Errorf("expected status %d, got %d", http.StatusForbidden, statusCode)
+	}
+}
