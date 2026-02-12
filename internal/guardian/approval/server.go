@@ -200,7 +200,6 @@ type templateRequest struct {
 	ID        string
 	Cloister  string
 	Project   string
-	Branch    string
 	Agent     string
 	Cmd       string
 	Timestamp string
@@ -246,7 +245,6 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 			ID:        req.ID,
 			Cloister:  req.Cloister,
 			Project:   req.Project,
-			Branch:    req.Branch,
 			Agent:     req.Agent,
 			Cmd:       req.Cmd,
 			Timestamp: req.Timestamp.Format(time.RFC3339),
@@ -280,7 +278,6 @@ type pendingRequestJSON struct {
 	ID        string `json:"id"`
 	Cloister  string `json:"cloister"`
 	Project   string `json:"project"`
-	Branch    string `json:"branch"`
 	Agent     string `json:"agent"`
 	Cmd       string `json:"cmd"`
 	Timestamp string `json:"timestamp"`
@@ -304,7 +301,6 @@ func (s *Server) handlePending(w http.ResponseWriter, r *http.Request) {
 			ID:        req.ID,
 			Cloister:  req.Cloister,
 			Project:   req.Project,
-			Branch:    req.Branch,
 			Agent:     req.Agent,
 			Cmd:       req.Cmd,
 			Timestamp: req.Timestamp.Format(time.RFC3339),
@@ -401,12 +397,11 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 	// Capture request info before removing from queue
 	cmd := req.Cmd
 	project := req.Project
-	branch := req.Branch
 	cloister := req.Cloister
 
 	// Log APPROVE event
 	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogApprove(project, branch, cloister, cmd, s.userIdentity)
+		_ = s.AuditLogger.LogApprove(project, cloister, cmd, s.userIdentity)
 	}
 
 	// Remove from queue FIRST (cancels timeout goroutine to prevent race)
@@ -463,7 +458,6 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 	// Capture request info before removing from queue
 	cmd := req.Cmd
 	project := req.Project
-	branch := req.Branch
 	cloister := req.Cloister
 
 	// Parse optional reason from request body
@@ -478,7 +472,7 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 
 	// Log DENY event
 	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogDeny(project, branch, cloister, cmd, reason)
+		_ = s.AuditLogger.LogDeny(project, cloister, cmd, reason)
 	}
 
 	// Remove from queue FIRST (cancels timeout goroutine to prevent race)

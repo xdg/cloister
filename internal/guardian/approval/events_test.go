@@ -158,7 +158,6 @@ func TestEventHub_BroadcastRequestAdded(t *testing.T) {
 		ID:        "test123",
 		Cloister:  "test-cloister",
 		Project:   "test-project",
-		Branch:    "main",
 		Agent:     "claude",
 		Cmd:       "docker compose up",
 		Timestamp: "2024-01-15T14:32:05Z",

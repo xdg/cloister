@@ -142,7 +142,6 @@ func (h *EventHub) BroadcastPendingRequestAdded(req *PendingRequest) {
 		ID:        req.ID,
 		Cloister:  req.Cloister,
 		Project:   req.Project,
-		Branch:    req.Branch,
 		Agent:     req.Agent,
 		Cmd:       req.Cmd,
 		Timestamp: req.Timestamp.Format(time.RFC3339),

@@ -30,7 +30,6 @@ type PendingRequest struct {
 	ID        string
 	Cloister  string
 	Project   string
-	Branch    string
 	Agent     string
 	Cmd       string
 	Timestamp time.Time
@@ -172,7 +171,6 @@ func (q *Queue) List() []PendingRequest {
 			ID:        req.ID,
 			Cloister:  req.Cloister,
 			Project:   req.Project,
-			Branch:    req.Branch,
 			Agent:     req.Agent,
 			Cmd:       req.Cmd,
 			Timestamp: req.Timestamp,

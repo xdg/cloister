@@ -29,7 +29,6 @@ func TestQueue_TimeoutSendsResponse(t *testing.T) {
 	req := &PendingRequest{
 		Cloister:  "test-cloister",
 		Project:   "test-project",
-		Branch:    "main",
 		Agent:     "claude",
 		Cmd:       "docker compose up -d",
 		Timestamp: time.Now(),
@@ -69,7 +68,6 @@ func TestQueue_ApproveBeforeTimeout(t *testing.T) {
 	req := &PendingRequest{
 		Cloister:  "test-cloister",
 		Project:   "test-project",
-		Branch:    "main",
 		Agent:     "claude",
 		Cmd:       "docker compose ps",
 		Timestamp: time.Now(),
@@ -195,7 +193,6 @@ func TestQueue_Add(t *testing.T) {
 	req := &PendingRequest{
 		Cloister:  "test-cloister",
 		Project:   "test-project",
-		Branch:    "main",
 		Agent:     "claude",
 		Cmd:       "docker compose ps",
 		Timestamp: time.Now(),
@@ -257,7 +254,6 @@ func TestQueue_Get(t *testing.T) {
 	req := &PendingRequest{
 		Cloister:  "test-cloister",
 		Project:   "test-project",
-		Branch:    "main",
 		Agent:     "claude",
 		Cmd:       "docker compose ps",
 		Timestamp: time.Now(),
@@ -279,9 +275,6 @@ func TestQueue_Get(t *testing.T) {
 	}
 	if got.Project != "test-project" {
 		t.Errorf("Project = %q, want %q", got.Project, "test-project")
-	}
-	if got.Branch != "main" {
-		t.Errorf("Branch = %q, want %q", got.Branch, "main")
 	}
 	if got.Agent != "claude" {
 		t.Errorf("Agent = %q, want %q", got.Agent, "claude")
@@ -351,9 +344,9 @@ func TestQueue_List(t *testing.T) {
 	respChan := make(chan Response, 1)
 
 	requests := []*PendingRequest{
-		{Cloister: "cloister-1", Project: "project-1", Branch: "main", Agent: "claude", Cmd: "cmd1", Timestamp: now, Response: respChan},
-		{Cloister: "cloister-2", Project: "project-2", Branch: "dev", Agent: "codex", Cmd: "cmd2", Timestamp: now.Add(time.Second), Response: respChan},
-		{Cloister: "cloister-3", Project: "project-3", Branch: "feature", Agent: "gemini", Cmd: "cmd3", Timestamp: now.Add(2 * time.Second), Response: respChan},
+		{Cloister: "cloister-1", Project: "project-1", Agent: "claude", Cmd: "cmd1", Timestamp: now, Response: respChan},
+		{Cloister: "cloister-2", Project: "project-2", Agent: "codex", Cmd: "cmd2", Timestamp: now.Add(time.Second), Response: respChan},
+		{Cloister: "cloister-3", Project: "project-3", Agent: "gemini", Cmd: "cmd3", Timestamp: now.Add(2 * time.Second), Response: respChan},
 	}
 
 	for _, req := range requests {
@@ -654,7 +647,6 @@ func TestQueue_BroadcastsOnAdd(t *testing.T) {
 	req := &PendingRequest{
 		Cloister:  "test-cloister",
 		Project:   "test-project",
-		Branch:    "main",
 		Agent:     "claude",
 		Cmd:       "docker compose up -d",
 		Timestamp: time.Now(),

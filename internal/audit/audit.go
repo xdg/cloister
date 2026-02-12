@@ -43,10 +43,7 @@ type Event struct {
 	// Project is the project name.
 	Project string
 
-	// Branch is the git branch name.
-	Branch string
-
-	// Cloister is the container name.
+	// Cloister is the cloister name.
 	Cloister string
 
 	// Cmd is the command being executed.
@@ -75,7 +72,7 @@ type Event struct {
 }
 
 // Format returns the log entry as a formatted string.
-// Format: 2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api branch=main cloister=my-api cmd="..."
+// Format: 2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api cloister=my-api cmd="..."
 // Format: 2024-01-15T14:32:05Z DOMAIN DOMAIN_REQUEST project=my-api cloister=my-api domain="example.com"
 func (e *Event) Format() string {
 	var b strings.Builder
@@ -97,12 +94,6 @@ func (e *Event) Format() string {
 	// Always include project and cloister
 	b.WriteString(" project=")
 	b.WriteString(e.Project)
-
-	// Branch is only included for HOSTEXEC events
-	if !isDomainEvent {
-		b.WriteString(" branch=")
-		b.WriteString(e.Branch)
-	}
 
 	b.WriteString(" cloister=")
 	b.WriteString(e.Cloister)
@@ -208,24 +199,22 @@ func (l *Logger) Log(e *Event) error {
 }
 
 // LogRequest logs a HOSTEXEC REQUEST event.
-func (l *Logger) LogRequest(project, branch, cloister, cmd string) error {
+func (l *Logger) LogRequest(project, cloister, cmd string) error {
 	return l.Log(&Event{
 		Timestamp: time.Now(),
 		Type:      EventRequest,
 		Project:   project,
-		Branch:    branch,
 		Cloister:  cloister,
 		Cmd:       cmd,
 	})
 }
 
 // LogAutoApprove logs a HOSTEXEC AUTO_APPROVE event.
-func (l *Logger) LogAutoApprove(project, branch, cloister, cmd, pattern string) error {
+func (l *Logger) LogAutoApprove(project, cloister, cmd, pattern string) error {
 	return l.Log(&Event{
 		Timestamp: time.Now(),
 		Type:      EventAutoApprove,
 		Project:   project,
-		Branch:    branch,
 		Cloister:  cloister,
 		Cmd:       cmd,
 		Pattern:   pattern,
@@ -233,12 +222,11 @@ func (l *Logger) LogAutoApprove(project, branch, cloister, cmd, pattern string) 
 }
 
 // LogApprove logs a HOSTEXEC APPROVE event.
-func (l *Logger) LogApprove(project, branch, cloister, cmd, user string) error {
+func (l *Logger) LogApprove(project, cloister, cmd, user string) error {
 	return l.Log(&Event{
 		Timestamp: time.Now(),
 		Type:      EventApprove,
 		Project:   project,
-		Branch:    branch,
 		Cloister:  cloister,
 		Cmd:       cmd,
 		User:      user,
@@ -246,12 +234,11 @@ func (l *Logger) LogApprove(project, branch, cloister, cmd, user string) error {
 }
 
 // LogDeny logs a HOSTEXEC DENY event.
-func (l *Logger) LogDeny(project, branch, cloister, cmd, reason string) error {
+func (l *Logger) LogDeny(project, cloister, cmd, reason string) error {
 	return l.Log(&Event{
 		Timestamp: time.Now(),
 		Type:      EventDeny,
 		Project:   project,
-		Branch:    branch,
 		Cloister:  cloister,
 		Cmd:       cmd,
 		Reason:    reason,
@@ -259,12 +246,11 @@ func (l *Logger) LogDeny(project, branch, cloister, cmd, reason string) error {
 }
 
 // LogComplete logs a HOSTEXEC COMPLETE event.
-func (l *Logger) LogComplete(project, branch, cloister, cmd string, exitCode int, duration time.Duration) error {
+func (l *Logger) LogComplete(project, cloister, cmd string, exitCode int, duration time.Duration) error {
 	return l.Log(&Event{
 		Timestamp: time.Now(),
 		Type:      EventComplete,
 		Project:   project,
-		Branch:    branch,
 		Cloister:  cloister,
 		Cmd:       cmd,
 		ExitCode:  exitCode,
@@ -273,12 +259,11 @@ func (l *Logger) LogComplete(project, branch, cloister, cmd string, exitCode int
 }
 
 // LogTimeout logs a HOSTEXEC TIMEOUT event.
-func (l *Logger) LogTimeout(project, branch, cloister, cmd string) error {
+func (l *Logger) LogTimeout(project, cloister, cmd string) error {
 	return l.Log(&Event{
 		Timestamp: time.Now(),
 		Type:      EventTimeout,
 		Project:   project,
-		Branch:    branch,
 		Cloister:  cloister,
 		Cmd:       cmd,
 	})

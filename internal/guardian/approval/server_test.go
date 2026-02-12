@@ -132,7 +132,6 @@ func TestServer_HandlePending_WithRequests(t *testing.T) {
 	req := &PendingRequest{
 		Cloister:  "test-cloister",
 		Project:   "test-project",
-		Branch:    "main",
 		Agent:     "claude",
 		Cmd:       "docker compose up -d",
 		Timestamp: time.Date(2024, 1, 15, 14, 32, 5, 0, time.UTC),
@@ -172,9 +171,6 @@ func TestServer_HandlePending_WithRequests(t *testing.T) {
 	}
 	if r.Project != "test-project" {
 		t.Errorf("expected project 'test-project', got %q", r.Project)
-	}
-	if r.Branch != "main" {
-		t.Errorf("expected branch 'main', got %q", r.Branch)
 	}
 	if r.Agent != "claude" {
 		t.Errorf("expected agent 'claude', got %q", r.Agent)
@@ -508,7 +504,6 @@ func TestTemplates_ExecuteWithData(t *testing.T) {
 				ID:        "abc123",
 				Cloister:  "test-cloister",
 				Project:   "test-project",
-				Branch:    "main",
 				Agent:     "claude",
 				Cmd:       "docker compose up -d",
 				Timestamp: "2024-01-15T14:32:05Z",
@@ -565,7 +560,6 @@ func TestTemplates_RequestPartial(t *testing.T) {
 		ID:        "def456",
 		Cloister:  "my-cloister",
 		Project:   "my-project",
-		Branch:    "feature-x",
 		Agent:     "codex",
 		Cmd:       "git push origin feature-x",
 		Timestamp: "2024-01-15T15:00:00Z",
@@ -747,7 +741,6 @@ func TestServer_HandleApprove_AuditLogging(t *testing.T) {
 	req := &PendingRequest{
 		Cloister:  "test-cloister",
 		Project:   "test-project",
-		Branch:    "main",
 		Cmd:       "docker compose up -d",
 		Timestamp: time.Now(),
 		Response:  respChan,
@@ -788,9 +781,6 @@ func TestServer_HandleApprove_AuditLogging(t *testing.T) {
 	if !strings.Contains(auditOutput, "cloister=test-cloister") {
 		t.Errorf("expected audit log to contain cloister=test-cloister, got: %s", auditOutput)
 	}
-	if !strings.Contains(auditOutput, "branch=main") {
-		t.Errorf("expected audit log to contain branch=main, got: %s", auditOutput)
-	}
 	if !strings.Contains(auditOutput, `user=`) {
 		t.Errorf("expected audit log to contain user field, got: %s", auditOutput)
 	}
@@ -807,7 +797,6 @@ func TestServer_HandleDeny_AuditLogging(t *testing.T) {
 	req := &PendingRequest{
 		Cloister:  "test-cloister",
 		Project:   "test-project",
-		Branch:    "feature",
 		Cmd:       "rm -rf /",
 		Timestamp: time.Now(),
 		Response:  respChan,

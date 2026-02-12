@@ -16,13 +16,12 @@ func TestEventFormat_Request(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventRequest,
 		Project:   "my-api",
-		Branch:    "main",
 		Cloister:  "my-api",
 		Cmd:       "docker compose up -d",
 	}
 
 	got := e.Format()
-	want := `2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api branch=main cloister=my-api cmd="docker compose up -d"`
+	want := `2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api cloister=my-api cmd="docker compose up -d"`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -34,14 +33,13 @@ func TestEventFormat_AutoApprove(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventAutoApprove,
 		Project:   "my-api",
-		Branch:    "feature-auth",
 		Cloister:  "my-api-feature-auth",
 		Cmd:       "docker compose ps",
 		Pattern:   "^docker compose ps$",
 	}
 
 	got := e.Format()
-	want := `2024-01-15T14:32:05Z HOSTEXEC AUTO_APPROVE project=my-api branch=feature-auth cloister=my-api-feature-auth cmd="docker compose ps" pattern="^docker compose ps$"`
+	want := `2024-01-15T14:32:05Z HOSTEXEC AUTO_APPROVE project=my-api cloister=my-api-feature-auth cmd="docker compose ps" pattern="^docker compose ps$"`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -53,14 +51,13 @@ func TestEventFormat_Approve(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventApprove,
 		Project:   "my-api",
-		Branch:    "main",
 		Cloister:  "my-api",
 		Cmd:       "docker compose up -d",
 		User:      "david",
 	}
 
 	got := e.Format()
-	want := `2024-01-15T14:32:05Z HOSTEXEC APPROVE project=my-api branch=main cloister=my-api cmd="docker compose up -d" user="david"`
+	want := `2024-01-15T14:32:05Z HOSTEXEC APPROVE project=my-api cloister=my-api cmd="docker compose up -d" user="david"`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -72,14 +69,13 @@ func TestEventFormat_Deny(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventDeny,
 		Project:   "my-api",
-		Branch:    "main",
 		Cloister:  "my-api",
 		Cmd:       "docker run --privileged alpine",
 		Reason:    "pattern denied",
 	}
 
 	got := e.Format()
-	want := `2024-01-15T14:32:05Z HOSTEXEC DENY project=my-api branch=main cloister=my-api cmd="docker run --privileged alpine" reason="pattern denied"`
+	want := `2024-01-15T14:32:05Z HOSTEXEC DENY project=my-api cloister=my-api cmd="docker run --privileged alpine" reason="pattern denied"`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -91,7 +87,6 @@ func TestEventFormat_Complete(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventComplete,
 		Project:   "my-api",
-		Branch:    "main",
 		Cloister:  "my-api",
 		Cmd:       "docker compose up -d",
 		ExitCode:  0,
@@ -99,7 +94,7 @@ func TestEventFormat_Complete(t *testing.T) {
 	}
 
 	got := e.Format()
-	want := `2024-01-15T14:32:05Z HOSTEXEC COMPLETE project=my-api branch=main cloister=my-api cmd="docker compose up -d" exit=0 duration=2.3s`
+	want := `2024-01-15T14:32:05Z HOSTEXEC COMPLETE project=my-api cloister=my-api cmd="docker compose up -d" exit=0 duration=2.3s`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -111,13 +106,12 @@ func TestEventFormat_Timeout(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventTimeout,
 		Project:   "my-api",
-		Branch:    "main",
 		Cloister:  "my-api",
 		Cmd:       "docker compose build",
 	}
 
 	got := e.Format()
-	want := `2024-01-15T14:32:05Z HOSTEXEC TIMEOUT project=my-api branch=main cloister=my-api cmd="docker compose build"`
+	want := `2024-01-15T14:32:05Z HOSTEXEC TIMEOUT project=my-api cloister=my-api cmd="docker compose build"`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -129,7 +123,6 @@ func TestEventFormat_CompleteNonZeroExit(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventComplete,
 		Project:   "my-api",
-		Branch:    "main",
 		Cloister:  "my-api",
 		Cmd:       "make test",
 		ExitCode:  1,
@@ -137,7 +130,7 @@ func TestEventFormat_CompleteNonZeroExit(t *testing.T) {
 	}
 
 	got := e.Format()
-	want := `2024-01-15T14:32:05Z HOSTEXEC COMPLETE project=my-api branch=main cloister=my-api cmd="make test" exit=1 duration=45.0s`
+	want := `2024-01-15T14:32:05Z HOSTEXEC COMPLETE project=my-api cloister=my-api cmd="make test" exit=1 duration=45.0s`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -149,7 +142,6 @@ func TestEventFormat_LongDuration(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventComplete,
 		Project:   "my-api",
-		Branch:    "main",
 		Cloister:  "my-api",
 		Cmd:       "npm install",
 		ExitCode:  0,
@@ -158,7 +150,7 @@ func TestEventFormat_LongDuration(t *testing.T) {
 
 	got := e.Format()
 	// For durations >= 1 minute, use standard Go duration format
-	want := `2024-01-15T14:32:05Z HOSTEXEC COMPLETE project=my-api branch=main cloister=my-api cmd="npm install" exit=0 duration=1m30s`
+	want := `2024-01-15T14:32:05Z HOSTEXEC COMPLETE project=my-api cloister=my-api cmd="npm install" exit=0 duration=1m30s`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -170,7 +162,6 @@ func TestEventFormat_MillisecondDuration(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventComplete,
 		Project:   "my-api",
-		Branch:    "main",
 		Cloister:  "my-api",
 		Cmd:       "echo hello",
 		ExitCode:  0,
@@ -178,7 +169,7 @@ func TestEventFormat_MillisecondDuration(t *testing.T) {
 	}
 
 	got := e.Format()
-	want := `2024-01-15T14:32:05Z HOSTEXEC COMPLETE project=my-api branch=main cloister=my-api cmd="echo hello" exit=0 duration=123.0ms`
+	want := `2024-01-15T14:32:05Z HOSTEXEC COMPLETE project=my-api cloister=my-api cmd="echo hello" exit=0 duration=123.0ms`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -190,14 +181,13 @@ func TestEventFormat_SpecialCharactersInCmd(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventRequest,
 		Project:   "my-api",
-		Branch:    "main",
 		Cloister:  "my-api",
 		Cmd:       `echo "hello world" | grep 'hello'`,
 	}
 
 	got := e.Format()
 	// Quotes within cmd should be escaped
-	want := `2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api branch=main cloister=my-api cmd="echo \"hello world\" | grep 'hello'"`
+	want := `2024-01-15T14:32:05Z HOSTEXEC REQUEST project=my-api cloister=my-api cmd="echo \"hello world\" | grep 'hello'"`
 
 	if got != want {
 		t.Errorf("Format() =\n  got:  %q\n  want: %q", got, want)
@@ -212,7 +202,6 @@ func TestLogger_Log(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventRequest,
 		Project:   "test-project",
-		Branch:    "feature",
 		Cloister:  "test-project-feature",
 		Cmd:       "make build",
 	}
@@ -222,7 +211,7 @@ func TestLogger_Log(t *testing.T) {
 	}
 
 	got := buf.String()
-	want := `2024-01-15T14:32:05Z HOSTEXEC REQUEST project=test-project branch=feature cloister=test-project-feature cmd="make build"` + "\n"
+	want := `2024-01-15T14:32:05Z HOSTEXEC REQUEST project=test-project cloister=test-project-feature cmd="make build"` + "\n"
 
 	if got != want {
 		t.Errorf("Log() wrote:\n  got:  %q\n  want: %q", got, want)
@@ -234,9 +223,9 @@ func TestLogger_LogMultipleEvents(t *testing.T) {
 	logger := NewLogger(&buf)
 
 	events := []*Event{
-		{Timestamp: testTime, Type: EventRequest, Project: "p", Branch: "b", Cloister: "c", Cmd: "cmd1"},
-		{Timestamp: testTime, Type: EventApprove, Project: "p", Branch: "b", Cloister: "c", Cmd: "cmd1", User: "user1"},
-		{Timestamp: testTime, Type: EventComplete, Project: "p", Branch: "b", Cloister: "c", Cmd: "cmd1", ExitCode: 0, Duration: time.Second},
+		{Timestamp: testTime, Type: EventRequest, Project: "p", Cloister: "c", Cmd: "cmd1"},
+		{Timestamp: testTime, Type: EventApprove, Project: "p", Cloister: "c", Cmd: "cmd1", User: "user1"},
+		{Timestamp: testTime, Type: EventComplete, Project: "p", Cloister: "c", Cmd: "cmd1", ExitCode: 0, Duration: time.Second},
 	}
 
 	for _, e := range events {
@@ -267,7 +256,6 @@ func TestLogger_NilLogger(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventRequest,
 		Project:   "p",
-		Branch:    "b",
 		Cloister:  "c",
 		Cmd:       "cmd",
 	})
@@ -285,7 +273,6 @@ func TestLogger_NilWriter(t *testing.T) {
 		Timestamp: testTime,
 		Type:      EventRequest,
 		Project:   "p",
-		Branch:    "b",
 		Cloister:  "c",
 		Cmd:       "cmd",
 	})
@@ -299,7 +286,7 @@ func TestLogger_LogRequest(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewLogger(&buf)
 
-	if err := logger.LogRequest("my-api", "main", "my-api", "docker ps"); err != nil {
+	if err := logger.LogRequest("my-api", "my-api", "docker ps"); err != nil {
 		t.Fatalf("LogRequest() error = %v", err)
 	}
 
@@ -316,7 +303,7 @@ func TestLogger_LogAutoApprove(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewLogger(&buf)
 
-	if err := logger.LogAutoApprove("my-api", "main", "my-api", "make test", "^make test$"); err != nil {
+	if err := logger.LogAutoApprove("my-api", "my-api", "make test", "^make test$"); err != nil {
 		t.Fatalf("LogAutoApprove() error = %v", err)
 	}
 
@@ -333,7 +320,7 @@ func TestLogger_LogApprove(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewLogger(&buf)
 
-	if err := logger.LogApprove("my-api", "main", "my-api", "docker build .", "david"); err != nil {
+	if err := logger.LogApprove("my-api", "my-api", "docker build .", "david"); err != nil {
 		t.Fatalf("LogApprove() error = %v", err)
 	}
 
@@ -350,7 +337,7 @@ func TestLogger_LogDeny(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewLogger(&buf)
 
-	if err := logger.LogDeny("my-api", "main", "my-api", "rm -rf /", "command not allowed"); err != nil {
+	if err := logger.LogDeny("my-api", "my-api", "rm -rf /", "command not allowed"); err != nil {
 		t.Fatalf("LogDeny() error = %v", err)
 	}
 
@@ -367,7 +354,7 @@ func TestLogger_LogComplete(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewLogger(&buf)
 
-	if err := logger.LogComplete("my-api", "main", "my-api", "make build", 0, 5*time.Second); err != nil {
+	if err := logger.LogComplete("my-api", "my-api", "make build", 0, 5*time.Second); err != nil {
 		t.Fatalf("LogComplete() error = %v", err)
 	}
 
@@ -387,7 +374,7 @@ func TestLogger_LogTimeout(t *testing.T) {
 	var buf bytes.Buffer
 	logger := NewLogger(&buf)
 
-	if err := logger.LogTimeout("my-api", "main", "my-api", "long-running-cmd"); err != nil {
+	if err := logger.LogTimeout("my-api", "my-api", "long-running-cmd"); err != nil {
 		t.Fatalf("LogTimeout() error = %v", err)
 	}
 
@@ -412,11 +399,10 @@ func TestEventFormat_MatchesConfigReferenceFormat(t *testing.T) {
 				Timestamp: testTime,
 				Type:      EventRequest,
 				Project:   "my-api",
-				Branch:    "main",
 				Cloister:  "my-api",
 				Cmd:       "docker compose up -d",
 			},
-			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC REQUEST project=my-api branch=main cloister=my-api cmd="docker compose up -d"$`,
+			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC REQUEST project=my-api cloister=my-api cmd="docker compose up -d"$`,
 		},
 		{
 			name: "auto_approve_format",
@@ -424,12 +410,11 @@ func TestEventFormat_MatchesConfigReferenceFormat(t *testing.T) {
 				Timestamp: testTime,
 				Type:      EventAutoApprove,
 				Project:   "my-api",
-				Branch:    "feature-auth",
 				Cloister:  "my-api-feature-auth",
 				Cmd:       "docker compose ps",
 				Pattern:   "^docker compose ps$",
 			},
-			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC AUTO_APPROVE project=my-api branch=feature-auth cloister=my-api-feature-auth cmd="docker compose ps" pattern="\^docker compose ps\$"$`,
+			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC AUTO_APPROVE project=my-api cloister=my-api-feature-auth cmd="docker compose ps" pattern="\^docker compose ps\$"$`,
 		},
 		{
 			name: "approve_format",
@@ -437,12 +422,11 @@ func TestEventFormat_MatchesConfigReferenceFormat(t *testing.T) {
 				Timestamp: testTime,
 				Type:      EventApprove,
 				Project:   "my-api",
-				Branch:    "main",
 				Cloister:  "my-api",
 				Cmd:       "docker compose up -d",
 				User:      "david",
 			},
-			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC APPROVE project=my-api branch=main cloister=my-api cmd="docker compose up -d" user="david"$`,
+			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC APPROVE project=my-api cloister=my-api cmd="docker compose up -d" user="david"$`,
 		},
 		{
 			name: "complete_format",
@@ -450,13 +434,12 @@ func TestEventFormat_MatchesConfigReferenceFormat(t *testing.T) {
 				Timestamp: testTime,
 				Type:      EventComplete,
 				Project:   "my-api",
-				Branch:    "main",
 				Cloister:  "my-api",
 				Cmd:       "docker compose up -d",
 				ExitCode:  0,
 				Duration:  2300 * time.Millisecond,
 			},
-			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC COMPLETE project=my-api branch=main cloister=my-api cmd="docker compose up -d" exit=0 duration=2\.3s$`,
+			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC COMPLETE project=my-api cloister=my-api cmd="docker compose up -d" exit=0 duration=2\.3s$`,
 		},
 		{
 			name: "deny_format",
@@ -464,12 +447,11 @@ func TestEventFormat_MatchesConfigReferenceFormat(t *testing.T) {
 				Timestamp: testTime,
 				Type:      EventDeny,
 				Project:   "my-api",
-				Branch:    "main",
 				Cloister:  "my-api",
 				Cmd:       "docker run --privileged alpine",
 				Reason:    "pattern denied",
 			},
-			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC DENY project=my-api branch=main cloister=my-api cmd="docker run --privileged alpine" reason="pattern denied"$`,
+			pattern: `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z HOSTEXEC DENY project=my-api cloister=my-api cmd="docker run --privileged alpine" reason="pattern denied"$`,
 		},
 	}
 
