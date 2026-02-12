@@ -206,13 +206,13 @@ func TestAllowlistCacheDenylistLoader(t *testing.T) {
 
 func TestAllowlistCacheIsBlocked(t *testing.T) {
 	tests := []struct {
-		name           string
-		globalDeny     *Allowlist
-		projectDeny    *Allowlist // set via SetProjectDeny (not loader)
-		denyLoader     ProjectDenylistLoader
-		project        string
-		domain         string
-		wantBlocked    bool
+		name        string
+		globalDeny  *Allowlist
+		projectDeny *Allowlist // set via SetProjectDeny (not loader)
+		denyLoader  ProjectDenylistLoader
+		project     string
+		domain      string
+		wantBlocked bool
 	}{
 		{
 			name:        "global denylist blocks a domain",

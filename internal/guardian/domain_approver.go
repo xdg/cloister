@@ -342,4 +342,3 @@ func (d *DomainApproverImpl) updateDenylistCache(scope, project, target string, 
 		}
 	}
 }
-

@@ -26,13 +26,13 @@ type ProjectDenylistLoader func(projectName string) *Allowlist
 
 // AllowlistCache provides per-project allowlist lookups with caching.
 type AllowlistCache struct {
-	mu              sync.RWMutex
-	global          *Allowlist
-	perProject      map[string]*Allowlist // project name -> merged allowlist
-	projectLoader   ProjectAllowlistLoader
-	globalDeny      *Allowlist
-	perProjectDeny  map[string]*Allowlist // project name -> merged denylist
-	denylistLoader  ProjectDenylistLoader
+	mu             sync.RWMutex
+	global         *Allowlist
+	perProject     map[string]*Allowlist // project name -> merged allowlist
+	projectLoader  ProjectAllowlistLoader
+	globalDeny     *Allowlist
+	perProjectDeny map[string]*Allowlist // project name -> merged denylist
+	denylistLoader ProjectDenylistLoader
 }
 
 // NewAllowlistCache creates a new AllowlistCache with the given global allowlist.

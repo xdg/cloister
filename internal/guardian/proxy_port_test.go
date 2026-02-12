@@ -19,29 +19,29 @@ func TestProxyPortHandling_StaticAllowlist(t *testing.T) {
 
 	// Test cases for different ports
 	tests := []struct {
-		name         string
-		connectHost  string
-		shouldMatch  bool
+		name        string
+		connectHost string
+		shouldMatch bool
 	}{
 		{
-			name:         "standard HTTPS port",
-			connectHost:  "api.example.com:443",
-			shouldMatch:  true,
+			name:        "standard HTTPS port",
+			connectHost: "api.example.com:443",
+			shouldMatch: true,
 		},
 		{
-			name:         "non-standard port",
-			connectHost:  "api.example.com:8443",
-			shouldMatch:  true,
+			name:        "non-standard port",
+			connectHost: "api.example.com:8443",
+			shouldMatch: true,
 		},
 		{
-			name:         "HTTP port",
-			connectHost:  "api.example.com:80",
-			shouldMatch:  true,
+			name:        "HTTP port",
+			connectHost: "api.example.com:80",
+			shouldMatch: true,
 		},
 		{
-			name:         "different domain with port",
-			connectHost:  "other.example.com:443",
-			shouldMatch:  false,
+			name:        "different domain with port",
+			connectHost: "other.example.com:443",
+			shouldMatch: false,
 		},
 	}
 

@@ -506,7 +506,7 @@ interface so integration tests can exercise the full proxy decision pipeline
 
 ### 8.1 Define TunnelHandler interface and extract default implementation
 
-- [ ] Define interface in `internal/guardian/proxy.go`:
+- [x] Define interface in `internal/guardian/proxy.go`:
   ```go
   // TunnelHandler handles the upstream connection after the proxy decides
   // to allow a CONNECT request. The proxy calls ServeTunnel only when the
@@ -515,10 +515,10 @@ interface so integration tests can exercise the full proxy decision pipeline
       ServeTunnel(w http.ResponseWriter, r *http.Request, targetHostPort string)
   }
   ```
-- [ ] Extract lines 452-520 of `handleConnect` (dial, hijack, bidirectional copy)
+- [x] Extract lines 452-520 of `handleConnect` (dial, hijack, bidirectional copy)
   into a private method `dialAndTunnel(w, r, targetHostPort)`
-- [ ] Add `TunnelHandler` field to `ProxyServer` struct
-- [ ] Update `handleConnect` to dispatch:
+- [x] Add `TunnelHandler` field to `ProxyServer` struct
+- [x] Update `handleConnect` to dispatch:
   ```go
   if p.TunnelHandler != nil {
       p.TunnelHandler.ServeTunnel(w, r, targetHostPort)
@@ -526,14 +526,14 @@ interface so integration tests can exercise the full proxy decision pipeline
       p.dialAndTunnel(w, r, targetHostPort)
   }
   ```
-- [ ] **Test**: `make test` passes — all existing proxy tests use nil TunnelHandler
+- [x] **Test**: `make test` passes — all existing proxy tests use nil TunnelHandler
   and hit the `dialAndTunnel` fallback, so no test changes needed
 
 ### 8.2 Wire TunnelHandler in production
 
-- [ ] No production wiring needed — nil TunnelHandler uses `dialAndTunnel`, which
+- [x] No production wiring needed — nil TunnelHandler uses `dialAndTunnel`, which
   is the current behavior. Production code is unchanged.
-- [ ] Verify `internal/cmd/guardian.go` does NOT set `TunnelHandler` (it stays nil)
+- [x] Verify `internal/cmd/guardian.go` does NOT set `TunnelHandler` (it stays nil)
 
 ---
 

@@ -730,7 +730,6 @@ func TestTemplates_DomainResultDenied(t *testing.T) {
 	}
 }
 
-
 // Tests for audit logging integration
 
 func TestServer_HandleApprove_AuditLogging(t *testing.T) {

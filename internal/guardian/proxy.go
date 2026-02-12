@@ -72,6 +72,13 @@ type SessionDenylist interface {
 	Clear(token string) // Called when token is revoked to clean up session domains
 }
 
+// TunnelHandler handles the upstream connection after the proxy decides
+// to allow a CONNECT request. The proxy calls ServeTunnel only when the
+// domain passes all deny/allow/approval checks.
+type TunnelHandler interface {
+	ServeTunnel(w http.ResponseWriter, r *http.Request, targetHostPort string)
+}
+
 // ProxyServer is an HTTP CONNECT proxy that enforces domain allowlists
 // for cloister containers.
 type ProxyServer struct {
@@ -105,6 +112,10 @@ type ProxyServer struct {
 	// SessionDenylist tracks domains denied with "session" scope (ephemeral).
 	// If nil, session denylist checks are skipped.
 	SessionDenylist SessionDenylist
+
+	// TunnelHandler optionally handles tunnel establishment after domain approval.
+	// If nil, the proxy uses its built-in dialAndTunnel method.
+	TunnelHandler TunnelHandler
 
 	server         *http.Server
 	listener       net.Listener
@@ -449,6 +460,18 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	if p.TunnelHandler != nil {
+		p.TunnelHandler.ServeTunnel(w, r, targetHostPort)
+	} else {
+		p.dialAndTunnel(w, r, targetHostPort)
+	}
+}
+
+// dialAndTunnel establishes a TCP connection to the upstream server, hijacks
+// the client connection, and performs bidirectional copy until either side
+// closes or the idle timeout is reached.
+func (p *ProxyServer) dialAndTunnel(w http.ResponseWriter, r *http.Request, targetHostPort string) {
 	// Establish connection to upstream server.
 	// We use net.Dial (not TLS) because the client will perform TLS handshake
 	// through the tunnel - this is how HTTP CONNECT proxies work.

@@ -486,8 +486,8 @@ func TestDomainToWildcard_StripsPort(t *testing.T) {
 	}{
 		{"api.example.com:443", "*.example.com"},
 		{"cdn.example.com:8443", "*.example.com"},
-		{"api.example.com", "*.example.com"},   // no port, unchanged behavior
-		{"example.com:443", ""},                 // too few components even without port
+		{"api.example.com", "*.example.com"}, // no port, unchanged behavior
+		{"example.com:443", ""},              // too few components even without port
 		{"a.b.example.com:443", "*.b.example.com"},
 	}
 	for _, tc := range tests {
