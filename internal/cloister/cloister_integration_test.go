@@ -324,7 +324,8 @@ func TestCloisterLifecycle(t *testing.T) {
 	t.Run("SecondStart_PreservesToken", func(t *testing.T) {
 		projectName := testutil.TestProjectName()
 		branchName := "token-preservation"
-		containerName := container.GenerateContainerName(projectName)
+		cloisterName := container.GenerateCloisterName(projectName)
+		containerName := container.CloisterNameToContainerName(cloisterName)
 		t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 		tmpDir, err := os.MkdirTemp("", "cloister-test-*")
@@ -362,8 +363,8 @@ func TestCloisterLifecycle(t *testing.T) {
 		if !exists {
 			t.Fatalf("Token T1 not found on disk after first Start()")
 		}
-		if tokenInfo1.CloisterName != containerName {
-			t.Errorf("Token info has wrong cloister name: got %q, want %q", tokenInfo1.CloisterName, containerName)
+		if tokenInfo1.CloisterName != cloisterName {
+			t.Errorf("Token info has wrong cloister name: got %q, want %q", tokenInfo1.CloisterName, cloisterName)
 		}
 
 		// Second start - should detect existing container and return ErrContainerExists
