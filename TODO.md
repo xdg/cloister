@@ -608,16 +608,16 @@ Build a reusable test helper that wires up the full stack.
 
 ### 9.2 Allow flow tests
 
-- [ ] **Test**: allow-once — CONNECT → approve scope=once → 200 → second CONNECT
+- [x] **Test**: allow-once — CONNECT → approve scope=once → 200 → second CONNECT
   to same domain → re-prompted (not remembered)
-- [ ] **Test**: allow-session — CONNECT → approve scope=session → 200 → second
+- [x] **Test**: allow-session — CONNECT → approve scope=session → 200 → second
   CONNECT → 200 without prompting → verify no decisions file written
-- [ ] **Test**: allow-project — CONNECT → approve scope=project → 200 → verify
+- [x] **Test**: allow-project — CONNECT → approve scope=project → 200 → verify
   decisions file contains domain in `proxy.allow` → second CONNECT → 200 without
   prompting (served from cache, not re-read from disk)
-- [ ] **Test**: allow-global — CONNECT → approve scope=global → 200 → verify
+- [x] **Test**: allow-global — CONNECT → approve scope=global → 200 → verify
   global decisions file updated
-- [ ] **Test**: allow-project-wildcard — CONNECT to `api.example.com` → approve
+- [x] **Test**: allow-project-wildcard — CONNECT to `api.example.com` → approve
   scope=project with pattern=`*.example.com` → verify decisions file has pattern →
   CONNECT to `cdn.example.com` → 200 without prompting
 
