@@ -20,10 +20,7 @@ import (
 )
 
 // Ensure helpers used by later test phases don't trigger "unused" lint warnings.
-var (
-	_ = (*mockTunnelHandler).getCalls
-	_ = (*proxyTestHarness).approveDomain
-)
+var _ = (*mockTunnelHandler).getCalls
 
 // mockTunnelHandler records CONNECT targets and completes the tunnel handshake.
 type mockTunnelHandler struct {
@@ -675,5 +672,341 @@ func TestProxyApproval_AllowProjectWildcard(t *testing.T) {
 	}
 	if statusCode2 != http.StatusOK {
 		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusOK, statusCode2)
+	}
+}
+
+// TestProxyApproval_DenyOnce verifies that scope=once denies a single CONNECT
+// but does not remember the decision for subsequent requests to the same domain.
+func TestProxyApproval_DenyOnce(t *testing.T) {
+	h := newProxyTestHarness(t)
+	domain := "once-deny.example.com"
+
+	// First CONNECT: should block until denied.
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT(domain)
+	}()
+
+	id, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	if err := h.denyDomain(id, "once", false); err != nil {
+		t.Fatalf("denyDomain() error: %v", err)
+	}
+
+	<-done
+	if connectErr != nil {
+		t.Fatalf("first sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusForbidden {
+		t.Fatalf("first CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode)
+	}
+
+	// Second CONNECT to same domain: should block again (not remembered).
+	done2 := make(chan struct{})
+	var statusCode2 int
+	var connectErr2 error
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECT(domain)
+	}()
+
+	id2, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("second pendingDomainID() error: %v", err)
+	}
+
+	// Approve the second request to unblock it.
+	if err := h.approveDomain(id2, "once", ""); err != nil {
+		t.Fatalf("approveDomain() error: %v", err)
+	}
+
+	<-done2
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusOK {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusOK, statusCode2)
+	}
+}
+
+// TestProxyApproval_DenySession verifies that scope=session remembers the
+// deny decision for subsequent requests without writing a decisions file.
+func TestProxyApproval_DenySession(t *testing.T) {
+	h := newProxyTestHarness(t)
+	domain := "session-deny.example.com"
+
+	// First CONNECT: should block until denied.
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT(domain)
+	}()
+
+	id, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	if err := h.denyDomain(id, "session", false); err != nil {
+		t.Fatalf("denyDomain() error: %v", err)
+	}
+
+	<-done
+	if connectErr != nil {
+		t.Fatalf("first sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusForbidden {
+		t.Fatalf("first CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode)
+	}
+
+	// Second CONNECT to same domain: should return 403 immediately (session denylist remembered).
+	done2 := make(chan struct{})
+	var statusCode2 int
+	var connectErr2 error
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECT(domain)
+	}()
+	select {
+	case <-done2:
+		// good - returned quickly
+	case <-time.After(3 * time.Second):
+		t.Fatal("second CONNECT should not block (domain should be remembered in session denylist)")
+	}
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusForbidden {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode2)
+	}
+
+	// Verify no decisions file was written for the project.
+	decisionPath := config.ProjectDecisionPath(h.ProjectName)
+	if _, err := os.Stat(decisionPath); !os.IsNotExist(err) {
+		t.Errorf("expected no project decisions file at %s, but it exists (or stat error: %v)", decisionPath, err)
+	}
+}
+
+// TestProxyApproval_DenyProject verifies that scope=project persists the
+// deny decision to a project decisions file and remembers it for subsequent requests.
+func TestProxyApproval_DenyProject(t *testing.T) {
+	h := newProxyTestHarness(t)
+	domain := "project-deny.example.com"
+
+	// First CONNECT: should block until denied.
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT(domain)
+	}()
+
+	id, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	if err := h.denyDomain(id, "project", false); err != nil {
+		t.Fatalf("denyDomain() error: %v", err)
+	}
+
+	<-done
+	if connectErr != nil {
+		t.Fatalf("first sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusForbidden {
+		t.Fatalf("first CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode)
+	}
+
+	// Verify the project decisions file contains the domain in the deny list.
+	decisions, err := config.LoadProjectDecisions(h.ProjectName)
+	if err != nil {
+		t.Fatalf("LoadProjectDecisions() error: %v", err)
+	}
+	deniedDomains := decisions.DeniedDomains()
+	found := false
+	for _, d := range deniedDomains {
+		if d == domain {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected domain %q in project decisions deny list, got: %v", domain, deniedDomains)
+	}
+
+	// Second CONNECT to same domain: should return 403 immediately (denylist cache).
+	done2 := make(chan struct{})
+	var statusCode2 int
+	var connectErr2 error
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECT(domain)
+	}()
+	select {
+	case <-done2:
+		// good - returned quickly
+	case <-time.After(3 * time.Second):
+		t.Fatal("second CONNECT should not block (domain should be remembered in project denylist)")
+	}
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusForbidden {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode2)
+	}
+}
+
+// TestProxyApproval_DenyGlobal verifies that scope=global persists the
+// deny decision to the global decisions file.
+func TestProxyApproval_DenyGlobal(t *testing.T) {
+	h := newProxyTestHarness(t)
+	domain := "global-deny.example.com"
+
+	// CONNECT should block until denied.
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT(domain)
+	}()
+
+	id, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	if err := h.denyDomain(id, "global", false); err != nil {
+		t.Fatalf("denyDomain() error: %v", err)
+	}
+
+	<-done
+	if connectErr != nil {
+		t.Fatalf("sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusForbidden {
+		t.Fatalf("CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode)
+	}
+
+	// Verify the global decisions file contains the domain in the deny list.
+	decisions, err := config.LoadGlobalDecisions()
+	if err != nil {
+		t.Fatalf("LoadGlobalDecisions() error: %v", err)
+	}
+	deniedDomains := decisions.DeniedDomains()
+	found := false
+	for _, d := range deniedDomains {
+		if d == domain {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected domain %q in global decisions deny list, got: %v", domain, deniedDomains)
+	}
+
+	// Second CONNECT to same domain: should return 403 immediately.
+	done2 := make(chan struct{})
+	var statusCode2 int
+	var connectErr2 error
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECT(domain)
+	}()
+	select {
+	case <-done2:
+		// good - returned quickly
+	case <-time.After(3 * time.Second):
+		t.Fatal("second CONNECT should not block (domain should be remembered in global denylist)")
+	}
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusForbidden {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode2)
+	}
+}
+
+// TestProxyApproval_DenyProjectWildcard verifies that denying with wildcard=true
+// persists a wildcard pattern in the deny list and blocks subsequent requests
+// to different subdomains of the same base domain.
+func TestProxyApproval_DenyProjectWildcard(t *testing.T) {
+	h := newProxyTestHarness(t)
+
+	// First CONNECT to a specific subdomain.
+	domain1 := "api.deny-wild.com"
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT(domain1)
+	}()
+
+	id, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	// Deny with wildcard.
+	if err := h.denyDomain(id, "project", true); err != nil {
+		t.Fatalf("denyDomain() error: %v", err)
+	}
+
+	<-done
+	if connectErr != nil {
+		t.Fatalf("first sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusForbidden {
+		t.Fatalf("first CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode)
+	}
+
+	// Verify the project decisions file contains the wildcard pattern in the deny list.
+	decisions, err := config.LoadProjectDecisions(h.ProjectName)
+	if err != nil {
+		t.Fatalf("LoadProjectDecisions() error: %v", err)
+	}
+	deniedPatterns := decisions.DeniedPatterns()
+	found := false
+	for _, p := range deniedPatterns {
+		if p == "*.deny-wild.com" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected pattern %q in project decisions deny list, got: %v", "*.deny-wild.com", deniedPatterns)
+	}
+
+	// Second CONNECT to a different subdomain: should match the wildcard and return 403 immediately.
+	domain2 := "cdn.deny-wild.com"
+	done2 := make(chan struct{})
+	var statusCode2 int
+	var connectErr2 error
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECT(domain2)
+	}()
+	select {
+	case <-done2:
+		// good - returned quickly
+	case <-time.After(3 * time.Second):
+		t.Fatal("second CONNECT should not block (wildcard deny pattern should match)")
+	}
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusForbidden {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusForbidden, statusCode2)
 	}
 }

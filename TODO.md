@@ -623,16 +623,16 @@ Build a reusable test helper that wires up the full stack.
 
 ### 9.3 Deny flow tests
 
-- [ ] **Test**: deny-once — CONNECT → deny scope=once → 403 → second CONNECT
+- [x] **Test**: deny-once — CONNECT → deny scope=once → 403 → second CONNECT
   to same domain → re-prompted (not remembered)
-- [ ] **Test**: deny-session — CONNECT → deny scope=session → 403 → second
+- [x] **Test**: deny-session — CONNECT → deny scope=session → 403 → second
   CONNECT → 403 without prompting → verify no decisions file written
-- [ ] **Test**: deny-project — CONNECT → deny scope=project → 403 → verify
+- [x] **Test**: deny-project — CONNECT → deny scope=project → 403 → verify
   decisions file contains domain in `proxy.deny` → second CONNECT → 403 without
   prompting (proxy checks denylist cache before reaching approval queue)
-- [ ] **Test**: deny-global — CONNECT → deny scope=global → 403 → verify
+- [x] **Test**: deny-global — CONNECT → deny scope=global → 403 → verify
   global decisions file updated → second CONNECT → 403 without prompting
-- [ ] **Test**: deny-project-wildcard — CONNECT to `api.evil.com` → deny
+- [x] **Test**: deny-project-wildcard — CONNECT to `api.evil.com` → deny
   scope=project with wildcard=true → verify decisions file has `*.evil.com`
   pattern in `proxy.deny` → CONNECT to `cdn.evil.com` → 403 without prompting
 
