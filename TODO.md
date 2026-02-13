@@ -701,6 +701,264 @@ Known symptoms to investigate if tests don't reproduce them:
 
 ---
 
+## Phase 11: Extract `CacheReloader` Type
+
+Extract the closure-based reload logic from `internal/cmd/guardian.go` into a
+testable `CacheReloader` type in `internal/guardian/`. The production SIGHUP
+handler and `ReloadNotifier` both rebuild caches from disk using closures that
+capture shared mutable state (`cfg`, `globalDecisions`, `registry`,
+`allowlistCache`). This makes the logic impossible to test from
+`internal/guardian/`, which forced the test harness to reinvent it incorrectly,
+masking real persistence bugs.
+
+### 11.1 Define `ProjectLister` interface
+
+- [ ] In `internal/guardian/cache_reloader.go`, define:
+  ```go
+  // ProjectLister provides the list of active projects for cache reloading.
+  // Satisfied by TokenRegistry and by test mocks.
+  type ProjectLister interface {
+      List() map[string]TokenInfo
+  }
+  ```
+- [ ] Verify `TokenRegistry` (in `api.go`) already embeds `List()` with the
+  same signature — `registryAdapter` satisfies `ProjectLister` without changes
+
+### 11.2 Define `CacheReloader` struct and constructor
+
+- [ ] Define struct in `internal/guardian/cache_reloader.go`:
+  ```go
+  type CacheReloader struct {
+      mu              sync.RWMutex
+      staticAllow     []config.AllowEntry
+      staticDeny      []config.AllowEntry
+      globalDecisions *config.Decisions
+      cache           *AllowlistCache
+      lister          ProjectLister
+  }
+  ```
+- [ ] Implement `NewCacheReloader(cache *AllowlistCache, lister ProjectLister,
+  staticAllow, staticDeny []config.AllowEntry, globalDecisions
+  *config.Decisions) *CacheReloader`
+- [ ] Implement `GlobalDecisions() *config.Decisions` read accessor
+- [ ] Implement `SetStaticConfig(allow, deny []config.AllowEntry)` for SIGHUP
+  to update static entries before calling `Reload()`
+- [ ] **Test**: Constructor stores and `GlobalDecisions()` returns initial value
+
+### 11.3 Implement `LoadProjectAllowlist` method
+
+Extract logic from `internal/cmd/guardian.go:313-345`.
+
+- [ ] Implement `LoadProjectAllowlist(projectName string) *Allowlist`
+- [ ] Loads `config.LoadProjectConfig(projectName)` and
+  `config.LoadProjectDecisions(projectName)` from disk
+- [ ] Returns `nil` if no project-specific entries (matching production
+  behavior)
+- [ ] Merge order: `MergeAllowlists(r.staticAllow, projectCfg.Proxy.Allow)` +
+  `r.globalDecisions.Proxy.Allow` + `projectDecisions.Proxy.Allow`
+- [ ] Reads `r.staticAllow` and `r.globalDecisions` under read lock
+- [ ] **Test**: Returns merged allowlist with entries from all four sources
+  (static global, static project, global decisions, project decisions)
+- [ ] **Test**: Returns `nil` when no project-specific entries exist
+- [ ] **Test**: Includes global decisions entries in merge result
+
+### 11.4 Implement `LoadProjectDenylist` method
+
+Extract logic from `internal/cmd/guardian.go:348-370`.
+
+- [ ] Implement `LoadProjectDenylist(projectName string) *Allowlist`
+- [ ] Merges `config.MergeDenylists(projectCfg.Proxy.Deny,
+  projectDecisions.Proxy.Deny)`
+- [ ] Returns `nil` if no deny entries exist
+- [ ] **Test**: Returns merged denylist from project config + project decisions
+- [ ] **Test**: Returns `nil` when no deny entries exist
+
+### 11.5 Implement `Reload` method
+
+Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
+`guardian.go:415-467` (SIGHUP handler).
+
+- [ ] Implement `Reload()`:
+  1. Load global decisions from disk via `config.LoadGlobalDecisions()`
+  2. Update `r.globalDecisions` under write lock
+  3. Read `r.staticAllow` and `r.staticDeny` under same lock
+  4. Rebuild global allowlist: static + decisions allow →
+     `cache.SetGlobal(NewAllowlistFromConfig(...))`
+  5. Rebuild global denylist: `MergeDenylists(staticDeny,
+     globalDecisions.Proxy.Deny)` → `cache.SetGlobalDeny(...)` or nil
+  6. `cache.Clear()` to evict per-project caches
+  7. Iterate `r.lister.List()`, call `LoadProjectAllowlist` for each project,
+     call `cache.SetProject` for each
+- [ ] Note: project denylists are NOT eagerly reloaded — they are lazily
+  loaded via `AllowlistCache.GetProjectDeny` calling the denylist loader. This
+  matches current production behavior.
+- [ ] **Test**: After `Reload()`, `cache.GetGlobal()` reflects freshly-loaded
+  global decisions
+- [ ] **Test**: After `Reload()`, `cache.GetGlobalDeny()` reflects global deny
+  entries
+- [ ] **Test**: After `Reload()`, `cache.GetProject(name)` returns merged
+  allowlist for registered projects
+- [ ] **Test**: Stale project cache entries are cleared (write decision, reload,
+  delete file, reload, verify stale entry gone)
+- [ ] **Test**: `make test` passes
+
+---
+
+## Phase 12: Wire `CacheReloader` into Production and Test Harness
+
+### 12.1 Wire into production (`internal/cmd/guardian.go`)
+
+- [ ] In `runGuardianProxy`, after loading config/decisions and creating
+  `allowlistCache`, construct `CacheReloader`:
+  ```go
+  reloader := guardian.NewCacheReloader(
+      allowlistCache,
+      &registryAdapter{registry},
+      cfg.Proxy.Allow, cfg.Proxy.Deny,
+      globalDecisions,
+  )
+  ```
+- [ ] Replace the `loadProjectAllowlist` closure (lines 313-345) with
+  `reloader.LoadProjectAllowlist`
+- [ ] Replace the `loadProjectDenylist` closure (lines 348-370) with
+  `reloader.LoadProjectDenylist`
+- [ ] Set cache loaders:
+  `allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)` and
+  `allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)`
+- [ ] Replace the `ReloadNotifier` closure (lines 550-586) with:
+  ```go
+  ReloadNotifier: func() {
+      reloader.Reload()
+      patternCache.Clear()
+  },
+  ```
+- [ ] Replace the SIGHUP handler's reload logic (lines 415-467):
+  - Keep `config.LoadGlobalConfig()` and `cfg = newCfg`
+  - Call `reloader.SetStaticConfig(newCfg.Proxy.Allow, newCfg.Proxy.Deny)`
+  - Call `reloader.Reload()`
+  - Keep pattern cache rebuild (`NewRegexMatcher`, `patternCache.SetGlobal`,
+    `patternCache.Clear`) after `reloader.Reload()`
+- [ ] Remove the captured `globalDecisions` variable from outer scope — use
+  `reloader.GlobalDecisions()` where it's still needed
+- [ ] Delete the now-unused `loadProjectAllowlist` and `loadProjectDenylist`
+  closures
+- [ ] **Test**: `make test` passes (existing tests still work with old harness)
+
+### 12.2 Wire into test harness (`proxy_approval_test.go`)
+
+- [ ] Define `mockProjectLister` in `proxy_approval_test.go` (or
+  `cache_reloader_test.go` — same package):
+  ```go
+  type mockProjectLister struct {
+      projects map[string]TokenInfo
+  }
+  func (m *mockProjectLister) List() map[string]TokenInfo {
+      return m.projects
+  }
+  ```
+- [ ] In `newProxyTestHarness`, create `CacheReloader`:
+  ```go
+  lister := &mockProjectLister{
+      projects: map[string]TokenInfo{
+          token: {ProjectName: projectName, CloisterName: cloisterName},
+      },
+  }
+  reloader := NewCacheReloader(allowlistCache, lister, nil, nil, &config.Decisions{})
+  ```
+- [ ] Replace the `SetProjectLoader` closure (lines 103-109) with
+  `allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)`
+- [ ] Replace the `SetDenylistLoader` closure (lines 110-116) with
+  `allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)`
+- [ ] Replace the `ReloadNotifier` closure (lines 142-156) with
+  `persister.ReloadNotifier = reloader.Reload`
+- [ ] Add `Reloader *CacheReloader` field to `proxyTestHarness` struct
+- [ ] **Test**: Run existing `TestProxyApproval_*` tests — expect most pass
+  but some may fail (failures addressed in Phase 13)
+
+### 12.3 Update pre-existing config tests to use `Reload()`
+
+- [ ] In `TestProxyApproval_PreExistingGlobalDeny` (line 1057): replace manual
+  `SetGlobalDeny` call (lines 1073-1078) with `h.Reloader.Reload()` — this
+  exercises the production path for loading global decisions at startup
+- [ ] Verify `TestProxyApproval_PreExistingProjectAllow` still works — project
+  decisions are lazily loaded via `reloader.LoadProjectAllowlist`, no changes
+  needed
+- [ ] Verify `TestProxyApproval_PreExistingDenyPattern` still works — project
+  deny lazily loaded via `reloader.LoadProjectDenylist`
+- [ ] Verify `TestProxyApproval_DenyOverridesAllow` still works — same lazy
+  loading
+- [ ] **Test**: `make test` passes for all pre-existing config tests
+
+---
+
+## Phase 13: Fix Bugs Exposed by Updated Tests
+
+With the test harness now using production reload logic, tests that previously
+passed with the simplified harness may fail, exposing the real persistence
+bugs.
+
+### 13.1 Add second-CONNECT check to `TestProxyApproval_AllowGlobal`
+
+- [ ] In `TestProxyApproval_AllowGlobal` (line 555), after verifying the
+  global decisions file, add a second CONNECT to the same domain
+- [ ] Verify it returns 200 immediately without blocking (3-second timeout)
+- [ ] Verify tunnel handler was called twice
+- [ ] This test is expected to fail initially — fixing it is 13.2+
+
+### 13.2 Diagnose and fix persistence bugs
+
+Run `make test` and investigate failures. Known likely causes:
+
+- **Nil-caching after `Clear()` + `SetProject(name, nil)`**: When
+  `LoadProjectAllowlist` returns `nil` (no project-specific entries),
+  `Reload()` stores `nil` in the cache via `SetProject`. Then
+  `GetProject()` finds the cached nil and returns it WITHOUT falling back
+  to the global allowlist. Before `Reload()` was ever called, `GetProject()`
+  found nothing in the cache and fell back correctly.
+- **Global allow not checked in `handleConnect`**: `resolveRequest()` returns
+  `AllowlistCache.GetProject()`, which only checks the project cache. The
+  global allowlist is set separately and never directly consulted by
+  `handleConnect` when a project entry exists (even if nil).
+
+Fix approaches (evaluate during implementation):
+- [ ] Option A: `Reload()` should not call `SetProject(name, nil)` — skip
+  the `SetProject` call when `LoadProjectAllowlist` returns nil, letting the
+  lazy loader handle it on next request
+- [ ] Option B: `GetProject()` should fall back to global when the cached
+  value is nil (change `if allowlist, ok := ...` to also check `allowlist !=
+  nil`)
+- [ ] Option C: `LoadProjectAllowlist` should never return nil — always
+  return at least the global allowlist (but this changes the semantics of the
+  nil-means-use-global convention)
+- [ ] Choose the approach that is simplest and least likely to introduce new
+  bugs; document the choice in a code comment
+
+### 13.3 Verify all tests pass
+
+- [ ] All `TestProxyApproval_*` tests pass with production `CacheReloader`:
+  - `TestProxyTestHarness_BasicDenyFlow`
+  - `TestProxyApproval_AllowOnce`
+  - `TestProxyApproval_AllowSession`
+  - `TestProxyApproval_AllowProject` (re-issues second CONNECT)
+  - `TestProxyApproval_AllowGlobal` (now re-issues second CONNECT)
+  - `TestProxyApproval_AllowProjectWildcard` (re-issues to different subdomain)
+  - `TestProxyApproval_DenyOnce`
+  - `TestProxyApproval_DenySession`
+  - `TestProxyApproval_DenyProject` (re-issues second CONNECT)
+  - `TestProxyApproval_DenyGlobal` (re-issues second CONNECT)
+  - `TestProxyApproval_DenyProjectWildcard` (re-issues to different subdomain)
+  - `TestProxyApproval_PreExistingProjectAllow`
+  - `TestProxyApproval_PreExistingGlobalDeny` (uses `Reload()`)
+  - `TestProxyApproval_PreExistingDenyPattern`
+  - `TestProxyApproval_DenyOverridesAllow`
+  - `TestProxyApproval_InvalidDomain`
+  - `TestProxyApproval_PortStrippingConsistency`
+  - `TestProxyApproval_DuplicateCONNECTDuringPending`
+- [ ] `make test` passes clean
+- [ ] `make lint` passes
+
+---
+
 ## Future Phases (Deferred)
 
 ### Undo functionality
