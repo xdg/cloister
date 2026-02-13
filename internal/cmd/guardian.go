@@ -291,6 +291,14 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	allowlistCache := guardian.NewAllowlistCache(globalAllowlist)
 	allowlistCache.SetGlobalDeny(globalDenylist)
 
+	// Create the cache reloader for allowlist/denylist management
+	reloader := guardian.NewCacheReloader(
+		allowlistCache,
+		&registryAdapter{registry},
+		cfg.Proxy.Allow, cfg.Proxy.Deny,
+		globalDecisions,
+	)
+
 	// Create the proxy server with config-derived allowlist
 	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)
 	proxy := guardian.NewProxyServerWithConfig(proxyAddr, globalAllowlist)
@@ -309,69 +317,9 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}, true
 	}
 
-	// Create project allowlist loader that merges project config with global
-	loadProjectAllowlist := func(projectName string) *guardian.Allowlist {
-		projectCfg, err := config.LoadProjectConfig(projectName)
-		if err != nil {
-			clog.Warn("failed to load project config for %s: %v", projectName, err)
-			return nil
-		}
-
-		// Load project decisions
-		projectDecisions, err := config.LoadProjectDecisions(projectName)
-		if err != nil {
-			clog.Warn("failed to load project decisions for %s: %v", projectName, err)
-			projectDecisions = &config.Decisions{}
-		}
-
-		// Check if there's anything project-specific to merge
-		hasProjectConfig := len(projectCfg.Proxy.Allow) > 0
-		hasProjectDecisions := len(projectDecisions.Proxy.Allow) > 0
-		if !hasProjectConfig && !hasProjectDecisions {
-			return nil
-		}
-
-		// Merge: global config + project config + global decisions + project decisions
-		merged := config.MergeAllowlists(cfg.Proxy.Allow, projectCfg.Proxy.Allow)
-		if len(globalDecisions.Proxy.Allow) > 0 {
-			merged = append(merged, globalDecisions.Proxy.Allow...)
-		}
-		if hasProjectDecisions {
-			merged = append(merged, projectDecisions.Proxy.Allow...)
-		}
-		allowlist := guardian.NewAllowlistFromConfig(merged)
-		clog.Info("loaded allowlist for project %s (%d entries)", projectName, len(allowlist.Domains()))
-		return allowlist
-	}
-
-	// Create project denylist loader
-	loadProjectDenylist := func(projectName string) *guardian.Allowlist {
-		projectCfg, err := config.LoadProjectConfig(projectName)
-		if err != nil {
-			clog.Warn("failed to load project config (deny) for %s: %v", projectName, err)
-			return nil
-		}
-
-		projectDecisions, err := config.LoadProjectDecisions(projectName)
-		if err != nil {
-			clog.Warn("failed to load project decisions (deny) for %s: %v", projectName, err)
-			projectDecisions = &config.Decisions{}
-		}
-
-		// Merge static project deny + project decision deny
-		projectDeny := config.MergeDenylists(projectCfg.Proxy.Deny, projectDecisions.Proxy.Deny)
-		if len(projectDeny) == 0 {
-			return nil
-		}
-		denylist := guardian.NewAllowlistFromConfig(projectDeny)
-		clog.Info("loaded denylist for project %s: %d static + %d decisions = %d total",
-			projectName, len(projectCfg.Proxy.Deny), len(projectDecisions.Proxy.Deny), len(projectDeny))
-		return denylist
-	}
-
 	// Set the project loaders for lazy loading
-	allowlistCache.SetProjectLoader(loadProjectAllowlist)
-	allowlistCache.SetDenylistLoader(loadProjectDenylist)
+	allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)
+	allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)
 
 	// Create pattern matcher from global config hostexec patterns
 	autoApprovePatterns := extractPatterns(cfg.Hostexec.AutoApprove)
@@ -417,42 +365,10 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return nil, err
 		}
-		// Update the cached global config for project merging
 		cfg = newCfg
 
-		// Reload global decisions
-		newGlobalDecisions, err := config.LoadGlobalDecisions()
-		if err != nil {
-			clog.Warn("failed to reload global decisions: %v", err)
-			newGlobalDecisions = &config.Decisions{}
-		}
-		globalDecisions = newGlobalDecisions
-
-		// Build new global allowlist with decisions
-		globalAllow := newCfg.Proxy.Allow
-		if len(globalDecisions.Proxy.Allow) > 0 {
-			globalAllow = append(globalAllow, globalDecisions.Proxy.Allow...)
-		}
-		newGlobal := guardian.NewAllowlistFromConfig(globalAllow)
-		allowlistCache.SetGlobal(newGlobal)
-
-		// Rebuild global denylist from static config + decisions
-		newGlobalDeny := config.MergeDenylists(newCfg.Proxy.Deny, globalDecisions.Proxy.Deny)
-		if len(newGlobalDeny) > 0 {
-			allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(newGlobalDeny))
-		} else {
-			allowlistCache.SetGlobalDeny(nil)
-		}
-
-		// Clear project cache so they get reloaded with new global
-		allowlistCache.Clear()
-		// Reload all project allowlists
-		for _, info := range registry.List() {
-			if info.ProjectName != "" {
-				allowlist := loadProjectAllowlist(info.ProjectName)
-				allowlistCache.SetProject(info.ProjectName, allowlist)
-			}
-		}
+		reloader.SetStaticConfig(newCfg.Proxy.Allow, newCfg.Proxy.Deny)
+		reloader.Reload()
 
 		// Rebuild global pattern matcher and clear project pattern cache
 		newAutoApprove := extractPatterns(newCfg.Hostexec.AutoApprove)
@@ -463,7 +379,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		clog.Info("reloaded approval patterns: %d auto-approve, %d manual-approve",
 			len(newAutoApprove), len(newManualApprove))
 
-		return newGlobal, nil
+		return allowlistCache.GetGlobal(), nil
 	})
 
 	// Create the API server
@@ -548,40 +464,7 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 	// Create config persister with reload notifier
 	configPersister := &guardian.ConfigPersisterImpl{
 		ReloadNotifier: func() {
-			// Clear and reload allowlist/denylist cache when config is updated
-			clog.Debug("config updated, reloading allowlist/denylist cache")
-
-			// Reload global decisions and rebuild global allowlist + denylist
-			newGlobalDecisions, err := config.LoadGlobalDecisions()
-			if err != nil {
-				clog.Warn("failed to reload global decisions: %v", err)
-				newGlobalDecisions = &config.Decisions{}
-			}
-			globalDecisions = newGlobalDecisions
-			globalAllow := cfg.Proxy.Allow
-			if len(globalDecisions.Proxy.Allow) > 0 {
-				globalAllow = append(globalAllow, globalDecisions.Proxy.Allow...)
-			}
-			allowlistCache.SetGlobal(guardian.NewAllowlistFromConfig(globalAllow))
-
-			// Rebuild global denylist from static config + decisions
-			reloadGlobalDeny := config.MergeDenylists(cfg.Proxy.Deny, globalDecisions.Proxy.Deny)
-			if len(reloadGlobalDeny) > 0 {
-				allowlistCache.SetGlobalDeny(guardian.NewAllowlistFromConfig(reloadGlobalDeny))
-			} else {
-				allowlistCache.SetGlobalDeny(nil)
-			}
-
-			// Clear and reload all project allowlists (denylists cleared too, reloaded lazily)
-			allowlistCache.Clear()
-			for _, info := range registry.List() {
-				if info.ProjectName != "" {
-					allowlist := loadProjectAllowlist(info.ProjectName)
-					allowlistCache.SetProject(info.ProjectName, allowlist)
-				}
-			}
-
-			// Clear project pattern cache (reloaded lazily on next request)
+			reloader.Reload()
 			patternCache.Clear()
 		},
 	}

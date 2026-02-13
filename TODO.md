@@ -808,7 +808,7 @@ Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
 
 ### 12.1 Wire into production (`internal/cmd/guardian.go`)
 
-- [ ] In `runGuardianProxy`, after loading config/decisions and creating
+- [x] In `runGuardianProxy`, after loading config/decisions and creating
   `allowlistCache`, construct `CacheReloader`:
   ```go
   reloader := guardian.NewCacheReloader(
@@ -818,35 +818,35 @@ Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
       globalDecisions,
   )
   ```
-- [ ] Replace the `loadProjectAllowlist` closure (lines 313-345) with
+- [x] Replace the `loadProjectAllowlist` closure (lines 313-345) with
   `reloader.LoadProjectAllowlist`
-- [ ] Replace the `loadProjectDenylist` closure (lines 348-370) with
+- [x] Replace the `loadProjectDenylist` closure (lines 348-370) with
   `reloader.LoadProjectDenylist`
-- [ ] Set cache loaders:
+- [x] Set cache loaders:
   `allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)` and
   `allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)`
-- [ ] Replace the `ReloadNotifier` closure (lines 550-586) with:
+- [x] Replace the `ReloadNotifier` closure (lines 550-586) with:
   ```go
   ReloadNotifier: func() {
       reloader.Reload()
       patternCache.Clear()
   },
   ```
-- [ ] Replace the SIGHUP handler's reload logic (lines 415-467):
+- [x] Replace the SIGHUP handler's reload logic (lines 415-467):
   - Keep `config.LoadGlobalConfig()` and `cfg = newCfg`
   - Call `reloader.SetStaticConfig(newCfg.Proxy.Allow, newCfg.Proxy.Deny)`
   - Call `reloader.Reload()`
   - Keep pattern cache rebuild (`NewRegexMatcher`, `patternCache.SetGlobal`,
     `patternCache.Clear`) after `reloader.Reload()`
-- [ ] Remove the captured `globalDecisions` variable from outer scope — use
+- [x] Remove the captured `globalDecisions` variable from outer scope — use
   `reloader.GlobalDecisions()` where it's still needed
-- [ ] Delete the now-unused `loadProjectAllowlist` and `loadProjectDenylist`
+- [x] Delete the now-unused `loadProjectAllowlist` and `loadProjectDenylist`
   closures
 - [ ] **Test**: `make test` passes (existing tests still work with old harness)
 
 ### 12.2 Wire into test harness (`proxy_approval_test.go`)
 
-- [ ] Define `mockProjectLister` in `proxy_approval_test.go` (or
+- [x] Define `mockProjectLister` in `proxy_approval_test.go` (or
   `cache_reloader_test.go` — same package):
   ```go
   type mockProjectLister struct {
@@ -856,7 +856,7 @@ Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
       return m.projects
   }
   ```
-- [ ] In `newProxyTestHarness`, create `CacheReloader`:
+- [x] In `newProxyTestHarness`, create `CacheReloader`:
   ```go
   lister := &mockProjectLister{
       projects: map[string]TokenInfo{
@@ -865,27 +865,27 @@ Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
   }
   reloader := NewCacheReloader(allowlistCache, lister, nil, nil, &config.Decisions{})
   ```
-- [ ] Replace the `SetProjectLoader` closure (lines 103-109) with
+- [x] Replace the `SetProjectLoader` closure (lines 103-109) with
   `allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)`
-- [ ] Replace the `SetDenylistLoader` closure (lines 110-116) with
+- [x] Replace the `SetDenylistLoader` closure (lines 110-116) with
   `allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)`
-- [ ] Replace the `ReloadNotifier` closure (lines 142-156) with
+- [x] Replace the `ReloadNotifier` closure (lines 142-156) with
   `persister.ReloadNotifier = reloader.Reload`
-- [ ] Add `Reloader *CacheReloader` field to `proxyTestHarness` struct
+- [x] Add `Reloader *CacheReloader` field to `proxyTestHarness` struct
 - [ ] **Test**: Run existing `TestProxyApproval_*` tests — expect most pass
   but some may fail (failures addressed in Phase 13)
 
 ### 12.3 Update pre-existing config tests to use `Reload()`
 
-- [ ] In `TestProxyApproval_PreExistingGlobalDeny` (line 1057): replace manual
+- [x] In `TestProxyApproval_PreExistingGlobalDeny` (line 1057): replace manual
   `SetGlobalDeny` call (lines 1073-1078) with `h.Reloader.Reload()` — this
   exercises the production path for loading global decisions at startup
-- [ ] Verify `TestProxyApproval_PreExistingProjectAllow` still works — project
+- [x] Verify `TestProxyApproval_PreExistingProjectAllow` still works — project
   decisions are lazily loaded via `reloader.LoadProjectAllowlist`, no changes
   needed
-- [ ] Verify `TestProxyApproval_PreExistingDenyPattern` still works — project
+- [x] Verify `TestProxyApproval_PreExistingDenyPattern` still works — project
   deny lazily loaded via `reloader.LoadProjectDenylist`
-- [ ] Verify `TestProxyApproval_DenyOverridesAllow` still works — same lazy
+- [x] Verify `TestProxyApproval_DenyOverridesAllow` still works — same lazy
   loading
 - [ ] **Test**: `make test` passes for all pre-existing config tests
 

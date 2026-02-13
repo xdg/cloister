@@ -55,6 +55,7 @@ func (m *mockTunnelHandler) getCalls() []string {
 type proxyTestHarness struct {
 	Proxy          *ProxyServer
 	ApprovalServer *approval.Server
+	Reloader       *CacheReloader
 	ConfigDir      string // t.TempDir() used as XDG_CONFIG_HOME
 	Token          string
 	ProjectName    string
@@ -99,21 +100,15 @@ func newProxyTestHarness(t *testing.T) *proxyTestHarness {
 	// Create domain approver
 	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, sessionDenylist, allowlistCache, nil)
 
-	// Set up project allowlist/denylist loaders
-	allowlistCache.SetProjectLoader(func(pName string) *Allowlist {
-		decisions, err := config.LoadProjectDecisions(pName)
-		if err != nil {
-			return NewAllowlist(nil)
-		}
-		return NewAllowlistFromConfig(decisions.Proxy.Allow)
-	})
-	allowlistCache.SetDenylistLoader(func(pName string) *Allowlist {
-		decisions, err := config.LoadProjectDecisions(pName)
-		if err != nil {
-			return NewAllowlist(nil)
-		}
-		return NewAllowlistFromConfig(decisions.Proxy.Deny)
-	})
+	// Create CacheReloader for project allowlist/denylist loading and cache reloading
+	lister := &mockProjectLister{
+		projects: map[string]TokenInfo{
+			token: {ProjectName: projectName, CloisterName: cloisterName},
+		},
+	}
+	reloader := NewCacheReloader(allowlistCache, lister, nil, nil, &config.Decisions{})
+	allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)
+	allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)
 
 	// Create tunnel handler mock
 	tunnelHandler := &mockTunnelHandler{}
@@ -139,21 +134,8 @@ func newProxyTestHarness(t *testing.T) *proxyTestHarness {
 	proxy.SessionDenylist = sessionDenylist
 	proxy.TunnelHandler = tunnelHandler
 
-	// Set up ConfigPersister reload notifier
-	persister.ReloadNotifier = func() {
-		// Reload project allowlist cache after persistence
-		decisions, err := config.LoadProjectDecisions(projectName)
-		if err == nil {
-			allowlistCache.SetProject(projectName, NewAllowlistFromConfig(decisions.Proxy.Allow))
-			allowlistCache.SetProjectDeny(projectName, NewAllowlistFromConfig(decisions.Proxy.Deny))
-		}
-		// Reload global decisions
-		globalDecisions, err := config.LoadGlobalDecisions()
-		if err == nil {
-			allowlistCache.SetGlobal(NewAllowlistFromConfig(globalDecisions.Proxy.Allow))
-			allowlistCache.SetGlobalDeny(NewAllowlistFromConfig(globalDecisions.Proxy.Deny))
-		}
-	}
+	// Set up ConfigPersister reload notifier using CacheReloader
+	persister.ReloadNotifier = reloader.Reload
 
 	// Start servers
 	if err := approvalSrv.Start(); err != nil {
@@ -175,6 +157,7 @@ func newProxyTestHarness(t *testing.T) *proxyTestHarness {
 	return &proxyTestHarness{
 		Proxy:          proxy,
 		ApprovalServer: approvalSrv,
+		Reloader:       reloader,
 		ConfigDir:      configDir,
 		Token:          token,
 		ProjectName:    projectName,
@@ -1070,12 +1053,8 @@ func TestProxyApproval_PreExistingGlobalDeny(t *testing.T) {
 		t.Fatalf("WriteGlobalDecisions() error: %v", err)
 	}
 
-	// Load it back and update the cache (the harness initialized with empty global denylist).
-	decisions, err := config.LoadGlobalDecisions()
-	if err != nil {
-		t.Fatalf("LoadGlobalDecisions() error: %v", err)
-	}
-	h.Proxy.AllowlistCache.SetGlobalDeny(NewAllowlistFromConfig(decisions.Proxy.Deny))
+	// Reload the cache to pick up the global decisions file (exercises the production path).
+	h.Reloader.Reload()
 
 	// Send CONNECT — should return 403 immediately (no approval prompt).
 	var statusCode int
