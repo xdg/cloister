@@ -38,6 +38,7 @@ RUN apt-get update && apt-get install -y \
     locales \
     man-db \
     nano \
+    ncurses-term \
     netcat-openbsd \
     openssh-client \
     pkg-config \
