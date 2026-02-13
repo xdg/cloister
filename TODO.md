@@ -713,7 +713,7 @@ masking real persistence bugs.
 
 ### 11.1 Define `ProjectLister` interface
 
-- [ ] In `internal/guardian/cache_reloader.go`, define:
+- [x] In `internal/guardian/cache_reloader.go`, define:
   ```go
   // ProjectLister provides the list of active projects for cache reloading.
   // Satisfied by TokenRegistry and by test mocks.
@@ -721,12 +721,12 @@ masking real persistence bugs.
       List() map[string]TokenInfo
   }
   ```
-- [ ] Verify `TokenRegistry` (in `api.go`) already embeds `List()` with the
+- [x] Verify `TokenRegistry` (in `api.go`) already embeds `List()` with the
   same signature — `registryAdapter` satisfies `ProjectLister` without changes
 
 ### 11.2 Define `CacheReloader` struct and constructor
 
-- [ ] Define struct in `internal/guardian/cache_reloader.go`:
+- [x] Define struct in `internal/guardian/cache_reloader.go`:
   ```go
   type CacheReloader struct {
       mu              sync.RWMutex
@@ -737,48 +737,48 @@ masking real persistence bugs.
       lister          ProjectLister
   }
   ```
-- [ ] Implement `NewCacheReloader(cache *AllowlistCache, lister ProjectLister,
+- [x] Implement `NewCacheReloader(cache *AllowlistCache, lister ProjectLister,
   staticAllow, staticDeny []config.AllowEntry, globalDecisions
   *config.Decisions) *CacheReloader`
-- [ ] Implement `GlobalDecisions() *config.Decisions` read accessor
-- [ ] Implement `SetStaticConfig(allow, deny []config.AllowEntry)` for SIGHUP
+- [x] Implement `GlobalDecisions() *config.Decisions` read accessor
+- [x] Implement `SetStaticConfig(allow, deny []config.AllowEntry)` for SIGHUP
   to update static entries before calling `Reload()`
-- [ ] **Test**: Constructor stores and `GlobalDecisions()` returns initial value
+- [x] **Test**: Constructor stores and `GlobalDecisions()` returns initial value
 
 ### 11.3 Implement `LoadProjectAllowlist` method
 
 Extract logic from `internal/cmd/guardian.go:313-345`.
 
-- [ ] Implement `LoadProjectAllowlist(projectName string) *Allowlist`
-- [ ] Loads `config.LoadProjectConfig(projectName)` and
+- [x] Implement `LoadProjectAllowlist(projectName string) *Allowlist`
+- [x] Loads `config.LoadProjectConfig(projectName)` and
   `config.LoadProjectDecisions(projectName)` from disk
-- [ ] Returns `nil` if no project-specific entries (matching production
+- [x] Returns `nil` if no project-specific entries (matching production
   behavior)
-- [ ] Merge order: `MergeAllowlists(r.staticAllow, projectCfg.Proxy.Allow)` +
+- [x] Merge order: `MergeAllowlists(r.staticAllow, projectCfg.Proxy.Allow)` +
   `r.globalDecisions.Proxy.Allow` + `projectDecisions.Proxy.Allow`
-- [ ] Reads `r.staticAllow` and `r.globalDecisions` under read lock
-- [ ] **Test**: Returns merged allowlist with entries from all four sources
+- [x] Reads `r.staticAllow` and `r.globalDecisions` under read lock
+- [x] **Test**: Returns merged allowlist with entries from all four sources
   (static global, static project, global decisions, project decisions)
-- [ ] **Test**: Returns `nil` when no project-specific entries exist
-- [ ] **Test**: Includes global decisions entries in merge result
+- [x] **Test**: Returns `nil` when no project-specific entries exist
+- [x] **Test**: Includes global decisions entries in merge result
 
 ### 11.4 Implement `LoadProjectDenylist` method
 
 Extract logic from `internal/cmd/guardian.go:348-370`.
 
-- [ ] Implement `LoadProjectDenylist(projectName string) *Allowlist`
-- [ ] Merges `config.MergeDenylists(projectCfg.Proxy.Deny,
+- [x] Implement `LoadProjectDenylist(projectName string) *Allowlist`
+- [x] Merges `config.MergeDenylists(projectCfg.Proxy.Deny,
   projectDecisions.Proxy.Deny)`
-- [ ] Returns `nil` if no deny entries exist
-- [ ] **Test**: Returns merged denylist from project config + project decisions
-- [ ] **Test**: Returns `nil` when no deny entries exist
+- [x] Returns `nil` if no deny entries exist
+- [x] **Test**: Returns merged denylist from project config + project decisions
+- [x] **Test**: Returns `nil` when no deny entries exist
 
 ### 11.5 Implement `Reload` method
 
 Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
 `guardian.go:415-467` (SIGHUP handler).
 
-- [ ] Implement `Reload()`:
+- [x] Implement `Reload()`:
   1. Load global decisions from disk via `config.LoadGlobalDecisions()`
   2. Update `r.globalDecisions` under write lock
   3. Read `r.staticAllow` and `r.staticDeny` under same lock
@@ -789,16 +789,16 @@ Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
   6. `cache.Clear()` to evict per-project caches
   7. Iterate `r.lister.List()`, call `LoadProjectAllowlist` for each project,
      call `cache.SetProject` for each
-- [ ] Note: project denylists are NOT eagerly reloaded — they are lazily
+- [x] Note: project denylists are NOT eagerly reloaded — they are lazily
   loaded via `AllowlistCache.GetProjectDeny` calling the denylist loader. This
   matches current production behavior.
-- [ ] **Test**: After `Reload()`, `cache.GetGlobal()` reflects freshly-loaded
+- [x] **Test**: After `Reload()`, `cache.GetGlobal()` reflects freshly-loaded
   global decisions
-- [ ] **Test**: After `Reload()`, `cache.GetGlobalDeny()` reflects global deny
+- [x] **Test**: After `Reload()`, `cache.GetGlobalDeny()` reflects global deny
   entries
-- [ ] **Test**: After `Reload()`, `cache.GetProject(name)` returns merged
+- [x] **Test**: After `Reload()`, `cache.GetProject(name)` returns merged
   allowlist for registered projects
-- [ ] **Test**: Stale project cache entries are cleared (write decision, reload,
+- [x] **Test**: Stale project cache entries are cleared (write decision, reload,
   delete file, reload, verify stale entry gone)
 - [ ] **Test**: `make test` passes
 
