@@ -583,6 +583,36 @@ func TestProxyApproval_AllowGlobal(t *testing.T) {
 	if !found {
 		t.Errorf("expected domain %q in global decisions allow list, got: %v", domain, allowedDomains)
 	}
+
+	// Second CONNECT to the same domain should be allowed immediately
+	// (the ReloadNotifier updates the cache after persistence).
+	done2 := make(chan struct{})
+	var statusCode2 int
+	var connectErr2 error
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECT(domain)
+	}()
+
+	select {
+	case <-done2:
+		// good — returned without blocking
+	case <-time.After(3 * time.Second):
+		t.Fatal("second CONNECT should not block for a globally-allowed domain")
+	}
+
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusOK {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusOK, statusCode2)
+	}
+
+	// Verify tunnel handler was called twice.
+	calls := h.TunnelHandler.getCalls()
+	if len(calls) != 2 {
+		t.Errorf("expected 2 tunnel handler calls, got %d: %v", len(calls), calls)
+	}
 }
 
 // TestProxyApproval_AllowProjectWildcard verifies that approving with a wildcard

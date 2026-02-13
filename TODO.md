@@ -899,11 +899,11 @@ bugs.
 
 ### 13.1 Add second-CONNECT check to `TestProxyApproval_AllowGlobal`
 
-- [ ] In `TestProxyApproval_AllowGlobal` (line 555), after verifying the
+- [x] In `TestProxyApproval_AllowGlobal` (line 555), after verifying the
   global decisions file, add a second CONNECT to the same domain
-- [ ] Verify it returns 200 immediately without blocking (3-second timeout)
-- [ ] Verify tunnel handler was called twice
-- [ ] This test is expected to fail initially — fixing it is 13.2+
+- [x] Verify it returns 200 immediately without blocking (3-second timeout)
+- [x] Verify tunnel handler was called twice
+- [x] This test is expected to fail initially — fixing it is 13.2+
 
 ### 13.2 Diagnose and fix persistence bugs
 
@@ -921,16 +921,12 @@ Run `make test` and investigate failures. Known likely causes:
   `handleConnect` when a project entry exists (even if nil).
 
 Fix approaches (evaluate during implementation):
-- [ ] Option A: `Reload()` should not call `SetProject(name, nil)` — skip
+- [x] Option A: `Reload()` should not call `SetProject(name, nil)` — skip
   the `SetProject` call when `LoadProjectAllowlist` returns nil, letting the
   lazy loader handle it on next request
-- [ ] Option B: `GetProject()` should fall back to global when the cached
-  value is nil (change `if allowlist, ok := ...` to also check `allowlist !=
-  nil`)
-- [ ] Option C: `LoadProjectAllowlist` should never return nil — always
-  return at least the global allowlist (but this changes the semantics of the
-  nil-means-use-global convention)
-- [ ] Choose the approach that is simplest and least likely to introduce new
+- [ ] ~~Option B~~ (not chosen)
+- [ ] ~~Option C~~ (not chosen)
+- [x] Choose the approach that is simplest and least likely to introduce new
   bugs; document the choice in a code comment
 
 ### 13.3 Verify all tests pass

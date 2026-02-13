@@ -178,11 +178,17 @@ func (r *CacheReloader) Reload() {
 	// 4. Clear per-project caches
 	r.cache.Clear()
 
-	// 5. Eagerly reload per-project allowlists for registered projects
+	// 5. Eagerly reload per-project allowlists for registered projects.
+	// Skip SetProject when LoadProjectAllowlist returns nil (no project-specific
+	// entries). Caching nil would prevent GetProject from falling back to the
+	// global allowlist — the lazy loader handles this correctly when the cache
+	// entry is absent.
 	for _, info := range r.lister.List() {
 		if info.ProjectName != "" {
 			allowlist := r.LoadProjectAllowlist(info.ProjectName)
-			r.cache.SetProject(info.ProjectName, allowlist)
+			if allowlist != nil {
+				r.cache.SetProject(info.ProjectName, allowlist)
+			}
 		}
 	}
 }
