@@ -800,7 +800,7 @@ Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
   allowlist for registered projects
 - [x] **Test**: Stale project cache entries are cleared (write decision, reload,
   delete file, reload, verify stale entry gone)
-- [ ] **Test**: `make test` passes
+- [x] **Test**: `make test` passes
 
 ---
 
@@ -842,7 +842,7 @@ Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
   `reloader.GlobalDecisions()` where it's still needed
 - [x] Delete the now-unused `loadProjectAllowlist` and `loadProjectDenylist`
   closures
-- [ ] **Test**: `make test` passes (existing tests still work with old harness)
+- [x] **Test**: `make test` passes (existing tests still work with old harness)
 
 ### 12.2 Wire into test harness (`proxy_approval_test.go`)
 
@@ -872,7 +872,7 @@ Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
 - [x] Replace the `ReloadNotifier` closure (lines 142-156) with
   `persister.ReloadNotifier = reloader.Reload`
 - [x] Add `Reloader *CacheReloader` field to `proxyTestHarness` struct
-- [ ] **Test**: Run existing `TestProxyApproval_*` tests — expect most pass
+- [x] **Test**: Run existing `TestProxyApproval_*` tests — expect most pass
   but some may fail (failures addressed in Phase 13)
 
 ### 12.3 Update pre-existing config tests to use `Reload()`
@@ -887,7 +887,7 @@ Extract shared logic from `guardian.go:550-586` (ReloadNotifier) and
   deny lazily loaded via `reloader.LoadProjectDenylist`
 - [x] Verify `TestProxyApproval_DenyOverridesAllow` still works — same lazy
   loading
-- [ ] **Test**: `make test` passes for all pre-existing config tests
+- [x] **Test**: `make test` passes for all pre-existing config tests
 
 ---
 
@@ -931,7 +931,7 @@ Fix approaches (evaluate during implementation):
 
 ### 13.3 Verify all tests pass
 
-- [ ] All `TestProxyApproval_*` tests pass with production `CacheReloader`:
+- [x] All `TestProxyApproval_*` tests pass with production `CacheReloader`:
   - `TestProxyTestHarness_BasicDenyFlow`
   - `TestProxyApproval_AllowOnce`
   - `TestProxyApproval_AllowSession`
@@ -950,8 +950,8 @@ Fix approaches (evaluate during implementation):
   - `TestProxyApproval_InvalidDomain`
   - `TestProxyApproval_PortStrippingConsistency`
   - `TestProxyApproval_DuplicateCONNECTDuringPending`
-- [ ] `make test` passes clean
-- [ ] `make lint` passes
+- [x] `make test` passes clean
+- [x] `make lint` passes
 
 ---
 
