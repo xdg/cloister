@@ -65,9 +65,18 @@ type proxyTestHarness struct {
 }
 
 func newProxyTestHarness(t *testing.T) *proxyTestHarness {
+	return newProxyTestHarnessWithConfigDir(t, "")
+}
+
+// newProxyTestHarnessWithConfigDir creates a test harness. If configDir is
+// empty, a new t.TempDir() is used; otherwise the given directory is reused
+// (simulating a guardian restart with persisted decisions on disk).
+func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTestHarness {
 	t.Helper()
 
-	configDir := t.TempDir()
+	if configDir == "" {
+		configDir = t.TempDir()
+	}
 	// Set XDG_CONFIG_HOME so config.DecisionDir() uses our temp dir
 	t.Setenv("XDG_CONFIG_HOME", configDir)
 	// Also set XDG_STATE_HOME to prevent writes to real state dir
@@ -1450,5 +1459,256 @@ func TestProxyApproval_DuplicateCONNECTDuringPending(t *testing.T) {
 	}
 	if statusCode2 != http.StatusOK {
 		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusOK, statusCode2)
+	}
+}
+
+// sendHTTPViaProxy sends a regular HTTP HEAD request through the proxy (not CONNECT).
+// This simulates what curl does with http:// URLs when HTTP_PROXY is set.
+func (h *proxyTestHarness) sendHTTPViaProxy(rawURL string) (int, error) {
+	h.t.Helper()
+
+	proxyAddr := h.Proxy.ListenAddr()
+	conn, err := net.DialTimeout("tcp", proxyAddr, 5*time.Second)
+	if err != nil {
+		return 0, fmt.Errorf("dial proxy: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	// For forward proxy mode, send the full URL in the request line
+	auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + h.Token))
+	req := fmt.Sprintf("HEAD %s HTTP/1.1\r\nHost: example.com\r\nProxy-Authorization: Basic %s\r\nConnection: close\r\n\r\n",
+		rawURL, auth)
+
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return 0, fmt.Errorf("set deadline: %w", err)
+	}
+	if _, err := conn.Write([]byte(req)); err != nil {
+		return 0, fmt.Errorf("write request: %w", err)
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		return 0, fmt.Errorf("read response: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	return resp.StatusCode, nil
+}
+
+// TestProxyApproval_NonCONNECTReturns405 verifies that HTTP requests (not
+// CONNECT) sent through the proxy return 405 Method Not Allowed. This is what
+// happens when curl uses http:// URLs with HTTP_PROXY set — curl sends a
+// regular HEAD through the proxy instead of CONNECT.
+func TestProxyApproval_NonCONNECTReturns405(t *testing.T) {
+	h := newProxyTestHarness(t)
+
+	statusCode, err := h.sendHTTPViaProxy("http://some-domain.example.com/")
+	if err != nil {
+		t.Fatalf("sendHTTPViaProxy() error: %v", err)
+	}
+	if statusCode != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d (Method Not Allowed), got %d", http.StatusMethodNotAllowed, statusCode)
+	}
+
+	// Verify no tunnel handler calls.
+	calls := h.TunnelHandler.getCalls()
+	if len(calls) != 0 {
+		t.Errorf("expected 0 tunnel handler calls, got %d: %v", len(calls), calls)
+	}
+
+	// Verify no pending domain requests (non-CONNECT should never reach approval).
+	count, err := h.pendingDomainCount()
+	if err != nil {
+		t.Fatalf("pendingDomainCount() error: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("expected 0 pending domain requests, got %d", count)
+	}
+}
+
+// TestProxyApproval_AllowProjectWithStaticConfig verifies project approval
+// persistence with static allow entries populated (mimicking production config
+// where default domains like api.anthropic.com are pre-configured).
+func TestProxyApproval_AllowProjectWithStaticConfig(t *testing.T) {
+	h := newProxyTestHarness(t)
+
+	// Inject static allow entries to mimic production config.
+	staticAllow := []config.AllowEntry{
+		{Domain: "api.anthropic.com"},
+		{Domain: "proxy.golang.org"},
+		{Pattern: "*.amazonaws.com"},
+	}
+	h.Reloader.SetStaticConfig(staticAllow, nil)
+	h.Reloader.Reload()
+
+	domain := "project-static-test.example.com"
+
+	// First CONNECT: should block until approved (domain not in static config).
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT(domain)
+	}()
+
+	id, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	if err := h.approveDomain(id, "project", ""); err != nil {
+		t.Fatalf("approveDomain() error: %v", err)
+	}
+
+	<-done
+	if connectErr != nil {
+		t.Fatalf("first sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusOK {
+		t.Fatalf("first CONNECT: expected status %d, got %d", http.StatusOK, statusCode)
+	}
+
+	// Verify the project decisions file contains the domain.
+	decisions, err := config.LoadProjectDecisions(h.ProjectName)
+	if err != nil {
+		t.Fatalf("LoadProjectDecisions() error: %v", err)
+	}
+	found := false
+	for _, d := range decisions.AllowedDomains() {
+		if d == domain {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected domain %q in project decisions allow list, got: %v", domain, decisions.AllowedDomains())
+	}
+
+	// Second CONNECT to same domain: should return 200 immediately.
+	done2 := make(chan struct{})
+	var statusCode2 int
+	var connectErr2 error
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECT(domain)
+	}()
+	select {
+	case <-done2:
+		// good — returned quickly
+	case <-time.After(3 * time.Second):
+		t.Fatal("second CONNECT should not block (domain should be remembered from project decisions)")
+	}
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusOK {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusOK, statusCode2)
+	}
+
+	// Also verify a static-config domain still works after the reload.
+	done3 := make(chan struct{})
+	var statusCode3 int
+	var connectErr3 error
+	go func() {
+		defer close(done3)
+		statusCode3, connectErr3 = h.sendCONNECT("api.anthropic.com")
+	}()
+	select {
+	case <-done3:
+	case <-time.After(3 * time.Second):
+		t.Fatal("CONNECT to static-config domain should not block")
+	}
+	if connectErr3 != nil {
+		t.Fatalf("static domain sendCONNECT() error: %v", connectErr3)
+	}
+	if statusCode3 != http.StatusOK {
+		t.Errorf("static domain CONNECT: expected status %d, got %d", http.StatusOK, statusCode3)
+	}
+}
+
+// TestProxyApproval_AllowProjectSurvivesRestart verifies that project-persisted
+// domain approvals survive a full guardian restart. This simulates:
+//  1. Approve domain with scope=project → decisions file written
+//  2. Shut down guardian (stop proxy + approval server)
+//  3. Start new guardian (new proxy + approval server, same config dir)
+//  4. CONNECT to same domain → should be allowed without re-prompting
+func TestProxyApproval_AllowProjectSurvivesRestart(t *testing.T) {
+	// Phase 1: Create harness, approve domain at project scope.
+	h1 := newProxyTestHarness(t)
+	domain := "restart-test.example.com"
+	configDir := h1.ConfigDir
+
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h1.sendCONNECT(domain)
+	}()
+
+	id, err := h1.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	if err := h1.approveDomain(id, "project", ""); err != nil {
+		t.Fatalf("approveDomain() error: %v", err)
+	}
+
+	<-done
+	if connectErr != nil {
+		t.Fatalf("first session sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusOK {
+		t.Fatalf("first session CONNECT: expected %d, got %d", http.StatusOK, statusCode)
+	}
+
+	// Verify decisions file was written.
+	decisions, err := config.LoadProjectDecisions(h1.ProjectName)
+	if err != nil {
+		t.Fatalf("LoadProjectDecisions() error: %v", err)
+	}
+	found := false
+	for _, d := range decisions.AllowedDomains() {
+		if d == domain {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected domain %q in project decisions, got: %v", domain, decisions.AllowedDomains())
+	}
+
+	// Phase 2: Shut down first harness (simulates guardian stop).
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = h1.Proxy.Stop(ctx)
+	_ = h1.ApprovalServer.Stop(ctx)
+
+	// Phase 3: Create new harness reusing same config dir (simulates restart).
+	h2 := newProxyTestHarnessWithConfigDir(t, configDir)
+
+	// Phase 4: CONNECT to same domain — should be allowed immediately.
+	done2 := make(chan struct{})
+	var statusCode2 int
+	var connectErr2 error
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h2.sendCONNECT(domain)
+	}()
+
+	select {
+	case <-done2:
+		// good — returned without blocking
+	case <-time.After(3 * time.Second):
+		t.Fatal("CONNECT after restart should not block (project decisions should be loaded from disk)")
+	}
+
+	if connectErr2 != nil {
+		t.Fatalf("post-restart sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusOK {
+		t.Errorf("post-restart CONNECT: expected %d, got %d", http.StatusOK, statusCode2)
 	}
 }
