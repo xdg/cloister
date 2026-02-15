@@ -65,7 +65,7 @@ func TestMatchPattern(t *testing.T) {
 			name:     "multi-level subdomain does NOT match",
 			pattern:  "*.example.com",
 			hostname: "a.b.example.com",
-			expected: false,
+			expected: true,
 		},
 		{
 			name:     "different domain does not match",
@@ -102,10 +102,16 @@ func TestMatchPattern(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "googleapis multi-level does not match",
+			name:     "googleapis multi-level matches",
 			pattern:  "*.googleapis.com",
 			hostname: "www.storage.googleapis.com",
-			expected: false,
+			expected: true,
+		},
+		{
+			name:     "case-insensitive hostname matches",
+			pattern:  "*.example.com",
+			hostname: "API.Example.COM",
+			expected: true,
 		},
 	}
 
@@ -204,7 +210,13 @@ func TestAllowlist_IsAllowed_WithPatterns(t *testing.T) {
 			name:     "pattern does not match multi-level subdomain",
 			patterns: []string{"*.example.com"},
 			host:     "a.b.example.com",
-			expected: false,
+			expected: true,
+		},
+		{
+			name:     "pattern matches mixed-case host",
+			patterns: []string{"*.example.com"},
+			host:     "API.Example.COM",
+			expected: true,
 		},
 
 		// Exact match takes precedence

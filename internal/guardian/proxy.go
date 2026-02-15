@@ -405,7 +405,7 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	// This ensures consistent behavior across allowlist matching, session cache,
 	// approval queue display, and config persistence.
 	targetHostPort := r.Host
-	domain := stripPort(targetHostPort)
+	domain := strings.ToLower(stripPort(targetHostPort))
 
 	// Resolve allowlist, project, cloister, and token from the request in a single lookup
 	allowlist, projectName, cloisterName, token := p.resolveRequest(r)

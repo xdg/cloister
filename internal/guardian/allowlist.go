@@ -119,7 +119,7 @@ func (a *Allowlist) Add(domains []string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for _, d := range domains {
-		a.domains[d] = struct{}{}
+		a.domains[stripPort(d)] = struct{}{}
 	}
 }
 
@@ -149,7 +149,7 @@ func (a *Allowlist) AddPatterns(patterns []string) {
 func (a *Allowlist) Replace(domains []string) {
 	newDomains := make(map[string]struct{}, len(domains))
 	for _, d := range domains {
-		newDomains[d] = struct{}{}
+		newDomains[stripPort(d)] = struct{}{}
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -195,9 +195,9 @@ func stripPort(host string) string {
 	hostname, _, err := net.SplitHostPort(host)
 	if err != nil {
 		// No port present, or invalid format - return as-is
-		return host
+		return strings.ToLower(host)
 	}
-	return hostname
+	return strings.ToLower(hostname)
 }
 
 // IsValidPattern checks if a pattern is a valid wildcard pattern.
@@ -223,9 +223,11 @@ func IsValidPattern(pattern string) bool {
 }
 
 // matchPattern checks if a hostname matches a wildcard pattern.
-// Pattern "*.example.com" matches "api.example.com" but NOT "example.com"
-// and NOT "a.b.example.com" (only single-level subdomain).
+// Pattern "*.example.com" matches "api.example.com" and "a.b.example.com",
+// but NOT "example.com".
 func matchPattern(pattern, hostname string) bool {
+	pattern = strings.ToLower(pattern)
+	hostname = strings.ToLower(hostname)
 	if !IsValidPattern(pattern) {
 		return false
 	}
@@ -242,11 +244,6 @@ func matchPattern(pattern, hostname string) bool {
 
 	// prefix must be non-empty (not just the base domain)
 	if prefix == "" {
-		return false
-	}
-
-	// prefix must not contain dots (single-level subdomain only)
-	if strings.Contains(prefix, ".") {
 		return false
 	}
 

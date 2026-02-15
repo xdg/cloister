@@ -140,7 +140,7 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 	// Strip port from domain so all downstream usage (queue, UI, session cache,
 	// config persistence) works with domain-only. The proxy also strips early,
 	// but this is defensive for any caller.
-	domain = stripPort(domain)
+	domain = strings.ToLower(stripPort(domain))
 
 	// Create response channel (buffered to prevent goroutine leaks)
 	respChan := make(chan approval.DomainResponse, 1)

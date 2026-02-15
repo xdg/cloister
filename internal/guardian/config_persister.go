@@ -131,7 +131,7 @@ func validateDomain(domain string) error {
 // CONNECT requests include port (e.g., "example.com:443") but allowlist
 // entries should store bare hostnames for consistent matching.
 func normalizeDomain(domain string) string {
-	return stripPort(domain)
+	return strings.ToLower(stripPort(domain))
 }
 
 // validatePattern checks if a pattern string is valid for use in the allowlist.

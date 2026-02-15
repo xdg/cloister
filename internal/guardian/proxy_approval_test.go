@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -694,6 +695,100 @@ func TestProxyApproval_AllowProjectWildcard(t *testing.T) {
 	}
 	if statusCode2 != http.StatusOK {
 		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusOK, statusCode2)
+	}
+
+	// Third CONNECT to a nested subdomain should also match the wildcard.
+	domain3 := "deep.cdn.wildcard-test.com"
+	done3 := make(chan struct{})
+	var statusCode3 int
+	var connectErr3 error
+	go func() {
+		defer close(done3)
+		statusCode3, connectErr3 = h.sendCONNECT(domain3)
+	}()
+	select {
+	case <-done3:
+		// good - returned quickly
+	case <-time.After(3 * time.Second):
+		t.Fatal("third CONNECT should not block (wildcard pattern should match nested subdomain)")
+	}
+	if connectErr3 != nil {
+		t.Fatalf("third sendCONNECT() error: %v", connectErr3)
+	}
+	if statusCode3 != http.StatusOK {
+		t.Errorf("third CONNECT: expected status %d, got %d", http.StatusOK, statusCode3)
+	}
+}
+
+// TestProxyApproval_CaseInsensitivity verifies that approvals are normalized to
+// avoid repeated prompts when casing differs between requests.
+func TestProxyApproval_CaseInsensitivity(t *testing.T) {
+	h := newProxyTestHarness(t)
+	firstDomain := "MiXeD.Example.com"
+	secondDomain := "mixed.example.com"
+
+	// First CONNECT blocks until approved.
+	var statusCode int
+	var connectErr error
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		statusCode, connectErr = h.sendCONNECT(firstDomain)
+	}()
+
+	id, err := h.pendingDomainID()
+	if err != nil {
+		t.Fatalf("pendingDomainID() error: %v", err)
+	}
+
+	if err := h.approveDomain(id, "project", ""); err != nil {
+		t.Fatalf("approveDomain() error: %v", err)
+	}
+
+	<-done
+	if connectErr != nil {
+		t.Fatalf("first sendCONNECT() error: %v", connectErr)
+	}
+	if statusCode != http.StatusOK {
+		t.Fatalf("first CONNECT: expected status %d, got %d", http.StatusOK, statusCode)
+	}
+
+	// Second CONNECT with different casing should not block.
+	done2 := make(chan struct{})
+	var statusCode2 int
+	var connectErr2 error
+	go func() {
+		defer close(done2)
+		statusCode2, connectErr2 = h.sendCONNECT(secondDomain)
+	}()
+	select {
+	case <-done2:
+		// good - returned quickly
+	case <-time.After(3 * time.Second):
+		t.Fatal("second CONNECT should not block (case-insensitive match)")
+	}
+	if connectErr2 != nil {
+		t.Fatalf("second sendCONNECT() error: %v", connectErr2)
+	}
+	if statusCode2 != http.StatusOK {
+		t.Errorf("second CONNECT: expected status %d, got %d", http.StatusOK, statusCode2)
+	}
+
+	// Verify the project decisions file stored normalized domain.
+	decisions, err := config.LoadProjectDecisions(h.ProjectName)
+	if err != nil {
+		t.Fatalf("LoadProjectDecisions() error: %v", err)
+	}
+	allowedDomains := decisions.AllowedDomains()
+	found := false
+	for _, d := range allowedDomains {
+		if d == strings.ToLower(firstDomain) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected normalized domain %q in project decisions allow list, got: %v", strings.ToLower(firstDomain), allowedDomains)
 	}
 }
 
