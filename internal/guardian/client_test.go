@@ -4,6 +4,8 @@ import (
 	"context"
 	"testing"
 	"time"
+
+	"github.com/xdg/cloister/internal/token"
 )
 
 func TestClient_RegisterToken(t *testing.T) {
@@ -65,7 +67,7 @@ func TestClient_RegisterTokenErrors(t *testing.T) {
 
 func TestClient_RevokeToken(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["token-to-revoke"] = TokenInfo{CloisterName: "test-cloister"}
+	registry.tokens["token-to-revoke"] = token.Info{CloisterName: "test-cloister"}
 
 	api := NewAPIServer(":0", registry)
 	if err := api.Start(); err != nil {
@@ -100,8 +102,8 @@ func TestClient_RevokeToken(t *testing.T) {
 
 func TestClient_ListTokens(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["token-a"] = TokenInfo{CloisterName: "cloister-a"}
-	registry.tokens["token-b"] = TokenInfo{CloisterName: "cloister-b"}
+	registry.tokens["token-a"] = token.Info{CloisterName: "cloister-a"}
+	registry.tokens["token-b"] = token.Info{CloisterName: "cloister-b"}
 
 	api := NewAPIServer(":0", registry)
 	if err := api.Start(); err != nil {

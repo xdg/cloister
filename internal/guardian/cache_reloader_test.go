@@ -4,20 +4,21 @@ import (
 	"testing"
 
 	"github.com/xdg/cloister/internal/config"
+	"github.com/xdg/cloister/internal/token"
 )
 
 // mockProjectLister is a test double for ProjectLister.
 type mockProjectLister struct {
-	projects map[string]TokenInfo
+	projects map[string]token.Info
 }
 
-func (m *mockProjectLister) List() map[string]TokenInfo {
+func (m *mockProjectLister) List() map[string]token.Info {
 	return m.projects
 }
 
 func TestNewCacheReloader_StoresAndReturnsGlobalDecisions(t *testing.T) {
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 
 	decisions := &config.Decisions{
 		Proxy: config.DecisionsProxy{
@@ -45,7 +46,7 @@ func TestNewCacheReloader_StoresAndReturnsGlobalDecisions(t *testing.T) {
 
 func TestNewCacheReloader_NilDecisionsDefaultsToEmpty(t *testing.T) {
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 
 	reloader := NewCacheReloader(cache, lister, nil, nil, nil)
 
@@ -63,7 +64,7 @@ func TestNewCacheReloader_NilDecisionsDefaultsToEmpty(t *testing.T) {
 
 func TestCacheReloader_SetStaticConfig(t *testing.T) {
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 
 	reloader := NewCacheReloader(cache, lister, nil, nil, &config.Decisions{})
 
@@ -117,7 +118,7 @@ func TestCacheReloader_LoadProjectAllowlist_AllFourSources(t *testing.T) {
 	}
 
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, staticAllow, nil, globalDecisions)
 
 	allowlist := reloader.LoadProjectAllowlist(projectName)
@@ -140,7 +141,7 @@ func TestCacheReloader_LoadProjectAllowlist_NilWhenNoProjectEntries(t *testing.T
 
 	staticAllow := []config.AllowEntry{{Domain: "static-global.com"}}
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, staticAllow, nil, &config.Decisions{})
 
 	// No project config or decisions files exist → nil
@@ -177,7 +178,7 @@ func TestCacheReloader_LoadProjectAllowlist_IncludesGlobalDecisions(t *testing.T
 	}
 
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, nil, nil, globalDecisions)
 
 	allowlist := reloader.LoadProjectAllowlist(projectName)
@@ -220,7 +221,7 @@ func TestCacheReloader_LoadProjectDenylist_MergesConfigAndDecisions(t *testing.T
 	}
 
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, nil, nil, &config.Decisions{})
 
 	denylist := reloader.LoadProjectDenylist(projectName)
@@ -241,7 +242,7 @@ func TestCacheReloader_LoadProjectDenylist_NilWhenNoDenyEntries(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, nil, nil, &config.Decisions{})
 
 	denylist := reloader.LoadProjectDenylist("nonexistent-project")
@@ -267,7 +268,7 @@ func TestCacheReloader_Reload_GlobalAllowlist(t *testing.T) {
 
 	staticAllow := []config.AllowEntry{{Domain: "static.com"}}
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, staticAllow, nil, &config.Decisions{})
 
 	reloader.Reload()
@@ -304,7 +305,7 @@ func TestCacheReloader_Reload_GlobalDenylist(t *testing.T) {
 
 	staticDeny := []config.AllowEntry{{Domain: "static-deny.com"}}
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{}}
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, nil, staticDeny, &config.Decisions{})
 
 	reloader.Reload()
@@ -327,7 +328,7 @@ func TestCacheReloader_Reload_ProjectAllowlist(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	projectName := "test-proj"
-	token := "tok1"
+	tok := "tok1"
 
 	// Write project decisions
 	err := config.WriteProjectDecisions(projectName, &config.Decisions{
@@ -340,8 +341,8 @@ func TestCacheReloader_Reload_ProjectAllowlist(t *testing.T) {
 	}
 
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{
-		token: {ProjectName: projectName, CloisterName: "test-cloister"},
+	lister := &mockProjectLister{projects: map[string]token.Info{
+		tok: {ProjectName: projectName, CloisterName: "test-cloister"},
 	}}
 	reloader := NewCacheReloader(cache, lister, nil, nil, &config.Decisions{})
 	cache.SetProjectLoader(reloader.LoadProjectAllowlist)
@@ -365,7 +366,7 @@ func TestCacheReloader_Reload_StaleCacheCleared(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	projectName := "test-proj"
-	token := "tok1"
+	tok := "tok1"
 
 	// Write project decisions
 	err := config.WriteProjectDecisions(projectName, &config.Decisions{
@@ -378,8 +379,8 @@ func TestCacheReloader_Reload_StaleCacheCleared(t *testing.T) {
 	}
 
 	cache := NewAllowlistCache(NewAllowlist(nil))
-	lister := &mockProjectLister{projects: map[string]TokenInfo{
-		token: {ProjectName: projectName, CloisterName: "test-cloister"},
+	lister := &mockProjectLister{projects: map[string]token.Info{
+		tok: {ProjectName: projectName, CloisterName: "test-cloister"},
 	}}
 	reloader := NewCacheReloader(cache, lister, nil, nil, &config.Decisions{})
 	cache.SetProjectLoader(reloader.LoadProjectAllowlist)

@@ -263,19 +263,12 @@ func runGuardianProxy(_ *cobra.Command, _ []string) error {
 	setupConfigReloader(proxy, gs)
 
 	apiAddr := fmt.Sprintf(":%d", guardian.DefaultAPIPort)
-	api := guardian.NewAPIServer(apiAddr, &guardian.RegistryAdapter{Registry: gs.registry})
+	api := guardian.NewAPIServer(apiAddr, gs.registry)
 
 	gs.auditLogger = setupAuditLogger(gs.cfg)
 
-	requestTokenLookup := func(tok string) (request.TokenInfo, bool) {
-		info, ok := gs.registry.Lookup(tok)
-		if !ok {
-			return request.TokenInfo{}, false
-		}
-		return request.TokenInfo{
-			CloisterName: info.CloisterName,
-			ProjectName:  info.ProjectName,
-		}, true
+	requestTokenLookup := func(tok string) (token.Info, bool) {
+		return gs.registry.Lookup(tok)
 	}
 
 	approvalQueue := approval.NewQueue()
@@ -378,7 +371,7 @@ func setupAllowlistCache(cfg *config.GlobalConfig, globalDecisions *config.Decis
 
 	reloader := guardian.NewCacheReloader(
 		cache,
-		&guardian.RegistryAdapter{Registry: registry},
+		registry,
 		cfg.Proxy.Allow, cfg.Proxy.Deny,
 		globalDecisions,
 	)

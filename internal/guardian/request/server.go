@@ -17,6 +17,7 @@ import (
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
+	"github.com/xdg/cloister/internal/token"
 )
 
 // DefaultRequestPort is the port for the request server.
@@ -166,7 +167,7 @@ func (s *Server) handleRequestRouter(w http.ResponseWriter, r *http.Request) {
 type validatedRequest struct {
 	args []string
 	cmd  string
-	info TokenInfo
+	info token.Info
 }
 
 // parseAndValidateRequest parses the JSON body, validates args, and extracts cloister info.

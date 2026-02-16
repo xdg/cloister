@@ -108,11 +108,8 @@ func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTest
 		allowlistCache.SetGlobalDeny(NewAllowlistFromConfig(globalDeny))
 	}
 
-	// RegistryAdapter satisfies TokenRegistry, ProjectLister, and TokenValidator.
-	adapter := &RegistryAdapter{Registry: registry}
-
 	// CacheReloader with production-matching static config.
-	reloader := NewCacheReloader(allowlistCache, adapter, staticAllow, staticDeny, &config.Decisions{})
+	reloader := NewCacheReloader(allowlistCache, registry, staticAllow, staticDeny, &config.Decisions{})
 	allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)
 	allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)
 
@@ -139,7 +136,7 @@ func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTest
 
 	// Create proxy server with production-faithful global allowlist.
 	proxy := NewProxyServerWithConfig(":0", globalAllowlist)
-	proxy.TokenValidator = adapter
+	proxy.TokenValidator = registry
 	proxy.AllowlistCache = allowlistCache
 	proxy.TokenLookup = TokenLookupFromRegistry(registry)
 	proxy.DomainApprover = domainApprover

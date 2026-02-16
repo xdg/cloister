@@ -16,6 +16,7 @@ import (
 	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
 	"github.com/xdg/cloister/internal/testutil"
+	"github.com/xdg/cloister/internal/token"
 )
 
 // noProxyClient returns an HTTP client that doesn't use any proxy.
@@ -25,7 +26,7 @@ func noProxyClient() *http.Client {
 }
 
 func TestNewServer(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -43,7 +44,7 @@ func TestNewServer(t *testing.T) {
 }
 
 func TestServer_StartStop(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -81,7 +82,7 @@ func TestServer_StartStop(t *testing.T) {
 }
 
 func TestServer_HandleRequest_MissingToken(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -104,7 +105,7 @@ func TestServer_HandleRequest_MissingToken(t *testing.T) {
 }
 
 func TestServer_HandleRequest_InvalidToken(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -125,7 +126,7 @@ func TestServer_HandleRequest_InvalidToken(t *testing.T) {
 }
 
 func TestServer_HandleRequest_InvalidJSON(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -153,7 +154,7 @@ func TestServer_HandleRequest_InvalidJSON(t *testing.T) {
 }
 
 func TestServer_HandleRequest_EmptyArgs(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -185,7 +186,7 @@ func TestServer_HandleRequest_EmptyArgs(t *testing.T) {
 }
 
 func TestServer_HandleRequest_ValidRequest_NilMatcher(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -219,7 +220,7 @@ func TestServer_HandleRequest_ValidRequest_NilMatcher(t *testing.T) {
 }
 
 func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -272,7 +273,7 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 }
 
 func TestServer_ListenAddrBeforeStart(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{})
+	lookup := mockTokenLookup(map[string]token.Info{})
 	server := NewServer(lookup, nil, nil, nil)
 
 	addr := server.ListenAddr()
@@ -322,7 +323,7 @@ func (m *mockCommandExecutor) Execute(req executor.ExecuteRequest) (*executor.Ex
 }
 
 func TestServer_HandleRequest_AutoApprove(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -380,7 +381,7 @@ func TestServer_HandleRequest_AutoApprove(t *testing.T) {
 }
 
 func TestServer_HandleRequest_ManualApprove_NilQueue(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -421,7 +422,7 @@ func TestServer_HandleRequest_ManualApprove_NilQueue(t *testing.T) {
 }
 
 func TestServer_HandleRequest_Deny(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -463,7 +464,7 @@ func TestServer_HandleRequest_Deny(t *testing.T) {
 }
 
 func TestServer_HandleRequest_NoPatternMatcher(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -498,7 +499,7 @@ func TestServer_HandleRequest_NoPatternMatcher(t *testing.T) {
 }
 
 func TestServer_HandleRequest_ManualApprove_BlocksUntilApproval(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -601,7 +602,7 @@ func TestServer_HandleRequest_ManualApprove_BlocksUntilApproval(t *testing.T) {
 }
 
 func TestServer_HandleRequest_ManualApprove_Timeout(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -664,7 +665,7 @@ func TestServer_HandleRequest_ManualApprove_Timeout(t *testing.T) {
 }
 
 func TestServer_HandleRequest_ManualApprove_Denied(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -744,7 +745,7 @@ func TestServer_HandleRequest_ManualApprove_Denied(t *testing.T) {
 }
 
 func TestServer_HandleRequest_GETReturns405(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -780,7 +781,7 @@ func TestServer_HandleRequest_GETReturns405(t *testing.T) {
 // Tests for Phase 4.5.2: Executor wiring
 
 func TestServer_HandleRequest_AutoApprove_ExecutorCalled(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -836,7 +837,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorCalled(t *testing.T) {
 }
 
 func TestServer_HandleRequest_AutoApprove_NilExecutor(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -877,7 +878,7 @@ func TestServer_HandleRequest_AutoApprove_NilExecutor(t *testing.T) {
 }
 
 func TestServer_HandleRequest_AutoApprove_ExecutorError(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -921,7 +922,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorError(t *testing.T) {
 }
 
 func TestServer_HandleRequest_AutoApprove_ExecutorTimeout(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -976,7 +977,7 @@ func TestServer_HandleRequest_AutoApprove_ExecutorTimeout(t *testing.T) {
 }
 
 func TestServer_HandleRequest_AutoApprove_CommandFailed(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"test-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -1150,7 +1151,7 @@ func TestMapExecutorResponse(t *testing.T) {
 // Tests for audit logging integration
 
 func TestServer_HandleRequest_AuditLogging_AutoApprove(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -1218,7 +1219,7 @@ func TestServer_HandleRequest_AuditLogging_AutoApprove(t *testing.T) {
 }
 
 func TestServer_HandleRequest_AuditLogging_Deny(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -1269,7 +1270,7 @@ func TestServer_HandleRequest_AuditLogging_Deny(t *testing.T) {
 }
 
 func TestServer_HandleRequest_AuditLogging_NilMatcher(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -1310,7 +1311,7 @@ func TestServer_HandleRequest_AuditLogging_NilMatcher(t *testing.T) {
 }
 
 func TestServer_HandleRequest_AuditLogging_Timeout(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -1369,7 +1370,7 @@ func TestServer_HandleRequest_AuditLogging_Timeout(t *testing.T) {
 
 func TestServer_HandleRequest_AuditLogging_NilLogger(t *testing.T) {
 	// Verify that nil logger doesn't cause panic
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -1419,7 +1420,7 @@ func TestServer_HandleRequest_AuditLogging_NilLogger(t *testing.T) {
 // TestServer_HandleRequest_NULByteRejected verifies that arguments containing
 // NUL bytes are rejected, as they cannot be safely represented in shell commands.
 func TestServer_HandleRequest_NULByteRejected(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -1463,7 +1464,7 @@ func TestServer_HandleRequest_NULByteRejected(t *testing.T) {
 // is ignored and the canonical command is reconstructed from args only.
 // This is the key security fix - prevents validation bypass attacks.
 func TestServer_HandleRequest_CmdFieldIgnored(t *testing.T) {
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		"valid-token": {CloisterName: "test-cloister", ProjectName: "test-project"},
 	})
 
@@ -1512,7 +1513,7 @@ func TestServer_HandleRequest_ProjectSpecificPatterns(t *testing.T) {
 	projectAToken := "token-project-a"
 	projectBToken := "token-project-b"
 
-	lookup := mockTokenLookup(map[string]TokenInfo{
+	lookup := mockTokenLookup(map[string]token.Info{
 		projectAToken: {CloisterName: "cloister-a", ProjectName: "project-a"},
 		projectBToken: {CloisterName: "cloister-b", ProjectName: "project-b"},
 	})

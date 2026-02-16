@@ -7,48 +7,50 @@ import (
 	"net/http"
 	"testing"
 	"time"
+
+	"github.com/xdg/cloister/internal/token"
 )
 
 // mockRegistry implements TokenRegistry for testing.
 type mockRegistry struct {
-	tokens map[string]TokenInfo
+	tokens map[string]token.Info
 }
 
 func newMockRegistry() *mockRegistry {
-	return &mockRegistry{tokens: make(map[string]TokenInfo)}
+	return &mockRegistry{tokens: make(map[string]token.Info)}
 }
 
-func (r *mockRegistry) Register(token, cloisterName string) {
-	r.tokens[token] = TokenInfo{CloisterName: cloisterName}
+func (r *mockRegistry) Register(tok, cloisterName string) {
+	r.tokens[tok] = token.Info{CloisterName: cloisterName}
 }
 
-func (r *mockRegistry) RegisterWithProject(token, cloisterName, projectName string) {
-	r.tokens[token] = TokenInfo{CloisterName: cloisterName, ProjectName: projectName}
+func (r *mockRegistry) RegisterWithProject(tok, cloisterName, projectName string) {
+	r.tokens[tok] = token.Info{CloisterName: cloisterName, ProjectName: projectName}
 }
 
-func (r *mockRegistry) RegisterFull(token, cloisterName, projectName, worktreePath string) {
-	r.tokens[token] = TokenInfo{
+func (r *mockRegistry) RegisterFull(tok, cloisterName, projectName, worktreePath string) {
+	r.tokens[tok] = token.Info{
 		CloisterName: cloisterName,
 		ProjectName:  projectName,
 		WorktreePath: worktreePath,
 	}
 }
 
-func (r *mockRegistry) Validate(token string) bool {
-	_, ok := r.tokens[token]
+func (r *mockRegistry) Validate(tok string) bool {
+	_, ok := r.tokens[tok]
 	return ok
 }
 
-func (r *mockRegistry) Revoke(token string) bool {
-	if _, ok := r.tokens[token]; ok {
-		delete(r.tokens, token)
+func (r *mockRegistry) Revoke(tok string) bool {
+	if _, ok := r.tokens[tok]; ok {
+		delete(r.tokens, tok)
 		return true
 	}
 	return false
 }
 
-func (r *mockRegistry) List() map[string]TokenInfo {
-	result := make(map[string]TokenInfo, len(r.tokens))
+func (r *mockRegistry) List() map[string]token.Info {
+	result := make(map[string]token.Info, len(r.tokens))
 	for k, v := range r.tokens {
 		result[k] = v
 	}
@@ -191,7 +193,7 @@ func TestAPIServer_RegisterToken(t *testing.T) {
 
 func TestAPIServer_RevokeToken(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["existing-token"] = TokenInfo{CloisterName: "test-cloister"}
+	registry.tokens["existing-token"] = token.Info{CloisterName: "test-cloister"}
 
 	api := NewAPIServer(":0", registry)
 	if err := api.Start(); err != nil {
@@ -251,8 +253,8 @@ func TestAPIServer_RevokeToken(t *testing.T) {
 
 func TestAPIServer_ListTokens(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["token1"] = TokenInfo{CloisterName: "cloister1"}
-	registry.tokens["token2"] = TokenInfo{CloisterName: "cloister2"}
+	registry.tokens["token1"] = token.Info{CloisterName: "cloister1"}
+	registry.tokens["token2"] = token.Info{CloisterName: "cloister2"}
 
 	api := NewAPIServer(":0", registry)
 	if err := api.Start(); err != nil {
@@ -390,13 +392,13 @@ func (m *mockSessionAllowlist) Add(_, _ string) error {
 	return nil
 }
 
-func (m *mockSessionAllowlist) Clear(token string) {
-	m.clearedTokens = append(m.clearedTokens, token)
+func (m *mockSessionAllowlist) Clear(tok string) {
+	m.clearedTokens = append(m.clearedTokens, tok)
 }
 
 func TestAPIServer_RevokeTokenClearsSessionAllowlist(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["test-token"] = TokenInfo{CloisterName: "test-cloister"}
+	registry.tokens["test-token"] = token.Info{CloisterName: "test-cloister"}
 
 	sessionAllowlist := &mockSessionAllowlist{}
 
@@ -447,7 +449,7 @@ func TestAPIServer_RevokeTokenClearsSessionAllowlist(t *testing.T) {
 
 func TestAPIServer_RevokeTokenWithNilSessionAllowlist(t *testing.T) {
 	registry := newMockRegistry()
-	registry.tokens["test-token"] = TokenInfo{CloisterName: "test-cloister"}
+	registry.tokens["test-token"] = token.Info{CloisterName: "test-cloister"}
 
 	// API server without session allowlist (nil)
 	api := NewAPIServer(":0", registry)

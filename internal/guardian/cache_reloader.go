@@ -5,12 +5,13 @@ import (
 
 	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
+	"github.com/xdg/cloister/internal/token"
 )
 
 // ProjectLister provides the list of active projects for cache reloading.
 // Satisfied by TokenRegistry and by test mocks.
 type ProjectLister interface {
-	List() map[string]TokenInfo
+	List() map[string]token.Info
 }
 
 // CacheReloader encapsulates the logic for rebuilding allowlist and denylist

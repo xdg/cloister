@@ -21,14 +21,6 @@ import (
 // This API is exposed only to the host, not to cloister containers.
 const DefaultAPIPort = 9997
 
-// TokenInfo mirrors token.Info for the interface.
-// This avoids an import cycle between guardian and token packages.
-type TokenInfo struct {
-	CloisterName string
-	ProjectName  string
-	WorktreePath string
-}
-
 // TokenRegistry defines the interface for token management operations.
 // This is implemented by token.Registry.
 type TokenRegistry interface {
@@ -37,7 +29,7 @@ type TokenRegistry interface {
 	RegisterWithProject(token, cloisterName, projectName string)
 	RegisterFull(token, cloisterName, projectName, worktreePath string)
 	Revoke(token string) bool
-	List() map[string]TokenInfo
+	List() map[string]token.Info
 	Count() int
 }
 
@@ -266,35 +258,8 @@ func (a *APIServer) writeError(w http.ResponseWriter, status int, message string
 	a.writeJSON(w, status, errorResponse{Error: message})
 }
 
-// RegistryAdapter wraps token.Registry to implement TokenRegistry and ProjectLister.
-// token.Registry methods (Validate, Register, RegisterWithProject, Revoke, Count)
-// are promoted via embedding. List() and RegisterFull() are overridden to convert
-// between token.Info and guardian.TokenInfo.
-type RegistryAdapter struct {
-	*token.Registry
-}
-
-// List returns all registered tokens as guardian.TokenInfo values.
-func (r *RegistryAdapter) List() map[string]TokenInfo {
-	tokens := r.Registry.List()
-	result := make(map[string]TokenInfo, len(tokens))
-	for k, v := range tokens {
-		result[k] = TokenInfo{
-			CloisterName: v.CloisterName,
-			ProjectName:  v.ProjectName,
-			WorktreePath: v.WorktreePath,
-		}
-	}
-	return result
-}
-
-// RegisterFull delegates to the underlying token.Registry.
-func (r *RegistryAdapter) RegisterFull(tok, cloisterName, projectName, worktreePath string) {
-	r.Registry.RegisterFull(tok, cloisterName, projectName, worktreePath)
-}
-
 // TokenLookupFromRegistry returns a TokenLookupFunc that resolves tokens
-// via the given registry, converting token.Info to TokenLookupResult.
+// via the given registry.
 func TokenLookupFromRegistry(registry *token.Registry) TokenLookupFunc {
 	return func(tok string) (TokenLookupResult, bool) {
 		info, ok := registry.Lookup(tok)
