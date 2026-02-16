@@ -93,6 +93,9 @@ RUN set -eux; \
       -o /usr/local/bin/yq; \
     chmod +x /usr/local/bin/yq
 
+# goimports (Go import formatter)
+RUN GOBIN=/usr/local/bin go install golang.org/x/tools/cmd/goimports@latest
+
 # golangci-lint (Go linter)
 RUN curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b /usr/local/bin
 
