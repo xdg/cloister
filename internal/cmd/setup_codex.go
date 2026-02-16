@@ -201,7 +201,7 @@ func saveCodexCredentialsToConfig(cmd *cobra.Command, apiKey string, fullAuto bo
 	codexCfg := cfg.Agents["codex"]
 
 	// Update auth settings
-	codexCfg.AuthMethod = "api_key"
+	codexCfg.AuthMethod = string(config.AuthMethodAPIKey)
 	codexCfg.APIKey = apiKey
 	codexCfg.Token = "" // Clear any token field (not used by Codex)
 

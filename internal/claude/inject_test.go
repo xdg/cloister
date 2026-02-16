@@ -150,10 +150,10 @@ func TestConstants(t *testing.T) {
 	if EnvAnthropicAPIKey != "ANTHROPIC_API_KEY" {
 		t.Errorf("unexpected EnvAnthropicAPIKey: %q", EnvAnthropicAPIKey)
 	}
-	if AuthMethodToken != "token" {
-		t.Errorf("unexpected AuthMethodToken: %q", AuthMethodToken)
+	if config.AuthMethodToken != "token" {
+		t.Errorf("unexpected config.AuthMethodToken: %q", config.AuthMethodToken)
 	}
-	if AuthMethodAPIKey != "api_key" {
-		t.Errorf("unexpected AuthMethodAPIKey: %q", AuthMethodAPIKey)
+	if config.AuthMethodAPIKey != "api_key" {
+		t.Errorf("unexpected config.AuthMethodAPIKey: %q", config.AuthMethodAPIKey)
 	}
 }

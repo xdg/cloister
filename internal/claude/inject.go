@@ -14,12 +14,6 @@ const (
 	EnvAnthropicAPIKey  = "ANTHROPIC_API_KEY"       //nolint:gosec // G101: not a credential, just the env var name
 )
 
-// Auth method constants matching config.AgentConfig.AuthMethod values.
-const (
-	AuthMethodToken  = "token"
-	AuthMethodAPIKey = "api_key"
-)
-
 // ErrNoAuthMethod indicates that no authentication method is configured.
 var ErrNoAuthMethod = errors.New("no authentication method configured for Claude: run `cloister setup claude`")
 
@@ -69,9 +63,9 @@ func (i *Injector) InjectCredentials(cfg *config.AgentConfig) (*InjectionConfig,
 	}
 
 	switch cfg.AuthMethod {
-	case AuthMethodToken:
+	case string(config.AuthMethodToken):
 		return i.injectToken(cfg, result)
-	case AuthMethodAPIKey:
+	case string(config.AuthMethodAPIKey):
 		return i.injectAPIKey(cfg, result)
 	default:
 		return nil, fmt.Errorf("%w: %q", ErrInvalidAuthMethod, cfg.AuthMethod)

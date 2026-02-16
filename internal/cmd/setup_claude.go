@@ -12,30 +12,16 @@ import (
 	"github.com/xdg/cloister/internal/term"
 )
 
-// AuthMethod represents the authentication method selected by the user.
-type AuthMethod int
-
-const (
-	// AuthMethodToken uses a long-lived OAuth token.
-	AuthMethodToken AuthMethod = iota
-	// AuthMethodAPIKey uses an Anthropic API key.
-	AuthMethodAPIKey
-)
-
-// String returns the config value for the auth method.
-func (m AuthMethod) String() string {
-	switch m {
-	case AuthMethodToken:
-		return "token"
-	case AuthMethodAPIKey:
-		return "api_key"
-	default:
-		return "unknown"
-	}
+// authMethodOptions maps prompt selection indices to config.AuthMethod values.
+// The order must match authMethodLabels.
+var authMethodOptions = []config.AuthMethod{
+	config.AuthMethodToken,
+	config.AuthMethodAPIKey,
 }
 
-// authMethodOptions are the options displayed to the user.
-var authMethodOptions = []string{
+// authMethodLabels are the options displayed to the user.
+// The order must match authMethodOptions.
+var authMethodLabels = []string{
 	"Long-lived OAuth token (from `claude setup-token`) (recommended)",
 	"API key (from console.anthropic.com)",
 }
@@ -141,9 +127,9 @@ func getSetupClaudeConfigPath() func() string {
 
 // credentialResult holds the credential data collected during setup.
 type credentialResult struct {
-	authMethod AuthMethod
-	token      string // for AuthMethodToken
-	apiKey     string // for AuthMethodAPIKey
+	authMethod config.AuthMethod
+	token      string // for config.AuthMethodToken
+	apiKey     string // for config.AuthMethodAPIKey
 }
 
 // hasExistingCredentials checks if the config already has Claude credentials configured.
@@ -184,29 +170,29 @@ func runSetupClaude(cmd *cobra.Command, _ []string) error {
 	p := getSetupClaudePrompter(cmd)
 
 	// Prompt for authentication method
-	selection, err := p.Prompt("Select authentication method:", authMethodOptions, 0)
+	selection, err := p.Prompt("Select authentication method:", authMethodLabels, 0)
 	if err != nil {
 		return fmt.Errorf("failed to get authentication method: %w", err)
 	}
 
-	authMethod := AuthMethod(selection)
+	authMethod := authMethodOptions[selection]
 
 	// Display selected method
-	term.Printf("\nSelected: %s\n", authMethodOptions[selection])
-	term.Printf("Auth method: %s\n", authMethod.String())
+	term.Printf("\nSelected: %s\n", authMethodLabels[selection])
+	term.Printf("Auth method: %s\n", authMethod)
 
 	// Handle credential extraction based on auth method
 	var creds credentialResult
 	creds.authMethod = authMethod
 
 	switch authMethod {
-	case AuthMethodToken:
+	case config.AuthMethodToken:
 		token, err := handleTokenInput(cmd)
 		if err != nil {
 			return err
 		}
 		creds.token = token
-	case AuthMethodAPIKey:
+	case config.AuthMethodAPIKey:
 		apiKey, err := handleAPIKeyInput(cmd)
 		if err != nil {
 			return err
@@ -253,7 +239,7 @@ func saveCredentialsToConfig(_ *cobra.Command, creds credentialResult, skipPerms
 	claudeCfg := cfg.Agents["claude"]
 
 	// Update auth method
-	claudeCfg.AuthMethod = creds.authMethod.String()
+	claudeCfg.AuthMethod = string(creds.authMethod)
 
 	// Clear any previous credentials when changing auth method
 	claudeCfg.Token = ""
@@ -261,9 +247,9 @@ func saveCredentialsToConfig(_ *cobra.Command, creds credentialResult, skipPerms
 
 	// Set credentials based on auth method
 	switch creds.authMethod {
-	case AuthMethodToken:
+	case config.AuthMethodToken:
 		claudeCfg.Token = creds.token
-	case AuthMethodAPIKey:
+	case config.AuthMethodAPIKey:
 		claudeCfg.APIKey = creds.apiKey
 	}
 

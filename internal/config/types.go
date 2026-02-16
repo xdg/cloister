@@ -83,6 +83,16 @@ type DefaultsConfig struct {
 	Agent string `yaml:"agent,omitempty"`
 }
 
+// AuthMethod represents the authentication method for an AI agent.
+type AuthMethod string
+
+const (
+	// AuthMethodToken uses a long-lived OAuth token.
+	AuthMethodToken AuthMethod = "token"
+	// AuthMethodAPIKey uses a provider API key.
+	AuthMethodAPIKey AuthMethod = "api_key"
+)
+
 // LogConfig contains logging settings.
 type LogConfig struct {
 	File           string `yaml:"file,omitempty"`

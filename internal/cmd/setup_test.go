@@ -229,41 +229,34 @@ func (e *testError) Error() string {
 	return e.msg
 }
 
-func TestAuthMethodOptions_ContainsExpectedChoices(t *testing.T) {
-	if len(authMethodOptions) != 2 {
-		t.Errorf("expected 2 auth method options, got %d", len(authMethodOptions))
+func TestAuthMethodLabels_ContainsExpectedChoices(t *testing.T) {
+	if len(authMethodLabels) != 2 {
+		t.Errorf("expected 2 auth method labels, got %d", len(authMethodLabels))
 	}
 
 	// Verify first option mentions OAuth/token and recommended
-	if !strings.Contains(strings.ToLower(authMethodOptions[0]), "token") {
+	if !strings.Contains(strings.ToLower(authMethodLabels[0]), "token") {
 		t.Error("first option should mention 'token'")
 	}
-	if !strings.Contains(authMethodOptions[0], "recommended") {
+	if !strings.Contains(authMethodLabels[0], "recommended") {
 		t.Error("first option should be marked as recommended")
 	}
 
 	// Verify second option mentions API key
-	if !strings.Contains(strings.ToLower(authMethodOptions[1]), "api key") {
+	if !strings.Contains(strings.ToLower(authMethodLabels[1]), "api key") {
 		t.Error("second option should mention 'API key'")
 	}
 }
 
-func TestAuthMethod_String(t *testing.T) {
-	tests := []struct {
-		method AuthMethod
-		want   string
-	}{
-		{AuthMethodToken, "token"},
-		{AuthMethodAPIKey, "api_key"},
-		{AuthMethod(99), "unknown"},
+func TestAuthMethodOptions_MatchLabels(t *testing.T) {
+	if len(authMethodOptions) != len(authMethodLabels) {
+		t.Fatalf("authMethodOptions length %d != authMethodLabels length %d", len(authMethodOptions), len(authMethodLabels))
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.want, func(t *testing.T) {
-			if got := tt.method.String(); got != tt.want {
-				t.Errorf("AuthMethod(%d).String() = %q, want %q", tt.method, got, tt.want)
-			}
-		})
+	if authMethodOptions[0] != config.AuthMethodToken {
+		t.Errorf("authMethodOptions[0] = %q, want %q", authMethodOptions[0], config.AuthMethodToken)
+	}
+	if authMethodOptions[1] != config.AuthMethodAPIKey {
+		t.Errorf("authMethodOptions[1] = %q, want %q", authMethodOptions[1], config.AuthMethodAPIKey)
 	}
 }
 

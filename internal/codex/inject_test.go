@@ -93,7 +93,7 @@ func TestConstants(t *testing.T) {
 	if EnvOpenAIAPIKey != "OPENAI_API_KEY" {
 		t.Errorf("unexpected EnvOpenAIAPIKey: %q", EnvOpenAIAPIKey)
 	}
-	if AuthMethodAPIKey != "api_key" {
-		t.Errorf("unexpected AuthMethodAPIKey: %q", AuthMethodAPIKey)
+	if config.AuthMethodAPIKey != "api_key" {
+		t.Errorf("unexpected config.AuthMethodAPIKey: %q", config.AuthMethodAPIKey)
 	}
 }

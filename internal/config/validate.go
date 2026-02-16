@@ -18,8 +18,8 @@ var validLogLevels = map[string]bool{
 
 // validAuthMethods defines the allowed auth_method values for agent configs.
 var validAuthMethods = map[string]bool{
-	"token":   true,
-	"api_key": true,
+	string(AuthMethodToken):  true,
+	string(AuthMethodAPIKey): true,
 }
 
 // ValidateGlobalConfig validates a parsed GlobalConfig, checking that all
@@ -201,11 +201,11 @@ func ValidateAgentConfig(cfg *AgentConfig, fieldPrefix string) error {
 
 	// Validate required fields based on auth_method
 	switch cfg.AuthMethod {
-	case "token":
+	case string(AuthMethodToken):
 		if cfg.Token == "" {
 			return fmt.Errorf("%s.token: required when auth_method is \"token\"", fieldPrefix)
 		}
-	case "api_key":
+	case string(AuthMethodAPIKey):
 		if cfg.APIKey == "" {
 			return fmt.Errorf("%s.api_key: required when auth_method is \"api_key\"", fieldPrefix)
 		}

@@ -157,12 +157,12 @@ Execute moves sequentially. Each move is one atomic commit.
 
 ### 3.2 Move M2: Auth method types to `config`
 
-- [ ] Define `AuthMethod` type, `AuthMethodAPIKey`, `AuthMethodToken` in `config/`
-- [ ] Update `claude/inject.go` to use `config.AuthMethodAPIKey`, `config.AuthMethodToken`
-- [ ] Update `codex/inject.go` to use `config.AuthMethodAPIKey`
-- [ ] Update `cmd/` to use `config.AuthMethod` type and constants
-- [ ] Remove old auth method definitions from `claude`, `codex`, `cmd`
-- [ ] Verify: `go build ./...`, `make test`, `make lint`
+- [x] Define `AuthMethod` type, `AuthMethodAPIKey`, `AuthMethodToken` in `config/`
+- [x] Update `claude/inject.go` to use `config.AuthMethodAPIKey`, `config.AuthMethodToken`
+- [x] Update `codex/inject.go` to use `config.AuthMethodAPIKey`
+- [x] Update `cmd/` to use `config.AuthMethod` type and constants
+- [x] Remove old auth method definitions from `claude`, `codex`, `cmd`
+- [x] Verify: `go build ./...`, `make test`, `make lint`
 
 ### 3.3 Move M3: Credential env vars from `token` to `cloister`
 

@@ -10,9 +10,6 @@ import (
 // EnvOpenAIAPIKey is the environment variable name for credential injection.
 const EnvOpenAIAPIKey = "OPENAI_API_KEY" //nolint:gosec // G101: not a credential, just the env var name
 
-// AuthMethodAPIKey is the auth method constant matching config.AgentConfig.AuthMethod value.
-const AuthMethodAPIKey = "api_key"
-
 // ErrNoAuthMethod indicates that no authentication method is configured.
 var ErrNoAuthMethod = errors.New("no authentication method configured for Codex: run `cloister setup codex`")
 
