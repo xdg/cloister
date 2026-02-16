@@ -120,9 +120,6 @@ func FindFreePort() (int, error) {
 	return addr.Port, nil
 }
 
-// DefaultTokenAPIPort is the default port for the guardian token management API.
-const DefaultTokenAPIPort = 9997
-
 // DefaultRequestPort is the default port for the guardian request server.
 const DefaultRequestPort = 9998
 
@@ -134,7 +131,7 @@ const DefaultApprovalPort = 9999
 // For test instances, allocates dynamic ports.
 func Ports() (tokenPort, approvalPort int, err error) {
 	if InstanceID() == "" {
-		return DefaultTokenAPIPort, DefaultApprovalPort, nil
+		return DefaultAPIPort, DefaultApprovalPort, nil
 	}
 	tokenPort, err = FindFreePort()
 	if err != nil {

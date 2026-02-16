@@ -507,13 +507,13 @@ const DefaultAPIAddr = "127.0.0.1:9997"
 // For test instances, reads from executor state.
 func APIPort() int {
 	if InstanceID() == "" {
-		return DefaultTokenAPIPort
+		return DefaultAPIPort
 	}
 	// For test instances, read from executor state
 	state, err := executor.LoadDaemonState()
 	if err != nil || state == nil || state.TokenAPIPort == 0 {
 		// Fallback to default if state not available
-		return DefaultTokenAPIPort
+		return DefaultAPIPort
 	}
 	return state.TokenAPIPort
 }

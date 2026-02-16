@@ -79,8 +79,8 @@ func TestPorts_Production(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Ports() error: %v", err)
 	}
-	if tokenPort != DefaultTokenAPIPort {
-		t.Errorf("tokenPort = %d, want %d", tokenPort, DefaultTokenAPIPort)
+	if tokenPort != DefaultAPIPort {
+		t.Errorf("tokenPort = %d, want %d", tokenPort, DefaultAPIPort)
 	}
 	if approvalPort != DefaultApprovalPort {
 		t.Errorf("approvalPort = %d, want %d", approvalPort, DefaultApprovalPort)

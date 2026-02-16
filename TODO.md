@@ -173,9 +173,9 @@ Execute moves sequentially. Each move is one atomic commit.
 
 ### 3.4 Move M4: Consolidate API port constants in `guardian`
 
-- [ ] Replace `DefaultTokenAPIPort` with `DefaultAPIPort` (or vice versa) in `guardian/`
-- [ ] Update all references to the removed name
-- [ ] Verify: `go build ./...`, `make test`, `make lint`
+- [x] Replace `DefaultTokenAPIPort` with `DefaultAPIPort` (or vice versa) in `guardian/`
+- [x] Update all references to the removed name
+- [x] Verify: `go build ./...`, `make test`, `make lint`
 
 ### 3.5 Move M5: Remove duplicate `DefaultRequestPort` from `guardian`
 
