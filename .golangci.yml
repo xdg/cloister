@@ -255,7 +255,6 @@ linters:
     staticcheck:
       checks:
         - "all"
-        - "-SA1019"  # Deprecated usage — useful but noisy during migrations
 
     misspell:
       locale: US

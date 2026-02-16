@@ -91,7 +91,7 @@ func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTest
 
 	// Use real token.Registry (same as production in internal/cmd/guardian.go).
 	registry := token.NewRegistry()
-	registry.RegisterWithProject(tok, cloisterName, projectName)
+	registry.RegisterFull(tok, cloisterName, projectName, "")
 
 	// Load production default config for static allow/deny entries.
 	cfg := config.DefaultGlobalConfig()

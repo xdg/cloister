@@ -54,7 +54,7 @@ func TestNetworkIsolation_RequestServerReachable(t *testing.T) {
 
 	// Register a test token with the guardian
 	testToken := fmt.Sprintf("test-token-%d", time.Now().UnixNano())
-	if err := guardian.RegisterToken(testToken, containerName, "test-project"); err != nil {
+	if err := guardian.RegisterTokenFull(testToken, containerName, "test-project", ""); err != nil {
 		t.Fatalf("Failed to register token: %v", err)
 	}
 	t.Cleanup(func() {

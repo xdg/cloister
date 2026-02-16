@@ -71,7 +71,7 @@ func (defaultGuardianManager) EnsureRunning() error {
 
 // RegisterToken delegates to the real guardian package.
 func (defaultGuardianManager) RegisterToken(tok, cloisterName, projectName string) error {
-	return guardian.RegisterToken(tok, cloisterName, projectName)
+	return guardian.RegisterTokenFull(tok, cloisterName, projectName, "")
 }
 
 // RegisterTokenFull delegates to the real guardian package.

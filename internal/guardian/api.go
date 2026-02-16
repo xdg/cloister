@@ -209,24 +209,24 @@ func (a *APIServer) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token := r.PathValue("token")
-	if token == "" {
+	tok := r.PathValue("token")
+	if tok == "" {
 		a.writeError(w, http.StatusBadRequest, "token is required")
 		return
 	}
 
 	// URL decode the token in case it contains special characters
 	// (tokens are hex-encoded so this shouldn't be necessary, but be safe)
-	token = strings.TrimSpace(token)
+	tok = strings.TrimSpace(tok)
 
-	if !a.Registry.Revoke(token) {
+	if !a.Registry.Revoke(tok) {
 		a.writeError(w, http.StatusNotFound, "token not found")
 		return
 	}
 
 	// Clear session-approved domains for this token to prevent memory leak
 	if a.SessionAllowlist != nil {
-		a.SessionAllowlist.Clear(token)
+		a.SessionAllowlist.Clear(tok)
 	}
 
 	a.writeJSON(w, http.StatusOK, statusResponse{Status: "revoked"})

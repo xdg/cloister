@@ -3,8 +3,8 @@ package approval
 import (
 	"bufio"
 	"context"
-	"io"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -358,7 +358,7 @@ func TestServer_HandleEvents_ClientDisconnect(t *testing.T) {
 		if err == nil {
 			// Signal that we're connected and read at least the headers
 			close(connected)
-			// Block reading from body to keep connection open until context is cancelled
+			// Block reading from body to keep connection open until context is canceled
 			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 		}

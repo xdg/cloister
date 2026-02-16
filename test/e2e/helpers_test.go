@@ -54,7 +54,7 @@ func createAuthenticatedTestContainer(t *testing.T, suffix string) testContainer
 
 	// Register a token for this container
 	token := fmt.Sprintf("test-token-%s-%d", suffix, time.Now().UnixNano())
-	if err := guardian.RegisterToken(token, containerName, "test-project"); err != nil {
+	if err := guardian.RegisterTokenFull(token, containerName, "test-project", ""); err != nil {
 		t.Fatalf("Failed to register token: %v", err)
 	}
 	t.Cleanup(func() {
