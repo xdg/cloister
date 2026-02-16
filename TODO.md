@@ -186,15 +186,9 @@ Execute moves sequentially. Each move is one atomic commit.
 
 ### 3.6 Final verification
 
-- [ ] Full `make test` pass
-- [ ] Full `make lint` pass (0 issues)
-- [ ] Grep for any remaining "import cycle" or "mirrors" comments that are now stale
-
-### 3.2 Final verification
-
-- [ ] Full `make test` pass
-- [ ] Full `make lint` pass (0 issues)
-- [ ] Grep for any remaining "import cycle" or "mirrors" comments that are now stale
+- [x] Full `make test` pass
+- [x] Full `make lint` pass (0 issues)
+- [x] Grep for any remaining "import cycle" or "mirrors" comments that are now stale — all are legitimate, none stale
 
 ---
 

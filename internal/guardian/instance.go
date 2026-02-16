@@ -120,7 +120,7 @@ func FindFreePort() (int, error) {
 	return addr.Port, nil
 }
 
-// DefaultRequestPort is the default port for the guardian request server.
+// DefaultRequestPort is the default port for the hostexec request server.
 const DefaultRequestPort = 9998
 
 // DefaultApprovalPort is the default port for the guardian approval web UI.
