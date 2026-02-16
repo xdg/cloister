@@ -3,8 +3,6 @@ package container
 
 import (
 	"fmt"
-
-	"github.com/xdg/cloister/internal/version"
 )
 
 // DefaultWorkDir is the working directory inside the container where
@@ -48,10 +46,10 @@ func (c *Config) ContainerName() string {
 	return "cloister-" + SanitizeName(c.Project)
 }
 
-// ImageName returns the Docker image to use, defaulting to version.DefaultImage().
+// ImageName returns the Docker image to use, defaulting to DefaultImage().
 func (c *Config) ImageName() string {
 	if c.Image == "" {
-		return version.DefaultImage()
+		return DefaultImage()
 	}
 	return c.Image
 }

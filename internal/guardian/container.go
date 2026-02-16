@@ -284,6 +284,20 @@ func resolveGuardianPorts(opts StartOptions) (tokenAPIPort, approvalPort int, er
 	return tokenAPIPort, approvalPort, nil
 }
 
+// guardianImage returns the Docker image to use for the guardian container.
+// This duplicates container.DefaultImage logic to avoid an import cycle
+// (guardian -> container -> testutil -> guardian in integration tests).
+func guardianImage() string {
+	if img := os.Getenv("CLOISTER_IMAGE"); img != "" {
+		return img
+	}
+	const registry = "ghcr.io/xdg/cloister"
+	if version.Version == "dev" || strings.Contains(version.Version, "dev") {
+		return registry + ":latest"
+	}
+	return registry + ":" + version.Version
+}
+
 // buildGuardianRunArgs builds the docker run arguments for the guardian container.
 func buildGuardianRunArgs(opts StartOptions, tokenAPIPort, approvalPort int, dirs hostDirs) []string {
 	args := []string{
@@ -305,7 +319,7 @@ func buildGuardianRunArgs(opts StartOptions, tokenAPIPort, approvalPort int, dir
 		args = append(args, "-e", SharedSecretEnvVar+"="+opts.SharedSecret)
 	}
 
-	args = append(args, version.DefaultImage(), "cloister", "guardian", "run")
+	args = append(args, guardianImage(), "cloister", "guardian", "run")
 	return args
 }
 

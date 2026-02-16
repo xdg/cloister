@@ -17,7 +17,6 @@ import (
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
 	"github.com/xdg/cloister/internal/testutil"
-	"github.com/xdg/cloister/internal/version"
 )
 
 // TestCloisterLifecycle combines integration tests that require the guardian.
@@ -41,7 +40,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       version.DefaultImage(),
+			Image:       container.DefaultImage(),
 		}
 
 		containerID, tok, err := Start(opts)
@@ -112,7 +111,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       version.DefaultImage(),
+			Image:       container.DefaultImage(),
 		}
 
 		containerID, tok, err := Start(opts)
@@ -190,7 +189,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       version.DefaultImage(),
+			Image:       container.DefaultImage(),
 		}
 
 		_, tok, err := Start(opts)
@@ -237,7 +236,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       version.DefaultImage(),
+			Image:       container.DefaultImage(),
 		}
 
 		containerID, tok, err := Start(opts)
@@ -290,7 +289,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       version.DefaultImage(),
+			Image:       container.DefaultImage(),
 		}
 
 		_, _, err = Start(opts)
@@ -338,7 +337,7 @@ func TestCloisterLifecycle(t *testing.T) {
 			ProjectPath: tmpDir,
 			ProjectName: projectName,
 			BranchName:  branchName,
-			Image:       version.DefaultImage(),
+			Image:       container.DefaultImage(),
 		}
 
 		// First start - creates container and token T1
@@ -417,10 +416,10 @@ func TestWriteFileToContainerWithOwner(t *testing.T) {
 	// Create container using cloister-default image which has /home/cloister
 	_, err := docker.Run("create",
 		"--name", containerName,
-		version.DefaultImage(),
+		container.DefaultImage(),
 		"sleep", "infinity")
 	if err != nil {
-		t.Skipf("Could not create container with %s: %v", version.DefaultImage(), err)
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage(), err)
 	}
 
 	// Start the container first - tar piping requires a running container
@@ -480,10 +479,10 @@ func TestCopyToContainerWithOwner(t *testing.T) {
 	// Create container using cloister-default image
 	_, err = docker.Run("create",
 		"--name", containerName,
-		version.DefaultImage(),
+		container.DefaultImage(),
 		"sleep", "infinity")
 	if err != nil {
-		t.Skipf("Could not create container with %s: %v", version.DefaultImage(), err)
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage(), err)
 	}
 
 	// Start the container first - tar piping requires a running container
@@ -574,10 +573,10 @@ func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
 	_, err = docker.Run("create",
 		"--name", containerName,
 		"-v", tmpDir+":/work",
-		version.DefaultImage(),
+		container.DefaultImage(),
 		"sleep", "infinity")
 	if err != nil {
-		t.Skipf("Could not create container with %s: %v", version.DefaultImage(), err)
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage(), err)
 	}
 
 	// Start the container first - injectUserSettings uses tar piping

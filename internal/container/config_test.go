@@ -2,8 +2,6 @@ package container
 
 import (
 	"testing"
-
-	"github.com/xdg/cloister/internal/version"
 )
 
 func TestConfig_ContainerName(t *testing.T) {
@@ -56,7 +54,7 @@ func TestConfig_ImageName(t *testing.T) {
 		{
 			name:     "default when empty",
 			image:    "",
-			expected: version.DefaultImage(),
+			expected: DefaultImage(),
 		},
 		{
 			name:     "custom image",
@@ -173,7 +171,7 @@ func TestConfig_BuildRunArgs_MinimalConfig(t *testing.T) {
 	}
 
 	// Should use default image
-	if args[len(args)-1] != version.DefaultImage() {
+	if args[len(args)-1] != DefaultImage() {
 		t.Errorf("expected default image, got %s", args[len(args)-1])
 	}
 
@@ -243,7 +241,7 @@ func TestConfig_BuildRunArgs_CustomUID(t *testing.T) {
 }
 
 func TestConstants(t *testing.T) {
-	// DefaultImage is now provided by version.DefaultImage() and tested in internal/version
+	// DefaultImage is tested in image_test.go
 	if DefaultWorkDir != "/work" {
 		t.Errorf("DefaultWorkDir = %q, want /work", DefaultWorkDir)
 	}

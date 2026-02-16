@@ -150,10 +150,10 @@ Execute moves sequentially. Each move is one atomic commit.
 
 ### 3.1 Move M1: Image constants from `version` to `container`
 
-- [ ] Move `DefaultRegistry`, `ImageEnvVar`, `DefaultImage()` from `version/version.go` to `container/`
-- [ ] Update all import sites to use `container.DefaultRegistry`, `container.ImageEnvVar`, `container.DefaultImage()`
-- [ ] Remove moved symbols from `version/version.go`
-- [ ] Verify: `go build ./...`, `make test`, `make lint`
+- [x] Move `DefaultRegistry`, `ImageEnvVar`, `DefaultImage()` from `version/version.go` to `container/`
+- [x] Update all import sites to use `container.DefaultRegistry`, `container.ImageEnvVar`, `container.DefaultImage()`
+- [x] Remove moved symbols from `version/version.go`
+- [x] Verify: `go build ./...`, `make test`, `make lint`
 
 ### 3.2 Move M2: Auth method types to `config`
 

@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/xdg/cloister/internal/config"
+	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/testutil"
-	"github.com/xdg/cloister/internal/version"
 )
 
 func TestClaudeAgent_SkipPerms_False_NoAlias(t *testing.T) {
@@ -21,10 +21,10 @@ func TestClaudeAgent_SkipPerms_False_NoAlias(t *testing.T) {
 	// Create container using cloister-default image which has /home/cloister
 	_, err := docker.Run("create",
 		"--name", containerName,
-		version.DefaultImage(),
+		container.DefaultImage(),
 		"sleep", "infinity")
 	if err != nil {
-		t.Skipf("Could not create container with %s: %v", version.DefaultImage(), err)
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage(), err)
 	}
 
 	// Start the container
@@ -87,10 +87,10 @@ func TestClaudeAgent_SkipPerms_Nil_HasAlias(t *testing.T) {
 	// Create container using cloister-default image which has /home/cloister
 	_, err := docker.Run("create",
 		"--name", containerName,
-		version.DefaultImage(),
+		container.DefaultImage(),
 		"sleep", "infinity")
 	if err != nil {
-		t.Skipf("Could not create container with %s: %v", version.DefaultImage(), err)
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage(), err)
 	}
 
 	// Start the container
@@ -152,10 +152,10 @@ func TestClaudeAgent_RulesFile(t *testing.T) {
 	// Create container using cloister-default image which has /home/cloister
 	_, err := docker.Run("create",
 		"--name", containerName,
-		version.DefaultImage(),
+		container.DefaultImage(),
 		"sleep", "infinity")
 	if err != nil {
-		t.Skipf("Could not create container with %s: %v", version.DefaultImage(), err)
+		t.Skipf("Could not create container with %s: %v", container.DefaultImage(), err)
 	}
 
 	// Start the container
