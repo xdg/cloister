@@ -129,11 +129,12 @@ the rest of the package, suggesting the file belongs elsewhere.
 > | M2 | `AuthMethod` type, `AuthMethodAPIKey`, `AuthMethodToken` | `cmd` + `claude` + `codex` | `config` | Three packages define auth method concepts; unify (Pass C + E) |
 > | M3 | `CredentialEnvVars`, `CredentialEnvVarsUsed` | `token` | `cloister` (or inline) | Only consumer is `cloister.go`; deprecated passthrough (Pass B + E) |
 > | M4 | `DefaultTokenAPIPort` / `DefaultAPIPort` | `guardian` (both) | `guardian` (one name) | Same-package redundancy, consolidate to `DefaultAPIPort` (Pass C) |
-> | M5 | `DefaultRequestPort` | `guardian` | remove; use `guardian/request` | No import cycle; sub-package should own its port (Pass C) |
+> | ~~M5~~ | ~~`DefaultRequestPort`~~ | ~~`guardian`~~ | ~~remove; use `guardian/request`~~ | **Cancelled**: test-time import cycle discovered (`guardian` → `request` → `testutil` → `guardian`) |
 >
 > **Leave as-is (justified):**
 > - `InstanceIDEnvVar` in `guardian`/`executor` — real import cycle, consistency test exists
 > - `DefaultApprovalPort` in `guardian`/`guardian/approval` — real import cycle
+> - `DefaultRequestPort` in `guardian`/`guardian/request` — real test-time import cycle (discovered during M5 attempt)
 > - `token/token.go` (Generate/TokenBytes) — core token concepts, no mismatch
 > - `agent.ContainerUID`/`ContainerGID` — mild mismatch but pragmatic; only used in agent setup
 > - `testutil/http.go` (NoProxyClient) — testutil is a reasonable shared location
@@ -179,9 +180,9 @@ Execute moves sequentially. Each move is one atomic commit.
 
 ### 3.5 Move M5: Remove duplicate `DefaultRequestPort` from `guardian`
 
-- [ ] Remove `DefaultRequestPort` from `guardian/instance.go`
-- [ ] Update references to use `request.DefaultRequestPort` (adding import if needed)
-- [ ] Verify: `go build ./...`, `make test`, `make lint`
+- [x] ~~Remove `DefaultRequestPort` from `guardian/instance.go`~~ — **Cancelled**: test-time import cycle (`guardian` → `guardian/request` → `testutil` → `guardian`) prevents this. Duplication is justified, same pattern as `DefaultApprovalPort` and `InstanceIDEnvVar`.
+- [x] ~~Update references to use `request.DefaultRequestPort`~~ — N/A (see above)
+- [x] Verify: `go build ./...`, `make test`, `make lint` — confirmed cycle exists
 
 ### 3.6 Final verification
 
