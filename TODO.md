@@ -97,9 +97,23 @@ the rest of the package, suggesting the file belongs elsewhere.
 
 ### 2.1 Pass E: Domain mismatch via go doc
 
-- [ ] Run `go doc` for each `internal/` package
-- [ ] Flag exported symbols whose names or purposes don't fit the package's domain
-- [ ] Cross-reference with Phase 1 findings
+- [x] Run `go doc` for each `internal/` package
+- [x] Flag exported symbols whose names or purposes don't fit the package's domain
+- [x] Cross-reference with Phase 1 findings
+
+> **Findings — new mismatches:**
+> - `version.DefaultRegistry`, `version.ImageEnvVar`, `version.DefaultImage()` → move to `container` (image selection ≠ version info)
+> - `cmd.AuthMethod` type + constants → move to `config` (third location for auth method concept, alongside `claude` and `codex`)
+> - `agent.ContainerUID`/`ContainerGID` → consider moving to `container` alongside `DefaultUID`
+> - `executor` package: half its surface is daemon state management — cohesion concern for future
+>
+> **Phase 1 findings confirmed:**
+> - `AuthMethodAPIKey` duplication now known to span 3 packages (`cmd`, `claude`, `codex`)
+> - `DefaultTokenAPIPort`/`DefaultAPIPort` redundancy in `guardian` confirmed
+> - `DefaultRequestPort` consolidatable between `guardian` and `guardian/request`
+> - `token.CredentialEnvVars` confirmed as belonging in `cloister`
+> - `token` package weak cohesion confirmed
+> - `guardian` package (60+ exported symbols) confirmed as decomposition candidate
 
 ### 2.2 Consolidate and prioritize
 
