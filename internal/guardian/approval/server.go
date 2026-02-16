@@ -347,6 +347,15 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	// Flush headers immediately so client knows connection is established
 	flusher.Flush()
 
+	// Send an initial heartbeat so the browser fires onopen.
+	// Header flush alone is insufficient to trigger EventSource.onopen;
+	// the browser needs actual SSE data on the stream.
+	initHeartbeat := Event{Type: EventHeartbeat, Data: ""}
+	if _, err := fmt.Fprint(w, FormatSSE(initHeartbeat)); err != nil {
+		return
+	}
+	flusher.Flush()
+
 	// Start heartbeat ticker to keep connection alive
 	ticker := time.NewTicker(HeartbeatInterval)
 	defer ticker.Stop()

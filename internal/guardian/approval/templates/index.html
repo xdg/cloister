@@ -487,44 +487,69 @@
                 onRequestResolved();
             }
 
-            // --- SSE event handling ---
+            // --- SSE event handling with manual reconnect ---
 
             initPendingCount();
-            var eventSource = new EventSource('/events');
+            var eventSource = null;
+            var reconnectTimer = null;
+            var RECONNECT_INTERVAL = 2000; // 2 seconds, constant
 
-            eventSource.addEventListener('request-added', function(e) {
-                addToList('request-list', 'queue-empty', e.data);
-                var info = extractInfo(e.data);
-                notifyRequest('Cloister: Approval Requested', info.cloister + ': ' + info.detail.substring(0, 80));
-            });
-
-            eventSource.addEventListener('request-removed', function(e) {
-                var data = JSON.parse(e.data);
-                removeFromList('request-list', 'queue-empty', 'No pending requests', data.id);
-            });
-
-            eventSource.addEventListener('domain-request-added', function(e) {
-                addToList('request-list', 'queue-empty', e.data);
-                var info = extractInfo(e.data);
-                notifyRequest('Cloister: Domain Approval Requested', info.cloister + ': ' + info.detail);
-            });
-
-            eventSource.addEventListener('domain-request-removed', function(e) {
-                var data = JSON.parse(e.data);
-                removeFromList('request-list', 'queue-empty', 'No pending requests', data.id);
-            });
-
-            eventSource.onerror = function() {
+            function showReconnecting() {
                 var banner = document.getElementById('connection-banner');
                 banner.textContent = 'Connection lost. Reconnecting...';
                 banner.className = 'connection-banner reconnecting';
                 banner.style.display = 'block';
-            };
+            }
 
-            eventSource.onopen = function() {
+            function hideReconnecting() {
                 var banner = document.getElementById('connection-banner');
                 banner.style.display = 'none';
-            };
+            }
+
+            function connectSSE() {
+                if (eventSource) {
+                    eventSource.close();
+                }
+
+                eventSource = new EventSource('/events');
+
+                eventSource.addEventListener('request-added', function(e) {
+                    addToList('request-list', 'queue-empty', e.data);
+                    var info = extractInfo(e.data);
+                    notifyRequest('Cloister: Approval Requested', info.cloister + ': ' + info.detail.substring(0, 80));
+                });
+
+                eventSource.addEventListener('request-removed', function(e) {
+                    var data = JSON.parse(e.data);
+                    removeFromList('request-list', 'queue-empty', 'No pending requests', data.id);
+                });
+
+                eventSource.addEventListener('domain-request-added', function(e) {
+                    addToList('request-list', 'queue-empty', e.data);
+                    var info = extractInfo(e.data);
+                    notifyRequest('Cloister: Domain Approval Requested', info.cloister + ': ' + info.detail);
+                });
+
+                eventSource.addEventListener('domain-request-removed', function(e) {
+                    var data = JSON.parse(e.data);
+                    removeFromList('request-list', 'queue-empty', 'No pending requests', data.id);
+                });
+
+                eventSource.onopen = function() {
+                    hideReconnecting();
+                };
+
+                eventSource.onerror = function() {
+                    showReconnecting();
+                    // Close and schedule manual reconnect instead of
+                    // relying on browser's exponential backoff.
+                    eventSource.close();
+                    if (reconnectTimer) clearTimeout(reconnectTimer);
+                    reconnectTimer = setTimeout(connectSSE, RECONNECT_INTERVAL);
+                };
+            }
+
+            connectSSE();
 
             // Wildcard confirmation modal functions
             window.showWildcardModal = function(pattern, scope, onConfirm) {

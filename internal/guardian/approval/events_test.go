@@ -3,6 +3,7 @@ package approval
 import (
 	"bufio"
 	"context"
+	"io"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -303,8 +304,18 @@ func TestServer_HandleEvents_ReceivesEvents(t *testing.T) {
 	// Broadcast an event
 	server.Events.BroadcastRequestRemoved("test123")
 
-	// Read the event from the stream
+	// Read the event from the stream; skip the initial heartbeat first
 	reader := bufio.NewReader(resp.Body)
+	for {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("failed to skip initial heartbeat: %v", err)
+		}
+		// Blank line marks end of the heartbeat SSE message
+		if strings.TrimSpace(line) == "" {
+			break
+		}
+	}
 	eventLine, err := reader.ReadString('\n')
 	if err != nil {
 		t.Fatalf("failed to read event line: %v", err)
@@ -347,9 +358,8 @@ func TestServer_HandleEvents_ClientDisconnect(t *testing.T) {
 		if err == nil {
 			// Signal that we're connected and read at least the headers
 			close(connected)
-			// Try to read from body to keep connection open
-			buf := make([]byte, 1)
-			_, _ = resp.Body.Read(buf)
+			// Block reading from body to keep connection open until context is cancelled
+			_, _ = io.Copy(io.Discard, resp.Body)
 			_ = resp.Body.Close()
 		}
 		close(done)
