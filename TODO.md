@@ -45,9 +45,18 @@ For each `.go` file in `internal/`, check if it references any unexported
 symbol from its own package. Files referencing zero unexported symbols are
 candidates for relocation.
 
-- [ ] Scan all non-test `.go` files in `internal/`
-- [ ] For each file, check for references to unexported identifiers defined in sibling files
-- [ ] Record findings as `[file] → [suggested home]` with rationale
+- [x] Scan all non-test `.go` files in `internal/`
+- [x] For each file, check for references to unexported identifiers defined in sibling files
+- [x] Record findings as `[file] → [suggested home]` with rationale
+
+> **Findings:**
+> - `internal/testutil/http.go` → `internal/guardian/` or delete (duplicates noProxyClient)
+> - `internal/token/credentials.go` → `internal/cloister/` or delete (deprecated, only used by cloister.go)
+> - `internal/token/token.go` → stays in `token` (widely used externally, no intra-package coupling)
+> - 9 provider-only files identified (define shared types/helpers; not true orphans)
+> - 9 single-file packages noted (audit, claude, cloister, codex, guardian/executor, pathutil, prompt, term, version)
+> - `internal/guardian/` (14 files) has weak internal cohesion — decomposition candidate
+> - `internal/token/` (4 files) has near-zero internal coupling
 
 ### 1.2 Pass C: Duplicated constants
 
