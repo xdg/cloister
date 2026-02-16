@@ -18,6 +18,7 @@ import (
 
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/guardian/approval"
+	"github.com/xdg/cloister/internal/token"
 )
 
 // Ensure helpers used by later test phases don't trigger "unused" lint warnings.
@@ -62,6 +63,7 @@ type proxyTestHarness struct {
 	ProjectName    string
 	CloisterName   string
 	TunnelHandler  *mockTunnelHandler
+	StaticAllow    []config.AllowEntry
 	t              *testing.T
 }
 
@@ -83,21 +85,43 @@ func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTest
 	// Also set XDG_STATE_HOME to prevent writes to real state dir
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	token := "test-token-12345"
+	tok := "test-token-12345"
 	projectName := "test-project"
 	cloisterName := "test-project-main"
+
+	// Use real token.Registry (same as production in internal/cmd/guardian.go).
+	registry := token.NewRegistry()
+	registry.RegisterWithProject(tok, cloisterName, projectName)
+
+	// Load production default config for static allow/deny entries.
+	cfg := config.DefaultGlobalConfig()
+	staticAllow := cfg.Proxy.Allow
+	staticDeny := cfg.Proxy.Deny
+
+	// Build global allowlist from static config (matches setupAllowlistCache in production).
+	globalAllowlist := NewAllowlistFromConfig(staticAllow)
+	allowlistCache := NewAllowlistCache(globalAllowlist)
+
+	// Wire global denylist if static deny entries exist.
+	globalDeny := config.MergeDenylists(staticDeny, nil)
+	if len(globalDeny) > 0 {
+		allowlistCache.SetGlobalDeny(NewAllowlistFromConfig(globalDeny))
+	}
+
+	// RegistryAdapter satisfies TokenRegistry, ProjectLister, and TokenValidator.
+	adapter := &RegistryAdapter{Registry: registry}
+
+	// CacheReloader with production-matching static config.
+	reloader := NewCacheReloader(allowlistCache, adapter, staticAllow, staticDeny, &config.Decisions{})
+	allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)
+	allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)
 
 	// Create approval server components
 	queue := approval.NewQueue()
 	domainQueue := approval.NewDomainQueueWithTimeout(10 * time.Second)
 
-	// Create config persister and allowlist cache
-	globalAllowlist := NewAllowlist(nil) // empty -- no pre-allowed domains
-	allowlistCache := NewAllowlistCache(globalAllowlist)
-
 	persister := &ConfigPersisterImpl{}
 
-	// Create approval server
 	approvalSrv := approval.NewServer(queue, nil) // nil audit logger
 	approvalSrv.SetDomainQueue(domainQueue)
 	approvalSrv.ConfigPersister = persister
@@ -110,41 +134,20 @@ func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTest
 	// Create domain approver
 	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, sessionDenylist, allowlistCache, nil)
 
-	// Create CacheReloader for project allowlist/denylist loading and cache reloading
-	lister := &mockProjectLister{
-		projects: map[string]TokenInfo{
-			token: {ProjectName: projectName, CloisterName: cloisterName},
-		},
-	}
-	reloader := NewCacheReloader(allowlistCache, lister, nil, nil, &config.Decisions{})
-	allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)
-	allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)
-
-	// Create tunnel handler mock
+	// Create tunnel handler mock (can't do real upstream connections in unit tests).
 	tunnelHandler := &mockTunnelHandler{}
 
-	// Create token validator using the existing newMockTokenValidator helper
-	tokenValidator := newMockTokenValidator(token)
-
-	// Token lookup function
-	tokenLookup := func(tok string) (TokenLookupResult, bool) {
-		if tok == token {
-			return TokenLookupResult{ProjectName: projectName, CloisterName: cloisterName}, true
-		}
-		return TokenLookupResult{}, false
-	}
-
-	// Create proxy server with empty global allowlist
+	// Create proxy server with production-faithful global allowlist.
 	proxy := NewProxyServerWithConfig(":0", globalAllowlist)
-	proxy.TokenValidator = tokenValidator
+	proxy.TokenValidator = adapter
 	proxy.AllowlistCache = allowlistCache
-	proxy.TokenLookup = tokenLookup
+	proxy.TokenLookup = TokenLookupFromRegistry(registry)
 	proxy.DomainApprover = domainApprover
 	proxy.SessionAllowlist = sessionAllowlist
 	proxy.SessionDenylist = sessionDenylist
 	proxy.TunnelHandler = tunnelHandler
 
-	// Set up ConfigPersister reload notifier using CacheReloader
+	// Set up ConfigPersister reload notifier using CacheReloader.
 	persister.ReloadNotifier = reloader.Reload
 
 	// Start servers
@@ -169,10 +172,11 @@ func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTest
 		ApprovalServer: approvalSrv,
 		Reloader:       reloader,
 		ConfigDir:      configDir,
-		Token:          token,
+		Token:          tok,
 		ProjectName:    projectName,
 		CloisterName:   cloisterName,
 		TunnelHandler:  tunnelHandler,
+		StaticAllow:    staticAllow,
 		t:              t,
 	}
 }
@@ -1641,19 +1645,16 @@ func TestProxyApproval_NonCONNECTReturns405(t *testing.T) {
 }
 
 // TestProxyApproval_AllowProjectWithStaticConfig verifies project approval
-// persistence with static allow entries populated (mimicking production config
-// where default domains like api.anthropic.com are pre-configured).
+// persistence with static allow entries populated. The harness now uses
+// production default config (api.anthropic.com, proxy.golang.org, etc.)
+// so no manual injection is needed.
 func TestProxyApproval_AllowProjectWithStaticConfig(t *testing.T) {
 	h := newProxyTestHarness(t)
 
-	// Inject static allow entries to mimic production config.
-	staticAllow := []config.AllowEntry{
-		{Domain: "api.anthropic.com"},
-		{Domain: "proxy.golang.org"},
-		{Pattern: "*.amazonaws.com"},
+	// Verify the harness has production static config loaded.
+	if len(h.StaticAllow) == 0 {
+		t.Fatal("expected non-empty StaticAllow from production defaults")
 	}
-	h.Reloader.SetStaticConfig(staticAllow, nil)
-	h.Reloader.Reload()
 
 	domain := "project-static-test.example.com"
 

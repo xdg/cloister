@@ -263,7 +263,7 @@ func runGuardianProxy(_ *cobra.Command, _ []string) error {
 	setupConfigReloader(proxy, gs)
 
 	apiAddr := fmt.Sprintf(":%d", guardian.DefaultAPIPort)
-	api := guardian.NewAPIServer(apiAddr, &registryAdapter{gs.registry})
+	api := guardian.NewAPIServer(apiAddr, &guardian.RegistryAdapter{Registry: gs.registry})
 
 	gs.auditLogger = setupAuditLogger(gs.cfg)
 
@@ -378,7 +378,7 @@ func setupAllowlistCache(cfg *config.GlobalConfig, globalDecisions *config.Decis
 
 	reloader := guardian.NewCacheReloader(
 		cache,
-		&registryAdapter{registry},
+		&guardian.RegistryAdapter{Registry: registry},
 		cfg.Proxy.Allow, cfg.Proxy.Deny,
 		globalDecisions,
 	)
@@ -395,16 +395,7 @@ func setupProxyServer(gs *guardianState) *guardian.ProxyServer {
 	proxy := guardian.NewProxyServerWithConfig(proxyAddr, gs.allowlistCache.GetGlobal())
 	proxy.TokenValidator = gs.registry
 	proxy.AllowlistCache = gs.allowlistCache
-	proxy.TokenLookup = func(token string) (guardian.TokenLookupResult, bool) {
-		info, ok := gs.registry.Lookup(token)
-		if !ok {
-			return guardian.TokenLookupResult{}, false
-		}
-		return guardian.TokenLookupResult{
-			ProjectName:  info.ProjectName,
-			CloisterName: info.CloisterName,
-		}, true
-	}
+	proxy.TokenLookup = guardian.TokenLookupFromRegistry(gs.registry)
 	return proxy
 }
 
@@ -668,32 +659,6 @@ func getGuardianUptime() (string, error) {
 
 	// Format as human-readable duration
 	return formatDuration(uptime), nil
-}
-
-// registryAdapter wraps token.Registry to implement guardian.TokenRegistry.
-// This is needed because token.Info and guardian.TokenInfo are structurally
-// identical but Go considers them different types.
-type registryAdapter struct {
-	*token.Registry
-}
-
-// List returns all registered tokens as guardian.TokenInfo values.
-func (r *registryAdapter) List() map[string]guardian.TokenInfo {
-	tokens := r.Registry.List()
-	result := make(map[string]guardian.TokenInfo, len(tokens))
-	for k, v := range tokens {
-		result[k] = guardian.TokenInfo{
-			CloisterName: v.CloisterName,
-			ProjectName:  v.ProjectName,
-			WorktreePath: v.WorktreePath,
-		}
-	}
-	return result
-}
-
-// RegisterFull delegates to the underlying token.Registry.
-func (r *registryAdapter) RegisterFull(tok, cloisterName, projectName, worktreePath string) {
-	r.Registry.RegisterFull(tok, cloisterName, projectName, worktreePath)
 }
 
 // formatDuration formats a duration in a human-readable way.

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/xdg/cloister/internal/clog"
+	"github.com/xdg/cloister/internal/token"
 )
 
 // DefaultAPIPort is the port for the internal management API.
@@ -263,4 +264,46 @@ func (a *APIServer) writeJSON(w http.ResponseWriter, status int, v interface{}) 
 // writeError writes an error response with the given status code.
 func (a *APIServer) writeError(w http.ResponseWriter, status int, message string) {
 	a.writeJSON(w, status, errorResponse{Error: message})
+}
+
+// RegistryAdapter wraps token.Registry to implement TokenRegistry and ProjectLister.
+// token.Registry methods (Validate, Register, RegisterWithProject, Revoke, Count)
+// are promoted via embedding. List() and RegisterFull() are overridden to convert
+// between token.Info and guardian.TokenInfo.
+type RegistryAdapter struct {
+	*token.Registry
+}
+
+// List returns all registered tokens as guardian.TokenInfo values.
+func (r *RegistryAdapter) List() map[string]TokenInfo {
+	tokens := r.Registry.List()
+	result := make(map[string]TokenInfo, len(tokens))
+	for k, v := range tokens {
+		result[k] = TokenInfo{
+			CloisterName: v.CloisterName,
+			ProjectName:  v.ProjectName,
+			WorktreePath: v.WorktreePath,
+		}
+	}
+	return result
+}
+
+// RegisterFull delegates to the underlying token.Registry.
+func (r *RegistryAdapter) RegisterFull(tok, cloisterName, projectName, worktreePath string) {
+	r.Registry.RegisterFull(tok, cloisterName, projectName, worktreePath)
+}
+
+// TokenLookupFromRegistry returns a TokenLookupFunc that resolves tokens
+// via the given registry, converting token.Info to TokenLookupResult.
+func TokenLookupFromRegistry(registry *token.Registry) TokenLookupFunc {
+	return func(tok string) (TokenLookupResult, bool) {
+		info, ok := registry.Lookup(tok)
+		if !ok {
+			return TokenLookupResult{}, false
+		}
+		return TokenLookupResult{
+			ProjectName:  info.ProjectName,
+			CloisterName: info.CloisterName,
+		}, true
+	}
 }
