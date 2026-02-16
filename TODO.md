@@ -79,9 +79,17 @@ identical string or integer values.
 For each package in `internal/`, find files whose imports are disjoint from
 the rest of the package, suggesting the file belongs elsewhere.
 
-- [ ] For each package, collect per-file import sets (external imports only)
-- [ ] Identify files whose imports share nothing with sibling files
-- [ ] Flag files where unique imports suggest a different domain than the package name
+- [x] For each package, collect per-file import sets (external imports only)
+- [x] Identify files whose imports share nothing with sibling files
+- [x] Flag files where unique imports suggest a different domain than the package name
+
+> **Findings:**
+> - No strong domain mismatches found — outlier files reflect complementary concerns within coherent domains
+> - `token/store.go` is an import outlier (imports only `config`), reinforcing Pass B finding of weak `token` package cohesion
+> - `container/config.go` and `container/manager.go` are disjoint (config vs lifecycle) but domain-appropriate
+> - `project/detect.go` (git detection) and `project/registry.go` (YAML persistence) are functionally independent — note for future growth
+> - `cmd/` package (13 files) has no outliers — healthy cohesion
+> - No relocations indicated by import analysis alone; cross-reference with Pass B confirms `token/credentials.go` as movable
 
 ---
 
