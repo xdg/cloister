@@ -63,9 +63,16 @@ candidates for relocation.
 Compare exported `const` declarations across `internal/` packages for
 identical string or integer values.
 
-- [ ] Extract all exported `const` declarations across `internal/`
-- [ ] Flag duplicates with identical values across packages
-- [ ] For each duplicate, verify whether it's justified by a real import cycle (use `go list`)
+- [x] Extract all exported `const` declarations across `internal/`
+- [x] Flag duplicates with identical values across packages
+- [x] For each duplicate, verify whether it's justified by a real import cycle (use `go list`)
+
+> **Findings:**
+> - `AuthMethodAPIKey` = `"api_key"` duplicated in `claude` and `codex` — **no import cycle**, consolidate to `config` package
+> - `InstanceIDEnvVar` = `"CLOISTER_INSTANCE_ID"` duplicated in `guardian` and `executor` — **justified** (import cycle: `guardian` → `executor`), consistency test exists
+> - `DefaultApprovalPort` = `9999` duplicated in `guardian` and `guardian/approval` — **justified** (import cycle: `guardian` → `approval`)
+> - `DefaultRequestPort` = `9998` duplicated in `guardian` and `guardian/request` — **no cycle**, could consolidate
+> - `DefaultTokenAPIPort` / `DefaultAPIPort` = `9997` both in `guardian` — same-package redundancy, consolidate to one name
 
 ### 1.3 Pass D: Import outliers
 
