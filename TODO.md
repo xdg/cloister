@@ -166,10 +166,10 @@ Execute moves sequentially. Each move is one atomic commit.
 
 ### 3.3 Move M3: Credential env vars from `token` to `cloister`
 
-- [ ] Move `CredentialEnvVars`, `CredentialEnvVarsUsed`, `credentialEnvVarNames` from `token/credentials.go` to `cloister/`
-- [ ] Update all import sites (expected: only `cloister/cloister.go`)
-- [ ] Delete `token/credentials.go`
-- [ ] Verify: `go build ./...`, `make test`, `make lint`
+- [x] Move `CredentialEnvVars`, `CredentialEnvVarsUsed`, `credentialEnvVarNames` from `token/credentials.go` to `cloister/`
+- [x] Update all import sites (expected: only `cloister/cloister.go`)
+- [x] Delete `token/credentials.go`
+- [x] Verify: `go build ./...`, `make test`, `make lint`
 
 ### 3.4 Move M4: Consolidate API port constants in `guardian`
 

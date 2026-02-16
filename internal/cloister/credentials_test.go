@@ -1,4 +1,4 @@
-package token //nolint:revive // intentional: does not conflict at import path level
+package cloister
 
 import (
 	"os"
@@ -18,7 +18,7 @@ func TestCredentialEnvVars_ReturnsSetVars(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-api-key")
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "test-oauth-token")
 
-	envVars := CredentialEnvVars()
+	envVars := credentialEnvVars()
 
 	if len(envVars) != 2 {
 		t.Fatalf("expected 2 env vars, got %d: %v", len(envVars), envVars)
@@ -56,7 +56,7 @@ func TestCredentialEnvVars_SkipsEmptyVars(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-api-key")
 	// CLAUDE_CODE_OAUTH_TOKEN is unset
 
-	envVars := CredentialEnvVars()
+	envVars := credentialEnvVars()
 
 	if len(envVars) != 1 {
 		t.Fatalf("expected 1 env var, got %d: %v", len(envVars), envVars)
@@ -76,7 +76,7 @@ func TestCredentialEnvVars_EmptyWhenNoneSet(t *testing.T) {
 		restoreEnv(t, "CLAUDE_CODE_OAUTH_TOKEN", origOAuthToken)
 	}()
 
-	envVars := CredentialEnvVars()
+	envVars := credentialEnvVars()
 
 	if len(envVars) != 0 {
 		t.Errorf("expected empty slice, got %v", envVars)
@@ -115,7 +115,7 @@ func TestCredentialEnvVarsUsed_ReturnsNames(t *testing.T) {
 	t.Setenv("ANTHROPIC_API_KEY", "test-api-key")
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "test-oauth-token")
 
-	names := CredentialEnvVarsUsed()
+	names := credentialEnvVarsUsed()
 
 	if len(names) != 2 {
 		t.Fatalf("expected 2 names, got %d: %v", len(names), names)
@@ -152,7 +152,7 @@ func TestCredentialEnvVarsUsed_SkipsEmptyVars(t *testing.T) {
 	// Set only one value
 	t.Setenv("ANTHROPIC_API_KEY", "test-api-key")
 
-	names := CredentialEnvVarsUsed()
+	names := credentialEnvVarsUsed()
 
 	if len(names) != 1 {
 		t.Fatalf("expected 1 name, got %d: %v", len(names), names)
@@ -172,7 +172,7 @@ func TestCredentialEnvVarsUsed_EmptyWhenNoneSet(t *testing.T) {
 		restoreEnv(t, "CLAUDE_CODE_OAUTH_TOKEN", origOAuthToken)
 	}()
 
-	names := CredentialEnvVarsUsed()
+	names := credentialEnvVarsUsed()
 
 	if len(names) != 0 {
 		t.Errorf("expected empty slice, got %v", names)

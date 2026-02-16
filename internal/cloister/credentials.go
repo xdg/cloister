@@ -1,4 +1,4 @@
-package token //nolint:revive // var-naming: conflicts with go/token but renaming would be disruptive
+package cloister
 
 import "os"
 
@@ -17,7 +17,7 @@ var credentialEnvVarNames = []string{
 	"OPENAI_API_KEY",
 }
 
-// CredentialEnvVars returns environment variables for AI agent credentials
+// credentialEnvVars returns environment variables for AI agent credentials
 // that are set on the host system. Only non-empty values are included.
 //
 // Deprecated: This is a fallback mechanism for credential injection.
@@ -28,7 +28,7 @@ var credentialEnvVarNames = []string{
 //   - ANTHROPIC_API_KEY: API key for Anthropic API access
 //   - CLAUDE_CODE_OAUTH_TOKEN: OAuth token for Claude Code authentication
 //   - OPENAI_API_KEY: API key for OpenAI/Codex access
-func CredentialEnvVars() []string {
+func credentialEnvVars() []string {
 	var envVars []string
 	for _, name := range credentialEnvVarNames {
 		if value := os.Getenv(name); value != "" {
@@ -38,12 +38,12 @@ func CredentialEnvVars() []string {
 	return envVars
 }
 
-// CredentialEnvVarsUsed returns the names of credential environment variables
+// credentialEnvVarsUsed returns the names of credential environment variables
 // that are set on the host system. This is used to generate deprecation warnings
 // when falling back to host env vars instead of config-based credentials.
 //
 // Deprecated: This is a fallback mechanism. Prefer config-based credentials.
-func CredentialEnvVarsUsed() []string {
+func credentialEnvVarsUsed() []string {
 	var names []string
 	for _, name := range credentialEnvVarNames {
 		if value := os.Getenv(name); value != "" {

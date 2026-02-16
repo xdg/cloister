@@ -358,11 +358,11 @@ func resolveAgentAndEnv(deps *options, opts StartOptions, tok string) (agent.Age
 	}
 
 	if agentCfg == nil || agentCfg.AuthMethod == "" {
-		usedEnvVars := token.CredentialEnvVarsUsed() //nolint:staticcheck // intentional fallback
+		usedEnvVars := credentialEnvVarsUsed()
 		if len(usedEnvVars) > 0 {
 			term.Warn("Using %s from environment. Run 'cloister setup %s' to store credentials in config.", usedEnvVars[0], agentName)
 		}
-		envVars = append(envVars, token.CredentialEnvVars()...) //nolint:staticcheck // intentional fallback
+		envVars = append(envVars, credentialEnvVars()...)
 	}
 
 	return agentImpl, agentCfg, envVars
