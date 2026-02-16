@@ -333,7 +333,7 @@ func registerCloisterToken(deps *options, cloisterName string, opts StartOptions
 
 // resolveAgentAndEnv resolves the agent implementation and builds container env vars.
 func resolveAgentAndEnv(deps *options, opts StartOptions, tok string) (agent.Agent, *config.AgentConfig, []string) {
-	envVars := token.ProxyEnvVars(tok, "")
+	envVars := guardian.ProxyEnvVars(tok, "")
 
 	globalCfg := deps.globalConfig
 	if globalCfg == nil {

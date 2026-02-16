@@ -15,8 +15,8 @@ import (
 	"github.com/xdg/cloister/internal/agent"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
+	"github.com/xdg/cloister/internal/guardian"
 	"github.com/xdg/cloister/internal/testutil"
-	"github.com/xdg/cloister/internal/token"
 	"github.com/xdg/cloister/internal/version"
 )
 
@@ -156,7 +156,7 @@ func TestCloisterLifecycle(t *testing.T) {
 		}
 
 		// Verify proxy env vars (use dynamic guardian host for test isolation)
-		expectedHost := token.GuardianHost()
+		expectedHost := guardian.Host()
 		expectedProxy := "http://token:" + tok + "@" + expectedHost + ":3128"
 		for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"} {
 			if val, ok := envMap[key]; !ok {

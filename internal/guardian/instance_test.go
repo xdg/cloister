@@ -1,6 +1,7 @@
 package guardian
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -103,5 +104,122 @@ func TestPorts_TestInstance(t *testing.T) {
 	}
 	if tokenPort == approvalPort {
 		t.Error("tokenPort and approvalPort should be different")
+	}
+}
+
+func TestGuardianHost_MatchesContainerName(t *testing.T) {
+	t.Setenv(InstanceIDEnvVar, "")
+	if got := Host(); got != ContainerName() {
+		t.Errorf("Host() = %q, want %q (ContainerName)", got, ContainerName())
+	}
+
+	t.Setenv(InstanceIDEnvVar, "abc123")
+	if got := Host(); got != ContainerName() {
+		t.Errorf("Host() = %q, want %q (ContainerName)", got, ContainerName())
+	}
+}
+
+func TestProxyEnvVars_ContainsAllVariables(t *testing.T) {
+	envVars := ProxyEnvVars("abc123", "guardian")
+
+	expected := []string{
+		"CLOISTER_TOKEN",
+		"CLOISTER_GUARDIAN_HOST",
+		"CLOISTER_REQUEST_PORT",
+		"HTTP_PROXY",
+		"HTTPS_PROXY",
+		"http_proxy",
+		"https_proxy",
+		"NO_PROXY",
+		"no_proxy",
+	}
+
+	if len(envVars) != len(expected) {
+		t.Errorf("expected %d env vars, got %d", len(expected), len(envVars))
+	}
+
+	for _, name := range expected {
+		found := false
+		for _, env := range envVars {
+			if strings.HasPrefix(env, name+"=") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("missing env var: %s", name)
+		}
+	}
+}
+
+func TestProxyEnvVars_ProxyURLFormat(t *testing.T) {
+	envVars := ProxyEnvVars("testtoken", "guardian-host")
+	expectedURL := "http://token:testtoken@guardian-host:3128"
+
+	proxyVars := []string{"HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy"}
+	for _, varName := range proxyVars {
+		var value string
+		for _, env := range envVars {
+			if strings.HasPrefix(env, varName+"=") {
+				value = strings.TrimPrefix(env, varName+"=")
+				break
+			}
+		}
+		if value != expectedURL {
+			t.Errorf("%s = %q, want %q", varName, value, expectedURL)
+		}
+	}
+}
+
+func TestProxyEnvVars_DefaultGuardianHost(t *testing.T) {
+	t.Setenv(InstanceIDEnvVar, "")
+	envVars := ProxyEnvVars("testtoken", "")
+	expectedURL := "http://token:testtoken@cloister-guardian:3128"
+
+	var httpProxy string
+	for _, env := range envVars {
+		if strings.HasPrefix(env, "HTTP_PROXY=") {
+			httpProxy = strings.TrimPrefix(env, "HTTP_PROXY=")
+			break
+		}
+	}
+
+	if httpProxy != expectedURL {
+		t.Errorf("HTTP_PROXY with empty host = %q, want %q", httpProxy, expectedURL)
+	}
+}
+
+func TestProxyEnvVars_NoProxyValue(t *testing.T) {
+	t.Setenv(InstanceIDEnvVar, "")
+	envVars := ProxyEnvVars("token123", "")
+	expected := "cloister-guardian,localhost,127.0.0.1"
+
+	for _, varName := range []string{"NO_PROXY", "no_proxy"} {
+		var value string
+		for _, env := range envVars {
+			if strings.HasPrefix(env, varName+"=") {
+				value = strings.TrimPrefix(env, varName+"=")
+				break
+			}
+		}
+		if value != expected {
+			t.Errorf("%s = %q, want %q", varName, value, expected)
+		}
+	}
+}
+
+func TestProxyEnvVars_RequestPortValue(t *testing.T) {
+	envVars := ProxyEnvVars("token123", "")
+
+	var requestPort string
+	for _, env := range envVars {
+		if strings.HasPrefix(env, "CLOISTER_REQUEST_PORT=") {
+			requestPort = strings.TrimPrefix(env, "CLOISTER_REQUEST_PORT=")
+			break
+		}
+	}
+
+	if requestPort != "9998" {
+		t.Errorf("CLOISTER_REQUEST_PORT = %q, want %q", requestPort, "9998")
 	}
 }

@@ -52,6 +52,49 @@ func ContainerName() string {
 	return "cloister-guardian"
 }
 
+// Host returns the guardian's network hostname. The container name doubles as
+// the DNS hostname on the cloister-net Docker network.
+func Host() string {
+	return ContainerName()
+}
+
+// ProxyEnvVars returns environment variables for configuring a container
+// to use the guardian proxy with the given token for authentication.
+//
+// The returned slice contains:
+//   - CLOISTER_TOKEN: the authentication token
+//   - CLOISTER_GUARDIAN_HOST: the guardian hostname (for hostexec and other tools)
+//   - HTTP_PROXY: proxy URL with embedded credentials
+//   - HTTPS_PROXY: same proxy URL (for tools that check HTTPS_PROXY)
+//   - http_proxy: lowercase variant for compatibility
+//   - https_proxy: lowercase variant for compatibility
+//   - NO_PROXY: hosts that bypass the proxy (guardian, localhost)
+//   - no_proxy: lowercase variant for compatibility
+//   - CLOISTER_REQUEST_PORT: port for hostexec requests (default 9998)
+//
+// The proxy URL format is: http://token:$token@$host:$port
+// Using "token" as the username and the actual token as the password.
+func ProxyEnvVars(tok, guardianHost string) []string {
+	if guardianHost == "" {
+		guardianHost = Host()
+	}
+
+	proxyURL := fmt.Sprintf("http://token:%s@%s:%d", tok, guardianHost, DefaultProxyPort)
+	noProxy := fmt.Sprintf("%s,localhost,127.0.0.1", guardianHost)
+
+	return []string{
+		"CLOISTER_TOKEN=" + tok,
+		"CLOISTER_GUARDIAN_HOST=" + guardianHost,
+		"CLOISTER_REQUEST_PORT=" + fmt.Sprintf("%d", DefaultRequestPort),
+		"HTTP_PROXY=" + proxyURL,
+		"HTTPS_PROXY=" + proxyURL,
+		"http_proxy=" + proxyURL,
+		"https_proxy=" + proxyURL,
+		"NO_PROXY=" + noProxy,
+		"no_proxy=" + noProxy,
+	}
+}
+
 // FindFreePort asks the OS for an available TCP port.
 // This is used for dynamic port allocation in test instances.
 //
@@ -79,6 +122,9 @@ func FindFreePort() (int, error) {
 
 // DefaultTokenAPIPort is the default port for the guardian token management API.
 const DefaultTokenAPIPort = 9997
+
+// DefaultRequestPort is the default port for the guardian request server.
+const DefaultRequestPort = 9998
 
 // DefaultApprovalPort is the default port for the guardian approval web UI.
 const DefaultApprovalPort = 9999
