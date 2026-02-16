@@ -294,7 +294,7 @@ func TestCloisterNameToContainerName(t *testing.T) {
 	}
 }
 
-func TestContainerNameToCloisterName(t *testing.T) {
+func TestNameToCloisterName(t *testing.T) {
 	tests := []struct {
 		containerName string
 		cloisterName  string
@@ -307,9 +307,9 @@ func TestContainerNameToCloisterName(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.containerName, func(t *testing.T) {
-			result := ContainerNameToCloisterName(tc.containerName)
+			result := NameToCloisterName(tc.containerName)
 			if result != tc.cloisterName {
-				t.Errorf("ContainerNameToCloisterName(%q) = %q, want %q", tc.containerName, result, tc.cloisterName)
+				t.Errorf("NameToCloisterName(%q) = %q, want %q", tc.containerName, result, tc.cloisterName)
 			}
 		})
 	}
@@ -325,7 +325,7 @@ func TestCloisterContainerNameRoundTrip(t *testing.T) {
 
 	for _, original := range cloisterNames {
 		containerName := CloisterNameToContainerName(original)
-		result := ContainerNameToCloisterName(containerName)
+		result := NameToCloisterName(containerName)
 		if result != original {
 			t.Errorf("Round trip failed: %q -> %q -> %q", original, containerName, result)
 		}

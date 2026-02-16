@@ -127,7 +127,7 @@ func TestEventHub_Close(t *testing.T) {
 	}
 }
 
-func TestEventHub_ConcurrentAccess(t *testing.T) {
+func TestEventHub_ConcurrentAccess(_ *testing.T) {
 	hub := NewEventHub()
 	var wg sync.WaitGroup
 
@@ -248,7 +248,7 @@ func TestServer_HandleEvents_Headers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately
 
-	req := httptest.NewRequest(http.MethodGet, "/events", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/events", http.NoBody).WithContext(ctx)
 	rr := httptest.NewRecorder()
 
 	server.handleEvents(rr, req)
@@ -284,7 +284,7 @@ func TestServer_HandleEvents_ReceivesEvents(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/events", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/events", http.NoBody)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request to /events failed: %v", err)
@@ -337,7 +337,7 @@ func TestServer_HandleEvents_ClientDisconnect(t *testing.T) {
 	// Create HTTP client with context that we'll cancel
 	ctx, cancel := context.WithCancel(context.Background())
 
-	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/events", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/events", http.NoBody)
 
 	// Start the request in a goroutine
 	done := make(chan struct{})
@@ -404,7 +404,7 @@ func TestServer_HandleEvents_ServerShutdown(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	req := httptest.NewRequest(http.MethodGet, "/events", nil).WithContext(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/events", http.NoBody).WithContext(ctx)
 	rr := httptest.NewRecorder()
 
 	server.handleEvents(rr, req)

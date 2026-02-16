@@ -1,4 +1,4 @@
-package token
+package token //nolint:revive // intentional: does not conflict at import path level
 
 import (
 	"sync"
@@ -166,7 +166,7 @@ func TestRegistry_UpdateRegistration(t *testing.T) {
 	}
 }
 
-func TestRegistry_ThreadSafety(t *testing.T) {
+func TestRegistry_ThreadSafety(_ *testing.T) {
 	r := NewRegistry()
 	const numGoroutines = 100
 	const numOps = 100
@@ -176,7 +176,7 @@ func TestRegistry_ThreadSafety(t *testing.T) {
 
 	// Register goroutines
 	for i := 0; i < numGoroutines; i++ {
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < numOps; j++ {
 				token := Generate()
@@ -266,7 +266,7 @@ func TestRegistry_List(t *testing.T) {
 	}
 
 	// Modifying the returned map should not affect the registry
-	tokens["token-d"] = TokenInfo{CloisterName: "cloister-d"}
+	tokens["token-d"] = Info{CloisterName: "cloister-d"}
 	if r.Count() != 3 {
 		t.Errorf("modifying returned map should not affect registry, count is %d", r.Count())
 	}
@@ -297,7 +297,7 @@ func TestRegistry_RegisterWithProject(t *testing.T) {
 		t.Error("token should be valid after registration")
 	}
 
-	// Lookup should return full TokenInfo
+	// Lookup should return full Info
 	info, valid := r.Lookup(token)
 	if !valid {
 		t.Error("Lookup should return valid=true")
@@ -382,7 +382,7 @@ func TestRegistry_ListWithProjectInfo(t *testing.T) {
 	}
 
 	// Modifying returned map should not affect registry
-	infos["token-d"] = TokenInfo{CloisterName: "cloister-d", ProjectName: "project-d"}
+	infos["token-d"] = Info{CloisterName: "cloister-d", ProjectName: "project-d"}
 	if r.Count() != 3 {
 		t.Errorf("modifying returned map should not affect registry, count is %d", r.Count())
 	}

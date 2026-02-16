@@ -22,7 +22,9 @@ func TestMergeStaticAndDecisions_GlobalOnly(t *testing.T) {
 		},
 	}
 
-	merged := append(staticAllow, decisions.Proxy.Allow...)
+	merged := make([]config.AllowEntry, 0, len(staticAllow)+len(decisions.Proxy.Allow))
+	merged = append(merged, staticAllow...)
+	merged = append(merged, decisions.Proxy.Allow...)
 
 	if len(merged) != 4 {
 		t.Fatalf("expected 4 entries, got %d", len(merged))
@@ -124,7 +126,9 @@ func TestMergeStaticAndDecisions_EmptyDecisions(t *testing.T) {
 	}
 	decisions := &config.Decisions{}
 
-	merged := append(staticAllow, decisions.Proxy.Allow...)
+	merged := make([]config.AllowEntry, 0, len(staticAllow)+len(decisions.Proxy.Allow))
+	merged = append(merged, staticAllow...)
+	merged = append(merged, decisions.Proxy.Allow...)
 
 	if len(merged) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(merged))
@@ -149,7 +153,9 @@ func TestMergeStaticAndDecisions_OnlyDecisions(t *testing.T) {
 		},
 	}
 
-	merged := append(staticAllow, decisions.Proxy.Allow...)
+	merged := make([]config.AllowEntry, 0, len(staticAllow)+len(decisions.Proxy.Allow))
+	merged = append(merged, staticAllow...)
+	merged = append(merged, decisions.Proxy.Allow...)
 
 	if len(merged) != 2 {
 		t.Fatalf("expected 2 entries, got %d", len(merged))

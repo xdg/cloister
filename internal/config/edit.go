@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -80,7 +81,7 @@ func openEditor(path string) error {
 		editor = "vi"
 	}
 
-	cmd := exec.Command(editor, path)
+	cmd := exec.CommandContext(context.Background(), editor, path) //nolint:gosec // G204: editor is from trusted EDITOR env var
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

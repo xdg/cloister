@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -198,67 +199,22 @@ var configForcedValues = map[string]any{
 // This copies the ~/.claude/ settings directory, injects credentials,
 // and generates the ~/.claude.json config file.
 func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) (*SetupResult, error) {
-	result := &SetupResult{
-		EnvVars: make(map[string]string),
-	}
+	result := &SetupResult{EnvVars: make(map[string]string)}
 
-	// Get home dir for plugin path rewriting
-	homeDir, err := UserHomeDirFunc()
-	if err != nil {
-		homeDir = "" // non-fatal; transforms will be no-ops
-	}
+	copyClaudeSettings(containerName)
 
-	// Step 1: Copy settings directory (~/.claude/)
-	// This is a one-way snapshot - writes inside container are isolated
-	if err := CopyDirToContainer(containerName, claudeSettingsDir, settingsExcludePatterns,
-		claudePluginTransform(homeDir)); err != nil {
-		// Log but don't fail - missing settings is not fatal
-		_ = err
-	}
-
-	// Step 1.5: Write cloister rules file
-	// This explains the cloister environment to Claude and is always overwritten
 	if err := writeCloisterRules(containerName); err != nil {
 		return nil, fmt.Errorf("failed to write cloister rules: %w", err)
 	}
 
-	// Step 2: Inject credentials (if configured)
-	if agentCfg != nil && agentCfg.AuthMethod != "" {
-		injector := a.Injector
-		if injector == nil {
-			injector = claude.NewInjector()
-		}
-
-		injectionConfig, err := injector.InjectCredentials(agentCfg)
-		if err != nil {
-			return nil, fmt.Errorf("credential injection failed: %w", err)
-		}
-
-		// Collect env vars for container
-		for key, value := range injectionConfig.EnvVars {
-			result.EnvVars[key] = value
-		}
-
-		// Write credential files to container
-		for destPath, content := range injectionConfig.Files {
-			if err := WriteFileToContainer(containerName, destPath, content); err != nil {
-				return nil, fmt.Errorf("failed to write credential file %s: %w", destPath, err)
-			}
-		}
+	if err := a.injectCredentials(containerName, agentCfg, result); err != nil {
+		return nil, err
 	}
 
-	// Step 3: Generate ~/.claude.json config file
-	configJSON, err := MergeJSONConfig(claudeConfigFileName, configFieldsToCopy, configForcedValues, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate config: %w", err)
+	if err := writeClaudeConfig(containerName); err != nil {
+		return nil, err
 	}
 
-	if err := WriteFileToContainer(containerName, configJSONPath, configJSON); err != nil {
-		return nil, fmt.Errorf("failed to write config file: %w", err)
-	}
-
-	// Step 4: Add skip-permissions alias if enabled (default true)
-	// SkipPerms is *bool: nil or true means add the alias, only explicit false skips it
 	if agentCfg == nil || agentCfg.SkipPerms == nil || *agentCfg.SkipPerms {
 		if err := AppendBashAlias(containerName, claudeSkipPermsAlias); err != nil {
 			return nil, fmt.Errorf("failed to add skip-permissions alias: %w", err)
@@ -268,12 +224,62 @@ func (a *ClaudeAgent) Setup(containerName string, agentCfg *config.AgentConfig) 
 	return result, nil
 }
 
+// copyClaudeSettings copies the ~/.claude/ settings directory to the container.
+func copyClaudeSettings(containerName string) {
+	homeDir, err := UserHomeDirFunc()
+	if err != nil {
+		homeDir = ""
+	}
+	// Log but don't fail - missing settings is not fatal
+	_ = CopyDirToContainer(containerName, claudeSettingsDir, settingsExcludePatterns, //nolint:errcheck // intentional: missing settings non-fatal
+		claudePluginTransform(homeDir))
+}
+
+// injectCredentials injects credentials into the container if configured.
+func (a *ClaudeAgent) injectCredentials(containerName string, agentCfg *config.AgentConfig, result *SetupResult) error {
+	if agentCfg == nil || agentCfg.AuthMethod == "" {
+		return nil
+	}
+
+	injector := a.Injector
+	if injector == nil {
+		injector = claude.NewInjector()
+	}
+
+	injectionConfig, err := injector.InjectCredentials(agentCfg)
+	if err != nil {
+		return fmt.Errorf("credential injection failed: %w", err)
+	}
+
+	for key, value := range injectionConfig.EnvVars {
+		result.EnvVars[key] = value
+	}
+	for destPath, content := range injectionConfig.Files {
+		if err := WriteFileToContainer(containerName, destPath, content); err != nil {
+			return fmt.Errorf("failed to write credential file %s: %w", destPath, err)
+		}
+	}
+	return nil
+}
+
+// writeClaudeConfig generates and writes the ~/.claude.json config file.
+func writeClaudeConfig(containerName string) error {
+	configJSON, err := MergeJSONConfig(claudeConfigFileName, configFieldsToCopy, configForcedValues, nil)
+	if err != nil {
+		return fmt.Errorf("failed to generate config: %w", err)
+	}
+	if err := WriteFileToContainer(containerName, configJSONPath, configJSON); err != nil {
+		return fmt.Errorf("failed to write config file: %w", err)
+	}
+	return nil
+}
+
 // writeCloisterRules creates the rules directory and writes the cloister.md file.
 // This file explains the cloister environment to Claude and is always overwritten.
 func writeCloisterRules(containerName string) error {
 	// Create rules directory if it doesn't exist
 	rulesDir := filepath.Dir(cloisterRulesPath)
-	mkdirCmd := exec.Command("docker", "exec", containerName, "mkdir", "-p", rulesDir)
+	mkdirCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "mkdir", "-p", rulesDir) //nolint:gosec // G204: args are not user-controlled
 	if output, err := mkdirCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create rules directory: %w: %s", err, output)
 	}

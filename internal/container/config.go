@@ -97,10 +97,8 @@ func (c *Config) BuildRunArgs() []string {
 	// Docker defaults already drop dangerous capabilities (SYS_ADMIN, SYS_PTRACE, etc.).
 	// Cloister's security comes from network isolation (proxy allowlist) and filesystem
 	// restrictions (only /work mounted, sensitive paths blocked), not capability dropping.
-	args = append(args, "--user", fmt.Sprintf("%d", c.UserID()))
-
-	// Add image name last
-	args = append(args, c.ImageName())
+	// Add user and image name last
+	args = append(args, "--user", fmt.Sprintf("%d", c.UserID()), c.ImageName())
 
 	return args
 }

@@ -1,4 +1,4 @@
-package token
+package token //nolint:revive // package name matches package under test
 
 import (
 	"regexp"

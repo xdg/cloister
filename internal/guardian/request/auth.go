@@ -8,10 +8,10 @@ import (
 )
 
 // TokenHeader is the HTTP header used to pass the cloister token.
-const TokenHeader = "X-Cloister-Token"
+const TokenHeader = "X-Cloister-Token" //nolint:gosec // G101: not a credential
 
 // TokenInfo contains information associated with a registered token.
-// This mirrors token.TokenInfo to avoid import cycles.
+// This mirrors token.Info to avoid import cycles.
 type TokenInfo struct {
 	CloisterName string
 	ProjectName  string

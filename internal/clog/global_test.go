@@ -66,7 +66,7 @@ func TestConfigure(t *testing.T) {
 	}
 }
 
-func TestDiscard(t *testing.T) {
+func TestDiscard(_ *testing.T) {
 	defer Reset()
 	Discard()
 

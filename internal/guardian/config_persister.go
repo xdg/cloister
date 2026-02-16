@@ -29,7 +29,7 @@ type ConfigPersisterImpl struct {
 // The ReloadNotifier callback is invoked after successful write if not nil.
 func (p *ConfigPersisterImpl) AddDomainToProject(project, domain string) error {
 	// Validate domain before processing
-	if err := validateDomain(domain); err != nil {
+	if err := checkDomainBasic(domain); err != nil {
 		return err
 	}
 	// Strip port if present (CONNECT requests include port, e.g. "example.com:443")
@@ -75,7 +75,7 @@ func (p *ConfigPersisterImpl) AddDomainToProject(project, domain string) error {
 // The ReloadNotifier callback is invoked after successful write if not nil.
 func (p *ConfigPersisterImpl) AddDomainToGlobal(domain string) error {
 	// Validate domain before processing
-	if err := validateDomain(domain); err != nil {
+	if err := checkDomainBasic(domain); err != nil {
 		return err
 	}
 	// Strip port if present (CONNECT requests include port, e.g. "example.com:443")
@@ -115,9 +115,9 @@ func (p *ConfigPersisterImpl) AddDomainToGlobal(domain string) error {
 	return nil
 }
 
-// validateDomain checks if a domain string is valid for use in the allowlist.
+// checkDomainBasic checks if a domain string is valid for use in the allowlist.
 // It returns an error if the domain is empty or contains invalid characters.
-func validateDomain(domain string) error {
+func checkDomainBasic(domain string) error {
 	if domain == "" {
 		return fmt.Errorf("domain cannot be empty")
 	}

@@ -95,14 +95,14 @@ func (l *Logger) log(level Level, format string, args ...any) {
 
 	// Write to file if configured
 	if l.fileWriter != nil {
-		_, _ = l.fileWriter.Write([]byte(line))
+		_, _ = l.fileWriter.Write([]byte(line)) //nolint:errcheck // logger cannot log its own write failures
 	}
 
 	// Write warn/error to stderr in CLI mode
 	if !l.daemonMode && l.errWriter != nil && level >= LevelWarn {
 		// For stderr, use a simpler format without timestamp
 		errLine := fmt.Sprintf("[%s] %s\n", level, msg)
-		_, _ = l.errWriter.Write([]byte(errLine))
+		_, _ = l.errWriter.Write([]byte(errLine)) //nolint:errcheck // logger cannot log its own write failures
 	}
 }
 
@@ -110,11 +110,11 @@ func (l *Logger) log(level Level, format string, args ...any) {
 // The file is opened in append mode.
 func OpenLogFile(path string) (*os.File, error) {
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0750); err != nil {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
 		return nil, fmt.Errorf("create log directory: %w", err)
 	}
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0640)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return nil, fmt.Errorf("open log file: %w", err)
 	}

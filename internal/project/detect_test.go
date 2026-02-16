@@ -130,9 +130,9 @@ func TestProjectName_CurrentRepo(t *testing.T) {
 		t.Skip("not in a git repo")
 	}
 
-	name, err := ProjectName(root)
+	name, err := Name(root)
 	if err != nil {
-		t.Fatalf("ProjectName failed: %v", err)
+		t.Fatalf("Name failed: %v", err)
 	}
 
 	// Project name should be "cloister" (either from remote or directory)
@@ -288,9 +288,9 @@ func TestProjectName_FallbackToDirectory(t *testing.T) {
 	}
 
 	// Get project name (should fall back to directory name)
-	name, err := ProjectName(tmpDir)
+	name, err := Name(tmpDir)
 	if err != nil {
-		t.Fatalf("ProjectName failed: %v", err)
+		t.Fatalf("Name failed: %v", err)
 	}
 
 	// Should use the temp directory name (starts with "test-project-")
@@ -328,7 +328,7 @@ func TestDetectProject_Valid(t *testing.T) {
 
 	// Should return the project info
 	if info == nil {
-		t.Fatal("expected non-nil ProjectInfo")
+		t.Fatal("expected non-nil Info")
 	}
 
 	// Name should be "cloister"
@@ -412,7 +412,7 @@ func TestDetectProject_NoRemote(t *testing.T) {
 
 	// Create an initial commit so we have a branch
 	testFile := filepath.Join(tmpDir, "test.txt")
-	if err := os.WriteFile(testFile, []byte("test"), 0644); err != nil {
+	if err := os.WriteFile(testFile, []byte("test"), 0o644); err != nil {
 		t.Fatalf("failed to write test file: %v", err)
 	}
 	if _, err := runGit(tmpDir, "add", "test.txt"); err != nil {

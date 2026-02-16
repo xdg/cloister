@@ -1,5 +1,5 @@
 // Package token provides token generation, validation, and persistence.
-package token
+package token //nolint:revive // intentional: does not conflict at import path level
 
 import (
 	"encoding/json"
@@ -19,9 +19,9 @@ type tokenFile struct {
 }
 
 // DefaultTokenDir returns the default directory for token storage.
-// This is config.ConfigDir() + "tokens", which respects XDG_CONFIG_HOME.
+// This is config.Dir() + "tokens", which respects XDG_CONFIG_HOME.
 func DefaultTokenDir() (string, error) {
-	return config.ConfigDir() + "tokens", nil
+	return config.Dir() + "tokens", nil
 }
 
 // Store handles persistent token storage using one file per cloister.
@@ -33,7 +33,7 @@ type Store struct {
 // NewStore creates a token store at the given directory.
 // Creates the directory if it doesn't exist.
 func NewStore(dir string) (*Store, error) {
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("failed to create token directory: %w", err)
 	}
 	return &Store{dir: dir}, nil
@@ -41,6 +41,7 @@ func NewStore(dir string) (*Store, error) {
 
 // Save persists a token for a cloister.
 // Overwrites any existing token for the same cloister name.
+//
 // Deprecated: Use SaveFull to include the worktree path.
 func (s *Store) Save(cloisterName, token, projectName string) error {
 	return s.SaveFull(cloisterName, token, projectName, "")
@@ -54,7 +55,7 @@ func (s *Store) SaveFull(cloisterName, token, projectName, worktreePath string) 
 	if err != nil {
 		return fmt.Errorf("failed to marshal token: %w", err)
 	}
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("failed to save token: %w", err)
 	}
 	return nil
@@ -71,18 +72,18 @@ func (s *Store) Remove(cloisterName string) error {
 }
 
 // Load reads all persisted tokens.
-// Returns a map of token -> TokenInfo (cloister name and project name).
+// Returns a map of token -> Info (cloister name and project name).
 // Backward compatible: plain text files are treated as token-only (no project).
-func (s *Store) Load() (map[string]TokenInfo, error) {
+func (s *Store) Load() (map[string]Info, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return make(map[string]TokenInfo), nil
+			return make(map[string]Info), nil
 		}
 		return nil, fmt.Errorf("failed to read token directory: %w", err)
 	}
 
-	tokens := make(map[string]TokenInfo)
+	tokens := make(map[string]Info)
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
@@ -100,7 +101,7 @@ func (s *Store) Load() (map[string]TokenInfo, error) {
 		// Try to parse as JSON first (new format)
 		var tf tokenFile
 		if err := json.Unmarshal(data, &tf); err == nil && tf.Token != "" {
-			tokens[tf.Token] = TokenInfo{
+			tokens[tf.Token] = Info{
 				CloisterName: cloisterName,
 				ProjectName:  tf.Project,
 				WorktreePath: tf.Worktree,
@@ -111,7 +112,7 @@ func (s *Store) Load() (map[string]TokenInfo, error) {
 		// Fall back to plain text (old format: file contains just the token)
 		token := strings.TrimSpace(string(data))
 		if token != "" {
-			tokens[token] = TokenInfo{CloisterName: cloisterName}
+			tokens[token] = Info{CloisterName: cloisterName}
 		}
 	}
 

@@ -154,7 +154,12 @@ func TestAPIServer_RegisterToken(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			resp, err := client.Post(baseURL+"/tokens", "application/json", bytes.NewBufferString(tc.body))
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/tokens", bytes.NewBufferString(tc.body))
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			req.Header.Set("Content-Type", "application/json")
+			resp, err := client.Do(req)
 			if err != nil {
 				t.Fatalf("request failed: %v", err)
 			}
@@ -221,7 +226,7 @@ func TestAPIServer_RevokeToken(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req, err := http.NewRequest(http.MethodDelete, baseURL+"/tokens/"+tc.token, nil)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, baseURL+"/tokens/"+tc.token, http.NoBody)
 			if err != nil {
 				t.Fatalf("failed to create request: %v", err)
 			}
@@ -262,7 +267,11 @@ func TestAPIServer_ListTokens(t *testing.T) {
 	baseURL := "http://" + api.ListenAddr()
 
 	client := noProxyClient()
-	resp, err := client.Get(baseURL + "/tokens")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/tokens", http.NoBody)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -311,7 +320,11 @@ func TestAPIServer_ListTokensEmpty(t *testing.T) {
 	baseURL := "http://" + api.ListenAddr()
 
 	client := noProxyClient()
-	resp, err := client.Get(baseURL + "/tokens")
+	req2, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/tokens", http.NoBody)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	resp, err := client.Do(req2)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -348,7 +361,11 @@ func TestAPIServer_ContentType(t *testing.T) {
 
 	// Check that responses have JSON content type
 	client := noProxyClient()
-	resp, err := client.Get(baseURL + "/tokens")
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/tokens", http.NoBody)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
@@ -365,11 +382,11 @@ type mockSessionAllowlist struct {
 	clearedTokens []string
 }
 
-func (m *mockSessionAllowlist) IsAllowed(token, domain string) bool {
+func (m *mockSessionAllowlist) IsAllowed(_, _ string) bool {
 	return false
 }
 
-func (m *mockSessionAllowlist) Add(token, domain string) error {
+func (m *mockSessionAllowlist) Add(_, _ string) error {
 	return nil
 }
 
@@ -399,7 +416,7 @@ func TestAPIServer_RevokeTokenClearsSessionAllowlist(t *testing.T) {
 	client := noProxyClient()
 
 	// Revoke the token
-	req, err := http.NewRequest(http.MethodDelete, baseURL+"/tokens/test-token", nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, baseURL+"/tokens/test-token", http.NoBody)
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
@@ -449,7 +466,7 @@ func TestAPIServer_RevokeTokenWithNilSessionAllowlist(t *testing.T) {
 	client := noProxyClient()
 
 	// Revoke the token - should not panic with nil SessionAllowlist
-	req, err := http.NewRequest(http.MethodDelete, baseURL+"/tokens/test-token", nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, baseURL+"/tokens/test-token", http.NoBody)
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}

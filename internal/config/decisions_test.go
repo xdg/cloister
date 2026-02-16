@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -84,12 +85,12 @@ func TestLoadGlobalDecisions_InvalidYAML(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	decisionDir := DecisionDir()
 
-	if err := os.MkdirAll(decisionDir, 0700); err != nil {
+	if err := os.MkdirAll(decisionDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	invalidYAML := "proxy: [this is not valid yaml\n"
-	if err := os.WriteFile(filepath.Join(decisionDir, "global.yaml"), []byte(invalidYAML), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(decisionDir, "global.yaml"), []byte(invalidYAML), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -103,12 +104,12 @@ func TestLoadProjectDecisions_InvalidYAML(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	projectsDir := filepath.Join(DecisionDir(), "projects")
 
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	invalidYAML := "proxy: {bad: yaml: content\n"
-	if err := os.WriteFile(filepath.Join(projectsDir, "my-project.yaml"), []byte(invalidYAML), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(projectsDir, "my-project.yaml"), []byte(invalidYAML), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -122,12 +123,12 @@ func TestLoadGlobalDecisions_UnknownField(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	decisionDir := DecisionDir()
 
-	if err := os.MkdirAll(decisionDir, 0700); err != nil {
+	if err := os.MkdirAll(decisionDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	yamlContent := "proxy:\n  allow:\n    - domain: example.com\nunknown_field: bad\n"
-	if err := os.WriteFile(filepath.Join(decisionDir, "global.yaml"), []byte(yamlContent), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(decisionDir, "global.yaml"), []byte(yamlContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -230,7 +231,7 @@ func TestWriteGlobalDecisions_CreatesDir(t *testing.T) {
 		t.Error("decision dir should be a directory")
 	}
 	perm := info.Mode().Perm()
-	if perm != 0700 {
+	if perm != 0o700 {
 		t.Errorf("decision dir permissions = %o, want 0700", perm)
 	}
 }
@@ -258,7 +259,7 @@ func TestWriteProjectDecisions_CreatesDir(t *testing.T) {
 		t.Error("projects dir should be a directory")
 	}
 	perm := info.Mode().Perm()
-	if perm != 0700 {
+	if perm != 0o700 {
 		t.Errorf("projects dir permissions = %o, want 0700", perm)
 	}
 }
@@ -277,7 +278,7 @@ func TestWriteGlobalDecisions_FilePermissions(t *testing.T) {
 	}
 
 	perm := info.Mode().Perm()
-	if perm != 0600 {
+	if perm != 0o600 {
 		t.Errorf("decision file permissions = %o, want 0600", perm)
 	}
 }
@@ -341,7 +342,7 @@ func TestLoadDecisions_AllFields(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	decisionDir := DecisionDir()
 
-	if err := os.MkdirAll(decisionDir, 0700); err != nil {
+	if err := os.MkdirAll(decisionDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -355,7 +356,7 @@ func TestLoadDecisions_AllFields(t *testing.T) {
     - domain: malware.net
     - pattern: "*.evil.com"
 `
-	if err := os.WriteFile(filepath.Join(decisionDir, "global.yaml"), []byte(yamlContent), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(decisionDir, "global.yaml"), []byte(yamlContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -405,14 +406,14 @@ func TestMigrateDecisionDir_MigratesOldDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	oldDir := ConfigDir() + "approvals"
-	if err := os.MkdirAll(oldDir, 0700); err != nil {
+	oldDir := Dir() + "approvals"
+	if err := os.MkdirAll(oldDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	// Write a test file in the old directory
 	testContent := []byte("proxy:\n  allow:\n    - domain: example.com\n")
-	if err := os.WriteFile(filepath.Join(oldDir, "global.yaml"), testContent, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(oldDir, "global.yaml"), testContent, 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -443,7 +444,7 @@ func TestMigrateDecisionDir_MigratesOldDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.ReadFile() error = %v", err)
 	}
-	if string(data) != string(testContent) {
+	if !bytes.Equal(data, testContent) {
 		t.Errorf("file content = %q, want %q", string(data), string(testContent))
 	}
 }
@@ -453,7 +454,7 @@ func TestMigrateDecisionDir_NoOldDir(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
 	// Create the cloister config dir but not approvals/
-	if err := os.MkdirAll(ConfigDir(), 0700); err != nil {
+	if err := os.MkdirAll(Dir(), 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -470,21 +471,21 @@ func TestMigrateDecisionDir_BothExist(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	oldDir := ConfigDir() + "approvals"
+	oldDir := Dir() + "approvals"
 	newDir := DecisionDir()
 
-	if err := os.MkdirAll(oldDir, 0700); err != nil {
+	if err := os.MkdirAll(oldDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll(approvals) error = %v", err)
 	}
-	if err := os.MkdirAll(newDir, 0700); err != nil {
+	if err := os.MkdirAll(newDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll(decisions) error = %v", err)
 	}
 
 	// Write distinct files so we can verify neither was clobbered
-	if err := os.WriteFile(filepath.Join(oldDir, "old.yaml"), []byte("old"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(oldDir, "old.yaml"), []byte("old"), 0o600); err != nil {
 		t.Fatalf("os.WriteFile(old) error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(newDir, "new.yaml"), []byte("new"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(newDir, "new.yaml"), []byte("new"), 0o600); err != nil {
 		t.Fatalf("os.WriteFile(new) error = %v", err)
 	}
 
@@ -515,19 +516,19 @@ func TestMigrateDecisionDir_PreservesContents(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
 
-	oldDir := ConfigDir() + "approvals"
+	oldDir := Dir() + "approvals"
 	projectsDir := filepath.Join(oldDir, "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll(projects) error = %v", err)
 	}
 
 	globalContent := []byte("proxy:\n  allow:\n    - domain: example.com\n    - domain: test.org\n")
 	projectContent := []byte("proxy:\n  allow:\n    - domain: project.dev\n    - pattern: \"*.internal.corp\"\n")
 
-	if err := os.WriteFile(filepath.Join(oldDir, "global.yaml"), globalContent, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(oldDir, "global.yaml"), globalContent, 0o600); err != nil {
 		t.Fatalf("os.WriteFile(global) error = %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(projectsDir, "test.yaml"), projectContent, 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(projectsDir, "test.yaml"), projectContent, 0o600); err != nil {
 		t.Fatalf("os.WriteFile(project) error = %v", err)
 	}
 
@@ -546,7 +547,7 @@ func TestMigrateDecisionDir_PreservesContents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.ReadFile(global) error = %v", err)
 	}
-	if string(data) != string(globalContent) {
+	if !bytes.Equal(data, globalContent) {
 		t.Errorf("global.yaml content = %q, want %q", string(data), string(globalContent))
 	}
 
@@ -555,7 +556,7 @@ func TestMigrateDecisionDir_PreservesContents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("os.ReadFile(project) error = %v", err)
 	}
-	if string(data) != string(projectContent) {
+	if !bytes.Equal(data, projectContent) {
 		t.Errorf("projects/test.yaml content = %q, want %q", string(data), string(projectContent))
 	}
 

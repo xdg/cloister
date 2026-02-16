@@ -38,13 +38,13 @@ func TestMergeTOMLConfig_WithExistingConfig(t *testing.T) {
 
 	// Create a config file with existing content
 	codexDir := filepath.Join(tmpDir, ".codex")
-	if err := os.MkdirAll(codexDir, 0755); err != nil {
+	if err := os.MkdirAll(codexDir, 0o755); err != nil {
 		t.Fatalf("failed to create .codex dir: %v", err)
 	}
 	existingConfig := `model = "gpt-5-codex"
 approval_policy = "on-request"
 `
-	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(existingConfig), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(codexDir, "config.toml"), []byte(existingConfig), 0o644); err != nil {
 		t.Fatalf("failed to write config: %v", err)
 	}
 

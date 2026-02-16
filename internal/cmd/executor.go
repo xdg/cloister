@@ -42,7 +42,7 @@ func init() {
 }
 
 // runExecutor starts the executor socket server and blocks until interrupted.
-func runExecutor(cmd *cobra.Command, args []string) error {
+func runExecutor(_ *cobra.Command, _ []string) error {
 	// Switch to daemon mode: logs go to file only, not stderr
 	clog.SetDaemonMode(true)
 
@@ -75,7 +75,10 @@ func runExecutor(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse listen address: %w", err)
 	}
-	port, _ := strconv.Atoi(portStr)
+	port, err2 := strconv.Atoi(portStr)
+	if err2 != nil {
+		clog.Warn("failed to parse port: %v", err2)
+	}
 
 	clog.Info("executor server listening on %s", listenAddr)
 

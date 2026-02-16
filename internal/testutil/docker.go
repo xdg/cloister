@@ -3,6 +3,7 @@ package testutil
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
@@ -20,8 +21,10 @@ func RequireDocker(t *testing.T) {
 // CleanupContainer removes a container if it exists.
 // Safe to call even if the container doesn't exist.
 func CleanupContainer(name string) {
-	// Best effort cleanup - ignore errors
-	_, _ = docker.Run("rm", "-f", name)
+	// Best effort cleanup - container may not exist
+	if _, err := docker.Run("rm", "-f", name); err != nil {
+		fmt.Fprintf(os.Stderr, "cleanup container %s: %v\n", name, err)
+	}
 }
 
 // UniqueContainerName generates a unique container name with the given prefix.

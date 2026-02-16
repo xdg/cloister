@@ -305,10 +305,10 @@ func TestFindValidMarketplaces_WithValidMarker(t *testing.T) {
 
 	// Create valid marketplace directory structure
 	markerDir := filepath.Join(tmpDir, "marketplaces", "good-plugin", ".claude-plugin")
-	if err := os.MkdirAll(markerDir, 0755); err != nil {
+	if err := os.MkdirAll(markerDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(markerDir, "marketplace.json"), []byte(`{}`), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(markerDir, "marketplace.json"), []byte(`{}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -337,12 +337,12 @@ func TestClaudePluginTransform_Integration(t *testing.T) {
 
 	// Set up plugins directory structure
 	pluginsDir := filepath.Join(tmpDir, "plugins")
-	if err := os.MkdirAll(filepath.Join(pluginsDir, "marketplaces", "test-mp", ".claude-plugin"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(pluginsDir, "marketplaces", "test-mp", ".claude-plugin"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(
 		filepath.Join(pluginsDir, "marketplaces", "test-mp", ".claude-plugin", "marketplace.json"),
-		[]byte(`{}`), 0644,
+		[]byte(`{}`), 0o644,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -355,7 +355,7 @@ func TestClaudePluginTransform_Integration(t *testing.T) {
     "lastUpdated": "2026-01-01T00:00:00.000Z"
   }
 }`
-	if err := os.WriteFile(filepath.Join(pluginsDir, "known_marketplaces.json"), []byte(marketplacesJSON), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginsDir, "known_marketplaces.json"), []byte(marketplacesJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -366,7 +366,7 @@ func TestClaudePluginTransform_Integration(t *testing.T) {
     "version": "2.0.0"
   }
 }`
-	if err := os.WriteFile(filepath.Join(pluginsDir, "installed_plugins.json"), []byte(installedJSON), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginsDir, "installed_plugins.json"), []byte(installedJSON), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

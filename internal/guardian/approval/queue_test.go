@@ -425,7 +425,7 @@ func TestQueue_ConcurrentAccess(t *testing.T) {
 	// Concurrent adds
 	wg.Add(numGoroutines)
 	for i := 0; i < numGoroutines; i++ {
-		go func(n int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < idsPerGoroutine; j++ {
 				req := &PendingRequest{
@@ -724,7 +724,7 @@ func TestQueue_BroadcastsOnTimeout(t *testing.T) {
 
 // contains checks if s contains substr
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > 0 && containsHelper(s, substr))
+	return len(s) >= len(substr) && (s == substr || s != "" && containsHelper(s, substr))
 }
 
 func containsHelper(s, substr string) bool {

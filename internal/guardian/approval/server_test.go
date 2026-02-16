@@ -76,7 +76,7 @@ func TestServer_HandleIndex(t *testing.T) {
 	queue := NewQueue()
 	server := NewServer(queue, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	server.handleIndex(rr, req)
@@ -100,7 +100,7 @@ func TestServer_HandlePending_Empty(t *testing.T) {
 	queue := NewQueue()
 	server := NewServer(queue, nil)
 
-	req := httptest.NewRequest(http.MethodGet, "/pending", nil)
+	req := httptest.NewRequest(http.MethodGet, "/pending", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	server.handlePending(rr, req)
@@ -144,7 +144,7 @@ func TestServer_HandlePending_WithRequests(t *testing.T) {
 
 	server := NewServer(queue, nil)
 
-	httpReq := httptest.NewRequest(http.MethodGet, "/pending", nil)
+	httpReq := httptest.NewRequest(http.MethodGet, "/pending", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	server.handlePending(rr, httpReq)
@@ -202,7 +202,7 @@ func TestServer_HandleApprove_Success(t *testing.T) {
 
 	server := NewServer(queue, nil)
 
-	httpReq := httptest.NewRequest(http.MethodPost, "/approve/"+id, nil)
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve/"+id, http.NoBody)
 	httpReq.SetPathValue("id", id)
 	rr := httptest.NewRecorder()
 
@@ -244,7 +244,7 @@ func TestServer_HandleApprove_NotFound(t *testing.T) {
 	queue := NewQueue()
 	server := NewServer(queue, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/approve/nonexistent", nil)
+	req := httptest.NewRequest(http.MethodPost, "/approve/nonexistent", http.NoBody)
 	req.SetPathValue("id", "nonexistent")
 	rr := httptest.NewRecorder()
 
@@ -283,7 +283,7 @@ func TestServer_HandleDeny_Success(t *testing.T) {
 
 	server := NewServer(queue, nil)
 
-	httpReq := httptest.NewRequest(http.MethodPost, "/deny/"+id, nil)
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny/"+id, http.NoBody)
 	httpReq.SetPathValue("id", id)
 	rr := httptest.NewRecorder()
 
@@ -372,7 +372,7 @@ func TestServer_HandleDeny_NotFound(t *testing.T) {
 	queue := NewQueue()
 	server := NewServer(queue, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/deny/nonexistent", nil)
+	req := httptest.NewRequest(http.MethodPost, "/deny/nonexistent", http.NoBody)
 	req.SetPathValue("id", "nonexistent")
 	rr := httptest.NewRecorder()
 
@@ -405,7 +405,11 @@ func TestServer_ViaHTTP(t *testing.T) {
 	baseURL := "http://" + server.ListenAddr()
 
 	// Test GET /
-	resp, err := http.Get(baseURL + "/")
+	getReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/", http.NoBody)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(getReq)
 	if err != nil {
 		t.Fatalf("request to / failed: %v", err)
 	}
@@ -415,7 +419,11 @@ func TestServer_ViaHTTP(t *testing.T) {
 	}
 
 	// Test GET /pending
-	resp, err = http.Get(baseURL + "/pending")
+	getReq, err = http.NewRequestWithContext(context.Background(), http.MethodGet, baseURL+"/pending", http.NoBody)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	resp, err = http.DefaultClient.Do(getReq)
 	if err != nil {
 		t.Fatalf("request to /pending failed: %v", err)
 	}
@@ -425,7 +433,12 @@ func TestServer_ViaHTTP(t *testing.T) {
 	}
 
 	// Test POST /approve/{id} (not found)
-	resp, err = http.Post(baseURL+"/approve/nonexistent", "application/json", nil)
+	postReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/approve/nonexistent", http.NoBody)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	postReq.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(postReq)
 	if err != nil {
 		t.Fatalf("request to /approve/nonexistent failed: %v", err)
 	}
@@ -435,7 +448,12 @@ func TestServer_ViaHTTP(t *testing.T) {
 	}
 
 	// Test POST /deny/{id} (not found)
-	resp, err = http.Post(baseURL+"/deny/nonexistent", "application/json", nil)
+	postReq, err = http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/deny/nonexistent", http.NoBody)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	postReq.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(postReq)
 	if err != nil {
 		t.Fatalf("request to /deny/nonexistent failed: %v", err)
 	}
@@ -450,7 +468,7 @@ func TestServer_HandleApprove_MissingID(t *testing.T) {
 	server := NewServer(queue, nil)
 
 	// Create request without path value set
-	req := httptest.NewRequest(http.MethodPost, "/approve/", nil)
+	req := httptest.NewRequest(http.MethodPost, "/approve/", http.NoBody)
 	// Don't set path value to simulate missing ID
 	rr := httptest.NewRecorder()
 
@@ -466,7 +484,7 @@ func TestServer_HandleDeny_MissingID(t *testing.T) {
 	server := NewServer(queue, nil)
 
 	// Create request without path value set
-	req := httptest.NewRequest(http.MethodPost, "/deny/", nil)
+	req := httptest.NewRequest(http.MethodPost, "/deny/", http.NoBody)
 	// Don't set path value to simulate missing ID
 	rr := httptest.NewRecorder()
 
@@ -755,7 +773,7 @@ func TestServer_HandleApprove_AuditLogging(t *testing.T) {
 
 	server := NewServer(queue, auditLogger)
 
-	httpReq := httptest.NewRequest(http.MethodPost, "/approve/"+id, nil)
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve/"+id, http.NoBody)
 	httpReq.SetPathValue("id", id)
 	rr := httptest.NewRecorder()
 
@@ -871,7 +889,7 @@ func TestServer_HandleDeny_AuditLogging_DefaultReason(t *testing.T) {
 	server := NewServer(queue, auditLogger)
 
 	// Deny without providing a reason
-	httpReq := httptest.NewRequest(http.MethodPost, "/deny/"+id, nil)
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny/"+id, http.NoBody)
 	httpReq.SetPathValue("id", id)
 	rr := httptest.NewRecorder()
 
@@ -917,7 +935,7 @@ func TestServer_HandleApprove_NilAuditLogger(t *testing.T) {
 	// Create server with nil audit logger - should not panic
 	server := NewServer(queue, nil)
 
-	httpReq := httptest.NewRequest(http.MethodPost, "/approve/"+id, nil)
+	httpReq := httptest.NewRequest(http.MethodPost, "/approve/"+id, http.NoBody)
 	httpReq.SetPathValue("id", id)
 	rr := httptest.NewRecorder()
 
@@ -948,7 +966,7 @@ func TestServer_HandlePendingDomains_Empty(t *testing.T) {
 	server := NewServer(queue, nil)
 	server.DomainQueue = domainQueue
 
-	req := httptest.NewRequest(http.MethodGet, "/pending-domains", nil)
+	req := httptest.NewRequest(http.MethodGet, "/pending-domains", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	server.handlePendingDomains(rr, req)
@@ -993,7 +1011,7 @@ func TestServer_HandlePendingDomains_WithRequests(t *testing.T) {
 	server := NewServer(queue, nil)
 	server.DomainQueue = domainQueue
 
-	httpReq := httptest.NewRequest(http.MethodGet, "/pending-domains", nil)
+	httpReq := httptest.NewRequest(http.MethodGet, "/pending-domains", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	server.handlePendingDomains(rr, httpReq)
@@ -1034,7 +1052,7 @@ func TestServer_HandlePendingDomains_NilDomainQueue(t *testing.T) {
 	server := NewServer(queue, nil)
 	// DomainQueue is nil by default
 
-	req := httptest.NewRequest(http.MethodGet, "/pending-domains", nil)
+	req := httptest.NewRequest(http.MethodGet, "/pending-domains", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	server.handlePendingDomains(rr, req)
@@ -1513,7 +1531,7 @@ func TestServer_HandleDenyDomain_Success(t *testing.T) {
 	server := NewServer(queue, nil)
 	server.DomainQueue = domainQueue
 
-	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, nil)
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, http.NoBody)
 	httpReq.SetPathValue("id", id)
 	rr := httptest.NewRecorder()
 
@@ -1862,7 +1880,7 @@ func TestServer_HandleDenyDomain_NotFound(t *testing.T) {
 	server := NewServer(queue, nil)
 	server.DomainQueue = domainQueue
 
-	req := httptest.NewRequest(http.MethodPost, "/deny-domain/nonexistent", nil)
+	req := httptest.NewRequest(http.MethodPost, "/deny-domain/nonexistent", http.NoBody)
 	req.SetPathValue("id", "nonexistent")
 	rr := httptest.NewRecorder()
 
@@ -2259,7 +2277,7 @@ func TestServer_HandleDenyDomain_AuditLogging_DefaultReason(t *testing.T) {
 	server.SetDomainQueue(domainQueue)
 
 	// Deny without providing a reason
-	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, nil)
+	httpReq := httptest.NewRequest(http.MethodPost, "/deny-domain/"+id, http.NoBody)
 	httpReq.SetPathValue("id", id)
 	rr := httptest.NewRecorder()
 

@@ -49,7 +49,7 @@ var guardianStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start the guardian service",
 	Long:  `Start the guardian container if not already running.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		// Check if Docker is running
 		if err := docker.CheckDaemon(); err != nil {
 			if errors.Is(err, docker.ErrDockerNotRunning) {
@@ -90,7 +90,7 @@ var guardianStopCmd = &cobra.Command{
 	Long: `Stop the guardian container.
 
 Warns if there are running cloister containers that depend on the guardian.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		// Check if Docker is running
 		if err := docker.CheckDaemon(); err != nil {
 			if errors.Is(err, docker.ErrDockerNotRunning) {
@@ -148,7 +148,7 @@ var guardianStatusCmd = &cobra.Command{
 	Use:   "status",
 	Short: "Show guardian service status",
 	Long:  `Show guardian status including uptime and active token count.`,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_ *cobra.Command, _ []string) error {
 		// Check if Docker is running
 		if err := docker.CheckDaemon(); err != nil {
 			if errors.Is(err, docker.ErrDockerNotRunning) {
@@ -229,187 +229,46 @@ func init() {
 	rootCmd.AddCommand(guardianCmd)
 }
 
+// guardianState holds all shared state for the guardian proxy runtime.
+type guardianState struct {
+	registry       *token.Registry
+	cfg            *config.GlobalConfig
+	allowlistCache *guardian.AllowlistCache
+	reloader       *guardian.CacheReloader
+	patternCache   *guardian.PatternCache
+	auditLogger    *audit.Logger
+}
+
 // runGuardianProxy starts the proxy and API servers and blocks until interrupted.
-func runGuardianProxy(cmd *cobra.Command, args []string) error {
+func runGuardianProxy(_ *cobra.Command, _ []string) error {
 	// Switch to daemon mode: logs go to file only, not stderr
 	clog.SetDaemonMode(true)
 
-	// Create an in-memory token registry
-	registry := token.NewRegistry()
+	gs := &guardianState{}
+	gs.registry = token.NewRegistry()
 
-	// Load persisted tokens from disk (mounted from host)
-	store, err := token.NewStore(guardian.ContainerTokenDir)
-	if err != nil {
-		clog.Warn("failed to open token store: %v", err)
-	} else {
-		tokens, err := store.Load()
-		if err != nil {
-			clog.Warn("failed to load tokens: %v", err)
-		} else {
-			for tok, info := range tokens {
-				registry.RegisterFull(tok, info.CloisterName, info.ProjectName, info.WorktreePath)
-			}
-			if len(tokens) > 0 {
-				clog.Info("recovered %d tokens from disk", len(tokens))
-			}
-		}
-	}
+	loadPersistedTokens(gs.registry)
 
-	// Load config and create allowlist
-	cfg, err := config.LoadGlobalConfig()
-	if err != nil {
-		clog.Warn("failed to load config, using defaults: %v", err)
-		cfg = config.DefaultGlobalConfig()
-	}
+	gs.cfg = loadGuardianConfig()
+	globalDecisions := loadGuardianDecisions()
 
-	// Load global decisions and merge with static config
-	globalDecisions, err := config.LoadGlobalDecisions()
-	if err != nil {
-		clog.Warn("failed to load global decisions: %v", err)
-		globalDecisions = &config.Decisions{}
-	}
-	globalAllow := cfg.Proxy.Allow
-	if len(globalDecisions.Proxy.Allow) > 0 {
-		globalAllow = append(globalAllow, globalDecisions.Proxy.Allow...)
-	}
-	globalAllowlist := guardian.NewAllowlistFromConfig(globalAllow)
-	staticCount := len(cfg.Proxy.Allow)
-	approvedCount := len(globalDecisions.Proxy.Allow)
-	clog.Info("loaded global allowlist: %d static + %d approved = %d total",
-		staticCount, approvedCount, len(globalAllow))
+	gs.allowlistCache, gs.reloader = setupAllowlistCache(gs.cfg, globalDecisions, gs.registry)
 
-	// Build global denylist from static config + decisions
-	var globalDenylist *guardian.Allowlist
-	globalDeny := config.MergeDenylists(cfg.Proxy.Deny, globalDecisions.Proxy.Deny)
-	if len(globalDeny) > 0 {
-		globalDenylist = guardian.NewAllowlistFromConfig(globalDeny)
-		clog.Info("loaded global denylist: %d static + %d decisions = %d total",
-			len(cfg.Proxy.Deny), len(globalDecisions.Proxy.Deny), len(globalDeny))
-	}
-
-	// Create allowlist cache for per-project allowlists
-	allowlistCache := guardian.NewAllowlistCache(globalAllowlist)
-	allowlistCache.SetGlobalDeny(globalDenylist)
-
-	// Create the cache reloader for allowlist/denylist management
-	reloader := guardian.NewCacheReloader(
-		allowlistCache,
-		&registryAdapter{registry},
-		cfg.Proxy.Allow, cfg.Proxy.Deny,
-		globalDecisions,
-	)
-
-	// Create the proxy server with config-derived allowlist
-	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)
-	proxy := guardian.NewProxyServerWithConfig(proxyAddr, globalAllowlist)
-	proxy.TokenValidator = registry
-
-	// Set up per-project allowlist support
-	proxy.AllowlistCache = allowlistCache
-	proxy.TokenLookup = func(token string) (guardian.TokenLookupResult, bool) {
-		info, ok := registry.Lookup(token)
-		if !ok {
-			return guardian.TokenLookupResult{}, false
-		}
-		return guardian.TokenLookupResult{
-			ProjectName:  info.ProjectName,
-			CloisterName: info.CloisterName,
-		}, true
-	}
-
-	// Set the project loaders for lazy loading
-	allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)
-	allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)
-
-	// Create pattern matcher from global config hostexec patterns
-	autoApprovePatterns := extractPatterns(cfg.Hostexec.AutoApprove)
-	manualApprovePatterns := extractPatterns(cfg.Hostexec.ManualApprove)
-	regexMatcher := patterns.NewRegexMatcher(autoApprovePatterns, manualApprovePatterns)
-	clog.Info("loaded approval patterns: %d auto-approve, %d manual-approve",
-		len(autoApprovePatterns), len(manualApprovePatterns))
-
-	// Create pattern cache for per-project command patterns
-	patternCache := guardian.NewPatternCache(regexMatcher)
-
-	// Create project pattern loader that merges project config with global
-	loadProjectPatterns := func(projectName string) patterns.Matcher {
-		projectCfg, err := config.LoadProjectConfig(projectName)
-		if err != nil {
-			clog.Warn("failed to load project config for patterns %s: %v", projectName, err)
-			return nil
-		}
-
-		// Check if there's anything project-specific to merge
-		if len(projectCfg.Hostexec.AutoApprove) == 0 && len(projectCfg.Hostexec.ManualApprove) == 0 {
-			return nil
-		}
-
-		// Merge: global + project patterns
-		mergedAuto := config.MergeCommandPatterns(cfg.Hostexec.AutoApprove, projectCfg.Hostexec.AutoApprove)
-		mergedManual := config.MergeCommandPatterns(cfg.Hostexec.ManualApprove, projectCfg.Hostexec.ManualApprove)
-		matcher := patterns.NewRegexMatcher(extractPatterns(mergedAuto), extractPatterns(mergedManual))
-		clog.Info("loaded command patterns for project %s (%d auto-approve, %d manual-approve)",
-			projectName, len(mergedAuto), len(mergedManual))
-		return matcher
-	}
-	patternCache.SetProjectLoader(loadProjectPatterns)
-
-	// Create pattern lookup function for the request server
+	proxy := setupProxyServer(gs)
+	gs.patternCache = setupPatternCache(gs)
 	patternLookup := func(projectName string) request.PatternMatcher {
-		return patternCache.GetProject(projectName)
+		return gs.patternCache.GetProject(projectName)
 	}
 
-	// Set up config reloader for SIGHUP
-	proxy.SetConfigReloader(func() (*guardian.Allowlist, error) {
-		newCfg, err := config.LoadGlobalConfig()
-		if err != nil {
-			return nil, err
-		}
-		cfg = newCfg
+	setupConfigReloader(proxy, gs)
 
-		reloader.SetStaticConfig(newCfg.Proxy.Allow, newCfg.Proxy.Deny)
-		reloader.Reload()
-
-		// Rebuild global pattern matcher and clear project pattern cache
-		newAutoApprove := extractPatterns(newCfg.Hostexec.AutoApprove)
-		newManualApprove := extractPatterns(newCfg.Hostexec.ManualApprove)
-		newRegexMatcher := patterns.NewRegexMatcher(newAutoApprove, newManualApprove)
-		patternCache.SetGlobal(newRegexMatcher)
-		patternCache.Clear()
-		clog.Info("reloaded approval patterns: %d auto-approve, %d manual-approve",
-			len(newAutoApprove), len(newManualApprove))
-
-		return allowlistCache.GetGlobal(), nil
-	})
-
-	// Create the API server
 	apiAddr := fmt.Sprintf(":%d", guardian.DefaultAPIPort)
-	api := guardian.NewAPIServer(apiAddr, &registryAdapter{registry})
+	api := guardian.NewAPIServer(apiAddr, &registryAdapter{gs.registry})
 
-	// Create audit logger if configured
-	var auditLogger *audit.Logger
-	if cfg.Log.File != "" {
-		// Expand ~ to home directory if present
-		auditLogPath := cfg.Log.File
-		if strings.HasPrefix(auditLogPath, "~/") {
-			home, err := os.UserHomeDir()
-			if err == nil {
-				auditLogPath = filepath.Join(home, auditLogPath[2:])
-			}
-		}
-		auditFile, err := clog.OpenLogFile(auditLogPath)
-		if err != nil {
-			clog.Warn("failed to open audit log file %s: %v", auditLogPath, err)
-		} else {
-			auditLogger = audit.NewLogger(auditFile)
-			clog.Info("audit logging enabled: %s", auditLogPath)
-		}
-	}
+	gs.auditLogger = setupAuditLogger(gs.cfg)
 
-	// Create the request server for hostexec commands
-	// Token lookup adapter for the request server
 	requestTokenLookup := func(tok string) (request.TokenInfo, bool) {
-		info, ok := registry.Lookup(tok)
+		info, ok := gs.registry.Lookup(tok)
 		if !ok {
 			return request.TokenInfo{}, false
 		}
@@ -419,10 +278,222 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		}, true
 	}
 
-	// Create the approval queue for pending requests
 	approvalQueue := approval.NewQueue()
+	dar := setupDomainApproval(gs, proxy)
 
-	// Validate unlisted_domain_behavior config value
+	configPersister := &guardian.ConfigPersisterImpl{
+		ReloadNotifier: func() {
+			gs.reloader.Reload()
+			gs.patternCache.Clear()
+		},
+	}
+
+	proxy.DomainApprover = dar.Approver
+	proxy.SessionAllowlist = dar.SessionAllowlist
+	proxy.SessionDenylist = dar.SessionDenylist
+	api.SessionAllowlist = dar.SessionAllowlist
+
+	execClient := setupExecutorClient()
+
+	reqServer := request.NewServer(requestTokenLookup, patternLookup, execClient, gs.auditLogger)
+	reqServer.Queue = approvalQueue
+
+	approvalServer := approval.NewServer(approvalQueue, gs.auditLogger)
+	approvalServer.SetDomainQueue(dar.DomainQueue)
+	approvalServer.ConfigPersister = configPersister
+
+	if dar.DomainQueue != nil && gs.auditLogger != nil {
+		dar.DomainQueue.SetAuditLogger(gs.auditLogger)
+	}
+
+	if err := startAllServers(proxy, api, reqServer, approvalServer); err != nil {
+		return err
+	}
+
+	awaitShutdownSignal()
+
+	return shutdownAllServers(proxy, api, reqServer, approvalServer)
+}
+
+// loadPersistedTokens loads tokens from disk into the registry.
+func loadPersistedTokens(registry *token.Registry) {
+	store, err := token.NewStore(guardian.ContainerTokenDir)
+	if err != nil {
+		clog.Warn("failed to open token store: %v", err)
+		return
+	}
+	tokens, err := store.Load()
+	if err != nil {
+		clog.Warn("failed to load tokens: %v", err)
+		return
+	}
+	for tok, info := range tokens {
+		registry.RegisterFull(tok, info.CloisterName, info.ProjectName, info.WorktreePath)
+	}
+	if len(tokens) > 0 {
+		clog.Info("recovered %d tokens from disk", len(tokens))
+	}
+}
+
+// loadGuardianConfig loads the global config, falling back to defaults.
+func loadGuardianConfig() *config.GlobalConfig {
+	cfg, err := config.LoadGlobalConfig()
+	if err != nil {
+		clog.Warn("failed to load config, using defaults: %v", err)
+		return config.DefaultGlobalConfig()
+	}
+	return cfg
+}
+
+// loadGuardianDecisions loads global decisions, falling back to empty.
+func loadGuardianDecisions() *config.Decisions {
+	decisions, err := config.LoadGlobalDecisions()
+	if err != nil {
+		clog.Warn("failed to load global decisions: %v", err)
+		return &config.Decisions{}
+	}
+	return decisions
+}
+
+// setupAllowlistCache creates the allowlist cache with global allow/deny lists.
+func setupAllowlistCache(cfg *config.GlobalConfig, globalDecisions *config.Decisions, registry *token.Registry) (*guardian.AllowlistCache, *guardian.CacheReloader) {
+	globalAllow := cfg.Proxy.Allow
+	if len(globalDecisions.Proxy.Allow) > 0 {
+		globalAllow = append(globalAllow, globalDecisions.Proxy.Allow...)
+	}
+	globalAllowlist := guardian.NewAllowlistFromConfig(globalAllow)
+	clog.Info("loaded global allowlist: %d static + %d approved = %d total",
+		len(cfg.Proxy.Allow), len(globalDecisions.Proxy.Allow), len(globalAllow))
+
+	var globalDenylist *guardian.Allowlist
+	globalDeny := config.MergeDenylists(cfg.Proxy.Deny, globalDecisions.Proxy.Deny)
+	if len(globalDeny) > 0 {
+		globalDenylist = guardian.NewAllowlistFromConfig(globalDeny)
+		clog.Info("loaded global denylist: %d static + %d decisions = %d total",
+			len(cfg.Proxy.Deny), len(globalDecisions.Proxy.Deny), len(globalDeny))
+	}
+
+	cache := guardian.NewAllowlistCache(globalAllowlist)
+	cache.SetGlobalDeny(globalDenylist)
+
+	reloader := guardian.NewCacheReloader(
+		cache,
+		&registryAdapter{registry},
+		cfg.Proxy.Allow, cfg.Proxy.Deny,
+		globalDecisions,
+	)
+
+	cache.SetProjectLoader(reloader.LoadProjectAllowlist)
+	cache.SetDenylistLoader(reloader.LoadProjectDenylist)
+
+	return cache, reloader
+}
+
+// setupProxyServer creates and configures the proxy server.
+func setupProxyServer(gs *guardianState) *guardian.ProxyServer {
+	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)
+	proxy := guardian.NewProxyServerWithConfig(proxyAddr, gs.allowlistCache.GetGlobal())
+	proxy.TokenValidator = gs.registry
+	proxy.AllowlistCache = gs.allowlistCache
+	proxy.TokenLookup = func(token string) (guardian.TokenLookupResult, bool) {
+		info, ok := gs.registry.Lookup(token)
+		if !ok {
+			return guardian.TokenLookupResult{}, false
+		}
+		return guardian.TokenLookupResult{
+			ProjectName:  info.ProjectName,
+			CloisterName: info.CloisterName,
+		}, true
+	}
+	return proxy
+}
+
+// setupPatternCache creates the pattern cache for command approval.
+func setupPatternCache(gs *guardianState) *guardian.PatternCache {
+	autoApprovePatterns := extractPatterns(gs.cfg.Hostexec.AutoApprove)
+	manualApprovePatterns := extractPatterns(gs.cfg.Hostexec.ManualApprove)
+	regexMatcher := patterns.NewRegexMatcher(autoApprovePatterns, manualApprovePatterns)
+	clog.Info("loaded approval patterns: %d auto-approve, %d manual-approve",
+		len(autoApprovePatterns), len(manualApprovePatterns))
+
+	cache := guardian.NewPatternCache(regexMatcher)
+	cfg := gs.cfg
+	cache.SetProjectLoader(func(projectName string) patterns.Matcher {
+		projectCfg, err := config.LoadProjectConfig(projectName)
+		if err != nil {
+			clog.Warn("failed to load project config for patterns %s: %v", projectName, err)
+			return nil
+		}
+		if len(projectCfg.Hostexec.AutoApprove) == 0 && len(projectCfg.Hostexec.ManualApprove) == 0 {
+			return nil
+		}
+		mergedAuto := config.MergeCommandPatterns(cfg.Hostexec.AutoApprove, projectCfg.Hostexec.AutoApprove)
+		mergedManual := config.MergeCommandPatterns(cfg.Hostexec.ManualApprove, projectCfg.Hostexec.ManualApprove)
+		matcher := patterns.NewRegexMatcher(extractPatterns(mergedAuto), extractPatterns(mergedManual))
+		clog.Info("loaded command patterns for project %s (%d auto-approve, %d manual-approve)",
+			projectName, len(mergedAuto), len(mergedManual))
+		return matcher
+	})
+
+	return cache
+}
+
+// setupConfigReloader configures the SIGHUP-based config reload on the proxy.
+func setupConfigReloader(proxy *guardian.ProxyServer, gs *guardianState) {
+	proxy.SetConfigReloader(func() (*guardian.Allowlist, error) {
+		newCfg, err := config.LoadGlobalConfig()
+		if err != nil {
+			return nil, err
+		}
+		gs.cfg = newCfg
+
+		gs.reloader.SetStaticConfig(newCfg.Proxy.Allow, newCfg.Proxy.Deny)
+		gs.reloader.Reload()
+
+		newAutoApprove := extractPatterns(newCfg.Hostexec.AutoApprove)
+		newManualApprove := extractPatterns(newCfg.Hostexec.ManualApprove)
+		newRegexMatcher := patterns.NewRegexMatcher(newAutoApprove, newManualApprove)
+		gs.patternCache.SetGlobal(newRegexMatcher)
+		gs.patternCache.Clear()
+		clog.Info("reloaded approval patterns: %d auto-approve, %d manual-approve",
+			len(newAutoApprove), len(newManualApprove))
+
+		return gs.allowlistCache.GetGlobal(), nil
+	})
+}
+
+// setupAuditLogger creates the audit logger if configured.
+func setupAuditLogger(cfg *config.GlobalConfig) *audit.Logger {
+	if cfg.Log.File == "" {
+		return nil
+	}
+	auditLogPath := cfg.Log.File
+	if strings.HasPrefix(auditLogPath, "~/") {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			auditLogPath = filepath.Join(home, auditLogPath[2:])
+		}
+	}
+	auditFile, err := clog.OpenLogFile(auditLogPath)
+	if err != nil {
+		clog.Warn("failed to open audit log file %s: %v", auditLogPath, err)
+		return nil
+	}
+	clog.Info("audit logging enabled: %s", auditLogPath)
+	return audit.NewLogger(auditFile)
+}
+
+// domainApprovalResult groups the components returned by setupDomainApproval.
+type domainApprovalResult struct {
+	Approver         guardian.DomainApprover
+	SessionAllowlist guardian.SessionAllowlist
+	SessionDenylist  guardian.SessionDenylist
+	DomainQueue      *approval.DomainQueue
+}
+
+// setupDomainApproval configures domain approval components if enabled.
+func setupDomainApproval(gs *guardianState, _ *guardian.ProxyServer) domainApprovalResult {
+	cfg := gs.cfg
 	if cfg.Proxy.UnlistedDomainBehavior != "" &&
 		cfg.Proxy.UnlistedDomainBehavior != "reject" &&
 		cfg.Proxy.UnlistedDomainBehavior != "request_approval" {
@@ -430,162 +501,122 @@ func runGuardianProxy(cmd *cobra.Command, args []string) error {
 		cfg.Proxy.UnlistedDomainBehavior = "request_approval"
 	}
 
-	// Create domain approver if unlisted_domain_behavior is "request_approval"
-	var domainApprover guardian.DomainApprover
-	var sessionAllowlist guardian.SessionAllowlist
-	var sessionDenylist guardian.SessionDenylist
-	var domainQueue *approval.DomainQueue
-	if cfg.Proxy.UnlistedDomainBehavior == "request_approval" {
-		// Parse domain approval timeout from config (default 60s)
-		approvalTimeout := 60 * time.Second
-		if cfg.Proxy.ApprovalTimeout != "" {
-			parsed, err := time.ParseDuration(cfg.Proxy.ApprovalTimeout)
-			if err != nil {
-				clog.Warn("invalid approval_timeout %q, using default 60s: %v", cfg.Proxy.ApprovalTimeout, err)
-			} else {
-				approvalTimeout = parsed
-			}
-		}
-
-		// Create the domain approval queue with configured timeout
-		domainQueue = approval.NewDomainQueueWithTimeout(approvalTimeout)
-
-		// Create session allowlist and denylist for ephemeral domain decisions
-		sessionAllowlist = guardian.NewSessionAllowlist()
-		sessionDenylist = guardian.NewSessionDenylist()
-
-		// Create domain approver with all dependencies
-		domainApprover = guardian.NewDomainApprover(domainQueue, sessionAllowlist, sessionDenylist, allowlistCache, auditLogger)
-		clog.Info("domain approval enabled (timeout: %v)", approvalTimeout)
-	} else {
+	if cfg.Proxy.UnlistedDomainBehavior != "request_approval" {
 		clog.Info("domain approval disabled (unlisted domains will be rejected)")
+		return domainApprovalResult{}
 	}
 
-	// Create config persister with reload notifier
-	configPersister := &guardian.ConfigPersisterImpl{
-		ReloadNotifier: func() {
-			reloader.Reload()
-			patternCache.Clear()
-		},
+	approvalTimeout := 60 * time.Second
+	if cfg.Proxy.ApprovalTimeout != "" {
+		parsed, err := time.ParseDuration(cfg.Proxy.ApprovalTimeout)
+		if err != nil {
+			clog.Warn("invalid approval_timeout %q, using default 60s: %v", cfg.Proxy.ApprovalTimeout, err)
+		} else {
+			approvalTimeout = parsed
+		}
 	}
 
-	// Set domain approver and session allow/deny lists on proxy (all may be nil if disabled)
-	proxy.DomainApprover = domainApprover
-	proxy.SessionAllowlist = sessionAllowlist
-	proxy.SessionDenylist = sessionDenylist
+	domainQueue := approval.NewDomainQueueWithTimeout(approvalTimeout)
+	sessionAllowlist := guardian.NewSessionAllowlist()
+	sessionDenylist := guardian.NewSessionDenylist()
+	domainApprover := guardian.NewDomainApprover(domainQueue, sessionAllowlist, sessionDenylist, gs.allowlistCache, gs.auditLogger)
+	clog.Info("domain approval enabled (timeout: %v)", approvalTimeout)
 
-	// Set session allowlist on API server for cleanup on token revocation
-	api.SessionAllowlist = sessionAllowlist
+	return domainApprovalResult{
+		Approver:         domainApprover,
+		SessionAllowlist: sessionAllowlist,
+		SessionDenylist:  sessionDenylist,
+		DomainQueue:      domainQueue,
+	}
+}
 
-	// Create executor client if shared secret and port are available
-	var execClient request.CommandExecutor
+// setupExecutorClient creates the executor client if environment is configured.
+func setupExecutorClient() request.CommandExecutor {
 	sharedSecret := os.Getenv(guardian.SharedSecretEnvVar)
 	executorPortStr := os.Getenv(guardian.ExecutorPortEnvVar)
-	if sharedSecret != "" && executorPortStr != "" {
-		port, err := strconv.Atoi(executorPortStr)
-		if err != nil {
-			clog.Warn("invalid executor port %q: %v", executorPortStr, err)
-		} else {
-			execClient = guardianexec.NewTCPClient(port, sharedSecret)
-			clog.Info("executor client configured (host.docker.internal:%d)", port)
-		}
-	} else {
+	if sharedSecret == "" || executorPortStr == "" {
 		if sharedSecret == "" {
 			clog.Warn("%s not set, command execution disabled", guardian.SharedSecretEnvVar)
 		}
 		if executorPortStr == "" {
 			clog.Warn("%s not set, command execution disabled", guardian.ExecutorPortEnvVar)
 		}
+		return nil
+	}
+	port, err := strconv.Atoi(executorPortStr)
+	if err != nil {
+		clog.Warn("invalid executor port %q: %v", executorPortStr, err)
+		return nil
+	}
+	clog.Info("executor client configured (host.docker.internal:%d)", port)
+	return guardianexec.NewTCPClient(port, sharedSecret)
+}
+
+// stoppable is a server that can be started and stopped.
+type stoppable interface {
+	Start() error
+	Stop(ctx context.Context) error
+	ListenAddr() string
+}
+
+// startAllServers starts all guardian servers, cleaning up on failure.
+func startAllServers(proxy, api, reqServer, approvalServer stoppable) error {
+	servers := []struct {
+		server stoppable
+		name   string
+	}{
+		{proxy, "proxy"},
+		{api, "API"},
+		{reqServer, "request"},
+		{approvalServer, "approval"},
 	}
 
-	reqServer := request.NewServer(requestTokenLookup, patternLookup, execClient, auditLogger)
-	reqServer.Queue = approvalQueue
-
-	// Create the approval server for the web UI (localhost only)
-	approvalServer := approval.NewServer(approvalQueue, auditLogger)
-
-	// Wire domain queue and config persister to approval server
-	// SetDomainQueue will wire the EventHub if both are non-nil
-	approvalServer.SetDomainQueue(domainQueue)
-	approvalServer.ConfigPersister = configPersister
-
-	// Wire audit logger to domain queue if both are non-nil
-	if domainQueue != nil && auditLogger != nil {
-		domainQueue.SetAuditLogger(auditLogger)
+	var started []stoppable
+	for _, s := range servers {
+		if err := s.server.Start(); err != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			for _, running := range started {
+				if stopErr := running.Stop(ctx); stopErr != nil {
+					clog.Warn("failed to stop server on cleanup: %v", stopErr)
+				}
+			}
+			cancel()
+			return fmt.Errorf("failed to start %s server: %w", s.name, err)
+		}
+		clog.Info("guardian %s server listening on %s", s.name, s.server.ListenAddr())
+		started = append(started, s.server)
 	}
 
-	// Start the proxy server
-	if err := proxy.Start(); err != nil {
-		return fmt.Errorf("failed to start proxy server: %w", err)
-	}
+	return nil
+}
 
-	clog.Info("guardian proxy server listening on %s", proxy.ListenAddr())
-
-	// Start the API server
-	if err := api.Start(); err != nil {
-		// Clean up proxy server on failure
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = proxy.Stop(ctx)
-		return fmt.Errorf("failed to start API server: %w", err)
-	}
-
-	clog.Info("guardian API server listening on %s", api.ListenAddr())
-
-	// Start the request server for hostexec commands
-	if err := reqServer.Start(); err != nil {
-		// Clean up other servers on failure
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = proxy.Stop(ctx)
-		_ = api.Stop(ctx)
-		return fmt.Errorf("failed to start request server: %w", err)
-	}
-
-	clog.Info("guardian request server listening on %s", reqServer.ListenAddr())
-
-	// Start the approval server for web UI (localhost only)
-	if err := approvalServer.Start(); err != nil {
-		// Clean up other servers on failure
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = proxy.Stop(ctx)
-		_ = api.Stop(ctx)
-		_ = reqServer.Stop(ctx)
-		return fmt.Errorf("failed to start approval server: %w", err)
-	}
-
-	clog.Info("guardian approval server listening on %s", approvalServer.ListenAddr())
-
-	// Wait for interrupt signal
+// awaitShutdownSignal blocks until SIGINT or SIGTERM is received.
+func awaitShutdownSignal() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 	<-sigChan
-
 	clog.Debug("shutting down guardian servers...")
+}
 
-	// Graceful shutdown with timeout
+// shutdownAllServers gracefully shuts down all guardian servers.
+func shutdownAllServers(proxy, api, reqServer, approvalServer stoppable) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Stop all servers
-	var proxyErr, apiErr, reqErr, approvalErr error
-	proxyErr = proxy.Stop(ctx)
-	apiErr = api.Stop(ctx)
-	reqErr = reqServer.Stop(ctx)
-	approvalErr = approvalServer.Stop(ctx)
+	errs := []struct {
+		err  error
+		name string
+	}{
+		{proxy.Stop(ctx), "proxy"},
+		{api.Stop(ctx), "API"},
+		{reqServer.Stop(ctx), "request server"},
+		{approvalServer.Stop(ctx), "approval server"},
+	}
 
-	if proxyErr != nil {
-		return fmt.Errorf("error during proxy shutdown: %w", proxyErr)
-	}
-	if apiErr != nil {
-		return fmt.Errorf("error during API shutdown: %w", apiErr)
-	}
-	if reqErr != nil {
-		return fmt.Errorf("error during request server shutdown: %w", reqErr)
-	}
-	if approvalErr != nil {
-		return fmt.Errorf("error during approval server shutdown: %w", approvalErr)
+	for _, e := range errs {
+		if e.err != nil {
+			return fmt.Errorf("error during %s shutdown: %w", e.name, e.err)
+		}
 	}
 
 	clog.Debug("guardian servers stopped")
@@ -640,12 +671,13 @@ func getGuardianUptime() (string, error) {
 }
 
 // registryAdapter wraps token.Registry to implement guardian.TokenRegistry.
-// This is needed because token.TokenInfo and guardian.TokenInfo are structurally
+// This is needed because token.Info and guardian.TokenInfo are structurally
 // identical but Go considers them different types.
 type registryAdapter struct {
 	*token.Registry
 }
 
+// List returns all registered tokens as guardian.TokenInfo values.
 func (r *registryAdapter) List() map[string]guardian.TokenInfo {
 	tokens := r.Registry.List()
 	result := make(map[string]guardian.TokenInfo, len(tokens))
@@ -659,6 +691,7 @@ func (r *registryAdapter) List() map[string]guardian.TokenInfo {
 	return result
 }
 
+// RegisterFull delegates to the underlying token.Registry.
 func (r *registryAdapter) RegisterFull(tok, cloisterName, projectName, worktreePath string) {
 	r.Registry.RegisterFull(tok, cloisterName, projectName, worktreePath)
 }
@@ -693,9 +726,9 @@ func formatDuration(d time.Duration) string {
 }
 
 // extractPatterns extracts pattern strings from a slice of CommandPattern.
-func extractPatterns(patterns []config.CommandPattern) []string {
-	result := make([]string, len(patterns))
-	for i, p := range patterns {
+func extractPatterns(cmds []config.CommandPattern) []string {
+	result := make([]string, len(cmds))
+	for i, p := range cmds {
 		result[i] = p.Pattern
 	}
 	return result

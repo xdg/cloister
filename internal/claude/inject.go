@@ -1,3 +1,4 @@
+// Package claude provides credential injection for Claude Code CLI.
 package claude
 
 import (
@@ -9,8 +10,8 @@ import (
 
 // Environment variable names for credential injection.
 const (
-	EnvClaudeOAuthToken = "CLAUDE_CODE_OAUTH_TOKEN"
-	EnvAnthropicAPIKey  = "ANTHROPIC_API_KEY"
+	EnvClaudeOAuthToken = "CLAUDE_CODE_OAUTH_TOKEN" //nolint:gosec // G101: not a credential, just the env var name
+	EnvAnthropicAPIKey  = "ANTHROPIC_API_KEY"       //nolint:gosec // G101: not a credential, just the env var name
 )
 
 // Auth method constants matching config.AgentConfig.AuthMethod values.

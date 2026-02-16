@@ -117,7 +117,7 @@ type mockExecutorForSocket struct {
 	response ExecuteResponse
 }
 
-func (m *mockExecutorForSocket) Execute(ctx context.Context, req ExecuteRequest) ExecuteResponse {
+func (m *mockExecutorForSocket) Execute(_ context.Context, req ExecuteRequest) ExecuteResponse {
 	m.mu.Lock()
 	m.calls = append(m.calls, req)
 	m.mu.Unlock()
@@ -151,7 +151,7 @@ func TestSocketServerStartStop(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Socket file not created: %v", err)
 	}
-	if info.Mode().Perm() != 0600 {
+	if info.Mode().Perm() != 0o600 {
 		t.Errorf("Socket permissions: got %o, want 0600", info.Mode().Perm())
 	}
 
@@ -213,7 +213,7 @@ func TestSocketServerValidRequest(t *testing.T) {
 	defer func() { _ = server.Stop() }()
 
 	// Connect to socket
-	conn, err := net.Dial("unix", sockPath)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "unix", sockPath)
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestSocketServerInvalidSecret(t *testing.T) {
 	defer func() { _ = server.Stop() }()
 
 	// Connect to socket
-	conn, err := net.Dial("unix", sockPath)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "unix", sockPath)
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}
@@ -319,7 +319,7 @@ func TestSocketServerInvalidJSON(t *testing.T) {
 	defer func() { _ = server.Stop() }()
 
 	// Connect to socket
-	conn, err := net.Dial("unix", sockPath)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "unix", sockPath)
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}
@@ -363,7 +363,7 @@ func TestSocketServerMultipleConnections(t *testing.T) {
 
 	for i := 0; i < numConns; i++ {
 		go func(idx int) {
-			conn, err := net.Dial("unix", sockPath)
+			conn, err := (&net.Dialer{}).DialContext(context.Background(), "unix", sockPath)
 			if err != nil {
 				t.Errorf("Connection %d: Dial failed: %v", idx, err)
 				done <- false
@@ -446,7 +446,7 @@ func TestSocketServerGracefulShutdown(t *testing.T) {
 	}
 
 	// Start a connection but don't finish it yet
-	conn, err := net.Dial("unix", sockPath)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "unix", sockPath)
 	if err != nil {
 		t.Fatalf("Dial failed: %v", err)
 	}

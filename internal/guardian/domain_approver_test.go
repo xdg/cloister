@@ -246,10 +246,8 @@ func TestValidateDomain(t *testing.T) {
 				if tt.errMsg != "" && !contains(err.Error(), tt.errMsg) {
 					t.Errorf("ValidateDomain(%q) error = %q, want error containing %q", tt.domain, err.Error(), tt.errMsg)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("ValidateDomain(%q) unexpected error: %v", tt.domain, err)
-				}
+			} else if err != nil {
+				t.Errorf("ValidateDomain(%q) unexpected error: %v", tt.domain, err)
 			}
 		})
 	}
@@ -257,8 +255,8 @@ func TestValidateDomain(t *testing.T) {
 
 // contains checks if s contains substr (case-sensitive)
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(substr) == 0 ||
-		(len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)))
+	return len(s) >= len(substr) && (s == substr || substr == "" ||
+		(s != "" && substr != "" && findSubstring(s, substr)))
 }
 
 func findSubstring(s, substr string) bool {

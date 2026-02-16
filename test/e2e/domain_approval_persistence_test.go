@@ -3,6 +3,8 @@
 package e2e
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -48,15 +50,20 @@ type pendingDomainsJSON struct {
 
 // waitForPendingDomain polls the approval server for a pending domain request
 // matching the given domain. Returns the request ID when found.
-func waitForPendingDomain(t *testing.T, port int, domain string, timeout time.Duration) string {
+func waitForPendingDomain(t *testing.T, port int, domain string) string {
 	t.Helper()
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	url := fmt.Sprintf("http://127.0.0.1:%d/pending-domains", port)
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(10 * time.Second)
 
 	for time.Now().Before(deadline) {
-		resp, err := client.Get(url)
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		resp, err := client.Do(req)
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 			continue
@@ -96,7 +103,12 @@ func approveDomain(t *testing.T, port int, requestID, scope string) {
 	url := fmt.Sprintf("http://127.0.0.1:%d/approve-domain/%s", port, requestID)
 
 	body := fmt.Sprintf(`{"scope": %q}`, scope)
-	resp, err := client.Post(url, "application/json", strings.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to approve domain: %v", err)
 	}
@@ -114,7 +126,12 @@ func denyDomain(t *testing.T, port int, requestID, scope string, wildcard bool) 
 	client := &http.Client{Timeout: 5 * time.Second}
 	url := fmt.Sprintf("http://127.0.0.1:%d/deny-domain/%s", port, requestID)
 	body := fmt.Sprintf(`{"scope": %q, "wildcard": %v}`, scope, wildcard)
-	resp, err := client.Post(url, "application/json", strings.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("Failed to deny domain: %v", err)
 	}
@@ -140,7 +157,7 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 	port := approvalPort(t)
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -168,7 +185,7 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 	}()
 
 	// Wait for the domain approval request to appear in the queue
-	requestID := waitForPendingDomain(t, port, testDomain, 10*time.Second)
+	requestID := waitForPendingDomain(t, port, testDomain)
 	t.Logf("Found pending domain request: id=%s", requestID)
 
 	// Approve with project scope
@@ -215,7 +232,7 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 
 	// Verify static project config was NOT modified
 	staticConfigAfter, _ := os.ReadFile(projectConfigPath)
-	if string(staticConfigBefore) != string(staticConfigAfter) {
+	if !bytes.Equal(staticConfigBefore, staticConfigAfter) {
 		t.Error("Static project config was modified; expected it to remain unchanged")
 	}
 }
@@ -235,7 +252,7 @@ func TestDomainApprovalPersistence_GlobalScope(t *testing.T) {
 	port := approvalPort(t)
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -260,7 +277,7 @@ func TestDomainApprovalPersistence_GlobalScope(t *testing.T) {
 	}()
 
 	// Wait for the domain approval request to appear in the queue
-	requestID := waitForPendingDomain(t, port, testDomain, 10*time.Second)
+	requestID := waitForPendingDomain(t, port, testDomain)
 	t.Logf("Found pending domain request: id=%s", requestID)
 
 	// Approve with global scope
@@ -302,7 +319,7 @@ func TestDomainApprovalPersistence_GlobalScope(t *testing.T) {
 
 	// Verify static global config was NOT modified
 	staticConfigAfter, _ := os.ReadFile(globalConfigPath)
-	if string(staticConfigBefore) != string(staticConfigAfter) {
+	if !bytes.Equal(staticConfigBefore, staticConfigAfter) {
 		t.Error("Static global config was modified; expected it to remain unchanged")
 	}
 }
@@ -316,7 +333,7 @@ func TestDomainApprovalPersistence_SubsequentRequestAllowed(t *testing.T) {
 	port := approvalPort(t)
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -334,7 +351,7 @@ func TestDomainApprovalPersistence_SubsequentRequestAllowed(t *testing.T) {
 	}()
 
 	// Approve the first request with project scope
-	requestID := waitForPendingDomain(t, port, testDomain, 10*time.Second)
+	requestID := waitForPendingDomain(t, port, testDomain)
 	approveDomain(t, port, requestID, "project")
 	wg.Wait()
 

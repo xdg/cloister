@@ -4,6 +4,7 @@ package prompt
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -64,7 +65,7 @@ func (p *StdinPrompter) Prompt(prompt string, options []string, defaultIdx int) 
 	// Read user input
 	reader := bufio.NewReader(p.In)
 	line, err := reader.ReadString('\n')
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return 0, fmt.Errorf("failed to read input: %w", err)
 	}
 
@@ -253,7 +254,7 @@ func (p *StdinYesNoPrompter) PromptYesNo(prompt string, defaultYes bool) (bool, 
 
 	reader := bufio.NewReader(p.In)
 	line, err := reader.ReadString('\n')
-	if err != nil && err != io.EOF {
+	if err != nil && !errors.Is(err, io.EOF) {
 		return false, fmt.Errorf("failed to read input: %w", err)
 	}
 

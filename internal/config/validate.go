@@ -34,67 +34,79 @@ var validAuthMethods = map[string]bool{
 // Returns nil if the config is valid, or an error with a clear message
 // indicating which field is invalid.
 func ValidateGlobalConfig(cfg *GlobalConfig) error {
-	// Validate proxy settings
-	if cfg.Proxy.Listen != "" {
-		if err := validateListenAddr(cfg.Proxy.Listen, "proxy.listen"); err != nil {
-			return err
-		}
+	if err := validateProxyConfig(&cfg.Proxy); err != nil {
+		return err
 	}
-	if cfg.Proxy.ApprovalTimeout != "" {
-		if err := validateDuration(cfg.Proxy.ApprovalTimeout, "proxy.approval_timeout"); err != nil {
-			return err
-		}
+	if err := validateRequestConfig(&cfg.Request); err != nil {
+		return err
 	}
-	if cfg.Proxy.RateLimit < 0 {
-		return fmt.Errorf("proxy.rate_limit: must be non-negative, got %d", cfg.Proxy.RateLimit)
+	if err := validateHostexecConfig(&cfg.Hostexec); err != nil {
+		return err
 	}
-	if cfg.Proxy.MaxRequestBytes < 0 {
-		return fmt.Errorf("proxy.max_request_bytes: must be non-negative, got %d", cfg.Proxy.MaxRequestBytes)
+	if cfg.Log.Level != "" && !validLogLevels[cfg.Log.Level] {
+		return fmt.Errorf("log.level: invalid value %q, must be one of: debug, info, warn, error", cfg.Log.Level)
 	}
-
-	// Validate request settings
-	if cfg.Request.Listen != "" {
-		if err := validateListenAddr(cfg.Request.Listen, "request.listen"); err != nil {
-			return err
-		}
-	}
-	if cfg.Request.Timeout != "" {
-		if err := validateDuration(cfg.Request.Timeout, "request.timeout"); err != nil {
-			return err
-		}
-	}
-
-	// Validate hostexec settings
-	if cfg.Hostexec.Listen != "" {
-		if err := validateListenAddr(cfg.Hostexec.Listen, "hostexec.listen"); err != nil {
-			return err
-		}
-	}
-	for i, pattern := range cfg.Hostexec.AutoApprove {
-		if err := validateRegex(pattern.Pattern, fmt.Sprintf("hostexec.auto_approve[%d].pattern", i)); err != nil {
-			return err
-		}
-	}
-	for i, pattern := range cfg.Hostexec.ManualApprove {
-		if err := validateRegex(pattern.Pattern, fmt.Sprintf("hostexec.manual_approve[%d].pattern", i)); err != nil {
-			return err
-		}
-	}
-
-	// Validate log settings
-	if cfg.Log.Level != "" {
-		if !validLogLevels[cfg.Log.Level] {
-			return fmt.Errorf("log.level: invalid value %q, must be one of: debug, info, warn, error", cfg.Log.Level)
-		}
-	}
-
-	// Validate agent configs
 	for name, agentCfg := range cfg.Agents {
 		if err := ValidateAgentConfig(&agentCfg, fmt.Sprintf("agents.%s", name)); err != nil {
 			return err
 		}
 	}
+	return nil
+}
 
+// validateProxyConfig validates the proxy section of the global config.
+func validateProxyConfig(proxy *ProxyConfig) error {
+	if proxy.Listen != "" {
+		if err := validateListenAddr(proxy.Listen, "proxy.listen"); err != nil {
+			return err
+		}
+	}
+	if proxy.ApprovalTimeout != "" {
+		if err := validateDuration(proxy.ApprovalTimeout, "proxy.approval_timeout"); err != nil {
+			return err
+		}
+	}
+	if proxy.RateLimit < 0 {
+		return fmt.Errorf("proxy.rate_limit: must be non-negative, got %d", proxy.RateLimit)
+	}
+	if proxy.MaxRequestBytes < 0 {
+		return fmt.Errorf("proxy.max_request_bytes: must be non-negative, got %d", proxy.MaxRequestBytes)
+	}
+	return nil
+}
+
+// validateRequestConfig validates the request section of the global config.
+func validateRequestConfig(req *RequestConfig) error {
+	if req.Listen != "" {
+		if err := validateListenAddr(req.Listen, "request.listen"); err != nil {
+			return err
+		}
+	}
+	if req.Timeout != "" {
+		if err := validateDuration(req.Timeout, "request.timeout"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateHostexecConfig validates the hostexec section of the global config.
+func validateHostexecConfig(hostexec *HostexecConfig) error {
+	if hostexec.Listen != "" {
+		if err := validateListenAddr(hostexec.Listen, "hostexec.listen"); err != nil {
+			return err
+		}
+	}
+	for i, pattern := range hostexec.AutoApprove {
+		if err := validateRegex(pattern.Pattern, fmt.Sprintf("hostexec.auto_approve[%d].pattern", i)); err != nil {
+			return err
+		}
+	}
+	for i, pattern := range hostexec.ManualApprove {
+		if err := validateRegex(pattern.Pattern, fmt.Sprintf("hostexec.manual_approve[%d].pattern", i)); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -160,7 +172,7 @@ func validateRegex(pattern, field string) error {
 	}
 	_, err := regexp.Compile(pattern)
 	if err != nil {
-		return fmt.Errorf("%s: invalid regex %q: %v", field, pattern, err)
+		return fmt.Errorf("%s: invalid regex %q: %w", field, pattern, err)
 	}
 	return nil
 }

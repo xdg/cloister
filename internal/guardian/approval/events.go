@@ -150,7 +150,10 @@ func (h *EventHub) BroadcastPendingRequestAdded(req *PendingRequest) {
 
 // BroadcastRequestRemoved broadcasts a request-removed event with the request ID.
 func (h *EventHub) BroadcastRequestRemoved(id string) {
-	data, _ := json.Marshal(RemovedEventData{ID: id})
+	data, err := json.Marshal(RemovedEventData{ID: id})
+	if err != nil {
+		return
+	}
 	h.Broadcast(Event{
 		Type: EventRequestRemoved,
 		Data: string(data),
@@ -217,7 +220,10 @@ func domainToWildcard(domain string) string {
 // BroadcastDomainRequestRemoved broadcasts a domain-request-removed event.
 // This is a placeholder for Phase 6.5 - currently just broadcasts the ID.
 func (h *EventHub) BroadcastDomainRequestRemoved(id string) {
-	data, _ := json.Marshal(RemovedEventData{ID: id})
+	data, err := json.Marshal(RemovedEventData{ID: id})
+	if err != nil {
+		return
+	}
 	h.Broadcast(Event{
 		Type: EventDomainRequestRemoved,
 		Data: string(data),

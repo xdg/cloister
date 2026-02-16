@@ -82,7 +82,7 @@ func init() {
 	projectRemoveCmd.Flags().BoolVar(&projectRemoveConfig, "config", false, "Also remove project config file")
 }
 
-func runProjectList(cmd *cobra.Command, args []string) error {
+func runProjectList(_ *cobra.Command, _ []string) error {
 	reg, err := project.LoadRegistry()
 	if err != nil {
 		return fmt.Errorf("failed to load registry: %w", err)
@@ -122,11 +122,13 @@ func runProjectList(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	_ = w.Flush()
+	if err := w.Flush(); err != nil {
+		clog.Warn("failed to flush output: %v", err)
+	}
 	return nil
 }
 
-func runProjectShow(cmd *cobra.Command, args []string) error {
+func runProjectShow(_ *cobra.Command, args []string) error {
 	name := args[0]
 
 	// Look up project in registry
@@ -189,7 +191,7 @@ func runProjectShow(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runProjectEdit(cmd *cobra.Command, args []string) error {
+func runProjectEdit(_ *cobra.Command, args []string) error {
 	name := args[0]
 
 	// Check if project exists in registry (warn but don't fail)
@@ -212,42 +214,22 @@ func runProjectEdit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runProjectRemove(cmd *cobra.Command, args []string) error {
+func runProjectRemove(_ *cobra.Command, args []string) error {
 	name := args[0]
 
-	// Load registry
 	reg, err := project.LoadRegistry()
 	if err != nil {
 		return fmt.Errorf("failed to load registry: %w", err)
 	}
 
-	// Check if project exists
-	entry := reg.FindByName(name)
-	if entry == nil {
+	if entry := reg.FindByName(name); entry == nil {
 		return fmt.Errorf("project %q not found in registry\n\nHint: Use 'cloister project list' to see registered projects", name)
 	}
 
-	// Check for running cloisters for this project
-	mgr := container.NewManager()
-	containers, err := mgr.List()
-	if err != nil {
-		// If Docker isn't running, we can't check - proceed with warning
-		clog.Warn("could not check for running cloisters (Docker may not be running)")
-	} else {
-		for _, c := range containers {
-			if c.Name == "cloister-guardian" || c.State != "running" {
-				continue
-			}
-			cloisterName := container.ContainerNameToCloisterName(c.Name)
-			// Check if this cloister belongs to the project
-			if strings.HasPrefix(cloisterName, name+"-") || cloisterName == name {
-				return fmt.Errorf("cannot remove project %q: cloister %q is running; stop it first with 'cloister stop %s'",
-					name, cloisterName, cloisterName)
-			}
-		}
+	if err := checkNoRunningCloisters(name); err != nil {
+		return err
 	}
 
-	// Remove from registry
 	if err := reg.Remove(name); err != nil {
 		if errors.Is(err, project.ErrProjectNotFound) {
 			return fmt.Errorf("project %q not found in registry", name)
@@ -255,26 +237,50 @@ func runProjectRemove(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to remove project: %w", err)
 	}
 
-	// Save updated registry
 	if err := project.SaveRegistry(reg); err != nil {
 		return fmt.Errorf("failed to save registry: %w", err)
 	}
 
 	term.Printf("Removed project %q from registry\n", name)
 
-	// Optionally remove config file
 	if projectRemoveConfig {
-		configPath := config.ProjectConfigPath(name)
-		if err := os.Remove(configPath); err != nil {
-			if os.IsNotExist(err) {
-				term.Println("Config file does not exist.")
-			} else {
-				return fmt.Errorf("failed to remove config file: %w", err)
-			}
-		} else {
-			term.Printf("Removed config file: %s\n", configPath)
-		}
+		removeProjectConfigFile(name)
 	}
 
 	return nil
+}
+
+// checkNoRunningCloisters ensures no running cloisters belong to the named project.
+func checkNoRunningCloisters(name string) error {
+	mgr := container.NewManager()
+	containers, err := mgr.List()
+	if err != nil {
+		clog.Warn("could not check for running cloisters (Docker may not be running): %v", err)
+		return nil //nolint:nilerr // Docker unavailable means no cloisters can be running; allow removal
+	}
+	for _, c := range containers {
+		if c.Name == "cloister-guardian" || c.State != "running" {
+			continue
+		}
+		cloisterName := container.NameToCloisterName(c.Name)
+		if strings.HasPrefix(cloisterName, name+"-") || cloisterName == name {
+			return fmt.Errorf("cannot remove project %q: cloister %q is running; stop it first with 'cloister stop %s'",
+				name, cloisterName, cloisterName)
+		}
+	}
+	return nil
+}
+
+// removeProjectConfigFile removes the project config file, printing the result.
+func removeProjectConfigFile(name string) {
+	configPath := config.ProjectConfigPath(name)
+	if err := os.Remove(configPath); err != nil {
+		if !os.IsNotExist(err) {
+			term.Printf("Warning: failed to remove config file: %v\n", err)
+		} else {
+			term.Println("Config file does not exist.")
+		}
+	} else {
+		term.Printf("Removed config file: %s\n", configPath)
+	}
 }

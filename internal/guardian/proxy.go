@@ -180,7 +180,7 @@ func (p *ProxyServer) Start() error {
 		return errors.New("proxy server already running")
 	}
 
-	listener, err := net.Listen("tcp", p.Addr)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", p.Addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", p.Addr, err)
 	}
@@ -193,12 +193,9 @@ func (p *ProxyServer) Start() error {
 	p.running = true
 
 	go func() {
-		// Serve blocks until the server is shut down.
-		// ErrServerClosed is expected on graceful shutdown and is not an error.
-		// Other errors are silently ignored as there's no good way to report
-		// them from a background goroutine - the caller should monitor via
-		// health checks or observe connection failures.
-		_ = p.server.Serve(listener)
+		if err := p.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			clog.Warn("proxy server error: %v", err)
+		}
 	}()
 
 	// Start SIGHUP handler if configReloader is set
@@ -267,7 +264,10 @@ func (p *ProxyServer) Stop(ctx context.Context) error {
 		p.stopSighup = nil
 	}
 
-	return p.server.Shutdown(ctx)
+	if err := p.server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown proxy server: %w", err)
+	}
+	return nil
 }
 
 // ListenAddr returns the actual address the server is listening on.
@@ -400,65 +400,16 @@ func isTimeoutError(err error) bool {
 // Returns 403 Forbidden for denied/non-allowed domains, 502 Bad Gateway for
 // upstream connection failures, 504 Gateway Timeout for upstream dial timeouts.
 func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
-	// r.Host contains the target host:port for CONNECT requests (e.g., "example.com:443")
-	// We strip the port early so all subsequent processing uses domain-only.
-	// This ensures consistent behavior across allowlist matching, session cache,
-	// approval queue display, and config persistence.
 	targetHostPort := r.Host
 	domain := strings.ToLower(stripPort(targetHostPort))
-
-	// Resolve allowlist, project, cloister, and token from the request in a single lookup
-	allowlist, projectName, cloisterName, token := p.resolveRequest(r)
+	resolved := p.resolveRequest(r)
 
 	clog.Debug("handleConnect: host=%s, domain=%s, project=%s, allowlist=%v",
-		targetHostPort, domain, projectName, allowlist != nil)
+		targetHostPort, domain, resolved.ProjectName, resolved.Allowlist != nil)
 
-	// 1. Check static denylist FIRST — denied domains take precedence over everything
-	if p.AllowlistCache != nil && p.AllowlistCache.IsBlocked(projectName, domain) {
-		http.Error(w, "Forbidden - domain denied", http.StatusForbidden)
+	if err := p.checkDomainAccess(domain, resolved); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
-	}
-
-	// 2. Check session denylist — denied domains take precedence over all approvals
-	if p.SessionDenylist != nil && token != "" {
-		if p.SessionDenylist.IsBlocked(token, domain) {
-			http.Error(w, "Forbidden - domain denied", http.StatusForbidden)
-			return
-		}
-	}
-
-	// 3. Check static allowlist
-	staticAllowed := allowlist != nil && allowlist.IsAllowed(domain)
-	if !staticAllowed {
-		// 4. Check session allowlist
-		sessionAllowed := false
-		if p.SessionAllowlist != nil && token != "" {
-			sessionAllowed = p.SessionAllowlist.IsAllowed(token, domain)
-		}
-
-		if !sessionAllowed {
-			// 5. Queue for human approval (or reject if no approver)
-			if p.DomainApprover == nil {
-				// No approver - reject immediately (backward compatible)
-				http.Error(w, "Forbidden - domain not allowed", http.StatusForbidden)
-				return
-			}
-
-			// Validate domain format before queueing for approval
-			if err := ValidateDomain(domain); err != nil {
-				http.Error(w, fmt.Sprintf("Forbidden - invalid domain: %v", err), http.StatusForbidden)
-				return
-			}
-
-			// Request approval (blocks until response)
-			// Pass domain-only (no port) so approval UI shows clean domain names
-			// and duplicates are properly detected across different ports
-			result, err := p.DomainApprover.RequestApproval(projectName, cloisterName, domain, token)
-			if err != nil || !result.Approved {
-				http.Error(w, "Forbidden - domain not approved", http.StatusForbidden)
-				return
-			}
-		}
 	}
 
 	if p.TunnelHandler != nil {
@@ -466,6 +417,48 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	} else {
 		p.dialAndTunnel(w, r, targetHostPort)
 	}
+}
+
+// checkDomainAccess evaluates deny/allow rules in strict precedence order.
+// Returns nil if the domain is allowed, or an error message if denied.
+func (p *ProxyServer) checkDomainAccess(domain string, resolved resolvedRequest) error {
+	// 1. Static denylist
+	if p.AllowlistCache != nil && p.AllowlistCache.IsBlocked(resolved.ProjectName, domain) {
+		return fmt.Errorf("forbidden - domain denied")
+	}
+
+	// 2. Session denylist
+	if p.SessionDenylist != nil && resolved.Token != "" && p.SessionDenylist.IsBlocked(resolved.Token, domain) {
+		return fmt.Errorf("forbidden - domain denied")
+	}
+
+	// 3. Static allowlist
+	if resolved.Allowlist != nil && resolved.Allowlist.IsAllowed(domain) {
+		return nil
+	}
+
+	// 4. Session allowlist
+	if p.SessionAllowlist != nil && resolved.Token != "" && p.SessionAllowlist.IsAllowed(resolved.Token, domain) {
+		return nil
+	}
+
+	// 5. Human approval
+	return p.requestDomainApproval(domain, resolved)
+}
+
+// requestDomainApproval queues a domain for human approval or rejects immediately.
+func (p *ProxyServer) requestDomainApproval(domain string, resolved resolvedRequest) error {
+	if p.DomainApprover == nil {
+		return fmt.Errorf("forbidden - domain not allowed")
+	}
+	if err := ValidateDomain(domain); err != nil {
+		return fmt.Errorf("forbidden - invalid domain: %w", err)
+	}
+	result, err := p.DomainApprover.RequestApproval(resolved.ProjectName, resolved.CloisterName, domain, resolved.Token)
+	if err != nil || !result.Approved {
+		return fmt.Errorf("forbidden - domain not approved")
+	}
+	return nil
 }
 
 // dialAndTunnel establishes a TCP connection to the upstream server, hijacks
@@ -491,7 +484,11 @@ func (p *ProxyServer) dialAndTunnel(w http.ResponseWriter, r *http.Request, targ
 		http.Error(w, fmt.Sprintf("Bad Gateway - failed to connect to upstream: %v", err), http.StatusBadGateway)
 		return
 	}
-	defer func() { _ = upstreamConn.Close() }()
+	defer func() {
+		if err := upstreamConn.Close(); err != nil {
+			clog.Warn("failed to close upstream connection: %v", err)
+		}
+	}()
 
 	// Hijack the client connection to get raw TCP access.
 	hijacker, ok := w.(http.Hijacker)
@@ -505,7 +502,11 @@ func (p *ProxyServer) dialAndTunnel(w http.ResponseWriter, r *http.Request, targ
 		http.Error(w, fmt.Sprintf("Internal Server Error - failed to hijack connection: %v", err), http.StatusInternalServerError)
 		return
 	}
-	defer func() { _ = clientConn.Close() }()
+	defer func() {
+		if err := clientConn.Close(); err != nil {
+			clog.Warn("failed to close client connection: %v", err)
+		}
+	}()
 
 	// Send 200 Connection Established to the client.
 	// This tells the client the tunnel is ready and it can begin TLS handshake.
@@ -526,7 +527,9 @@ func (p *ProxyServer) dialAndTunnel(w http.ResponseWriter, r *http.Request, targ
 		copyWithIdleTimeout(upstreamConn, clientConn, idleTimeout)
 		// When client closes or times out, close upstream write side
 		if tcpConn, ok := upstreamConn.(*net.TCPConn); ok {
-			_ = tcpConn.CloseWrite()
+			if err := tcpConn.CloseWrite(); err != nil {
+				clog.Warn("failed to close-write upstream connection: %v", err)
+			}
 		}
 	}()
 
@@ -536,7 +539,9 @@ func (p *ProxyServer) dialAndTunnel(w http.ResponseWriter, r *http.Request, targ
 		copyWithIdleTimeout(clientConn, upstreamConn, idleTimeout)
 		// When upstream closes or times out, close client write side
 		if tcpConn, ok := clientConn.(*net.TCPConn); ok {
-			_ = tcpConn.CloseWrite()
+			if err := tcpConn.CloseWrite(); err != nil {
+				clog.Warn("failed to close-write client connection: %v", err)
+			}
 		}
 	}()
 
@@ -546,16 +551,20 @@ func (p *ProxyServer) dialAndTunnel(w http.ResponseWriter, r *http.Request, targ
 // copyWithIdleTimeout copies from src to dst, resetting the deadline on each read.
 // This implements an idle timeout - the connection is closed if no data is transferred
 // for the specified duration.
-func copyWithIdleTimeout(dst net.Conn, src net.Conn, idleTimeout time.Duration) {
+func copyWithIdleTimeout(dst, src net.Conn, idleTimeout time.Duration) {
 	buf := make([]byte, 32*1024) // 32KB buffer, same as io.Copy default
 	for {
 		// Set read deadline for idle timeout
-		_ = src.SetReadDeadline(time.Now().Add(idleTimeout))
+		if err := src.SetReadDeadline(time.Now().Add(idleTimeout)); err != nil {
+			clog.Warn("failed to set read deadline: %v", err)
+		}
 
 		n, err := src.Read(buf)
 		if n > 0 {
 			// Reset write deadline and write data
-			_ = dst.SetWriteDeadline(time.Now().Add(idleTimeout))
+			if err := dst.SetWriteDeadline(time.Now().Add(idleTimeout)); err != nil {
+				clog.Warn("failed to set write deadline: %v", err)
+			}
 			_, writeErr := dst.Write(buf[:n])
 			if writeErr != nil {
 				return
@@ -568,11 +577,21 @@ func copyWithIdleTimeout(dst net.Conn, src net.Conn, idleTimeout time.Duration) 
 	}
 }
 
+// resolvedRequest holds the result of resolving a proxy request's identity and allowlist.
+type resolvedRequest struct {
+	Allowlist    *Allowlist
+	ProjectName  string
+	CloisterName string
+	Token        string
+}
+
 // resolveRequest determines the allowlist, project name, cloister name, and token for a request.
 // It extracts the token from the Proxy-Authorization header and performs a single lookup.
 // Falls back to the global allowlist with empty project/cloister if lookup is unavailable.
-func (p *ProxyServer) resolveRequest(r *http.Request) (allowlist *Allowlist, projectName string, cloisterName string, token string) {
+func (p *ProxyServer) resolveRequest(r *http.Request) resolvedRequest {
 	clog.Debug("resolveRequest: AllowlistCache=%v, TokenLookup=%v", p.AllowlistCache != nil, p.TokenLookup != nil)
+
+	var token string
 
 	// Extract token from request header (needed for session allowlist regardless)
 	authHeader := r.Header.Get("Proxy-Authorization")
@@ -585,19 +604,24 @@ func (p *ProxyServer) resolveRequest(r *http.Request) (allowlist *Allowlist, pro
 	// If no per-project support is configured, use global allowlist
 	if p.AllowlistCache == nil || p.TokenLookup == nil {
 		clog.Debug("resolveRequest: returning p.Allowlist (global)")
-		return p.Allowlist, "", "", token
+		return resolvedRequest{Allowlist: p.Allowlist, Token: token}
 	}
 
 	if token == "" {
-		return p.Allowlist, "", "", ""
+		return resolvedRequest{Allowlist: p.Allowlist}
 	}
 
 	// Single token lookup for project and cloister
 	result, valid := p.TokenLookup(token)
 	if !valid || result.ProjectName == "" {
-		return p.Allowlist, "", "", token
+		return resolvedRequest{Allowlist: p.Allowlist, Token: token}
 	}
 
 	// Get project-specific allowlist
-	return p.AllowlistCache.GetProject(result.ProjectName), result.ProjectName, result.CloisterName, token
+	return resolvedRequest{
+		Allowlist:    p.AllowlistCache.GetProject(result.ProjectName),
+		ProjectName:  result.ProjectName,
+		CloisterName: result.CloisterName,
+		Token:        token,
+	}
 }

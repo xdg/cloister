@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/xdg/cloister/internal/audit"
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
@@ -96,7 +97,7 @@ func (s *Server) Start() error {
 		return errors.New("request server already running")
 	}
 
-	listener, err := net.Listen("tcp", s.Addr)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", s.Addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", s.Addr, err)
 	}
@@ -115,7 +116,9 @@ func (s *Server) Start() error {
 	s.running = true
 
 	go func() {
-		_ = s.server.Serve(listener)
+		if err := s.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			clog.Warn("request server error: %v", err)
+		}
 	}()
 
 	return nil
@@ -131,7 +134,10 @@ func (s *Server) Stop(ctx context.Context) error {
 	}
 
 	s.running = false
-	return s.server.Shutdown(ctx)
+	if err := s.server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown request server: %w", err)
+	}
+	return nil
 }
 
 // ListenAddr returns the actual address the server is listening on.
@@ -156,174 +162,174 @@ func (s *Server) handleRequestRouter(w http.ResponseWriter, r *http.Request) {
 	s.handleRequest(w, r)
 }
 
+// validatedRequest holds a parsed and validated command request.
+type validatedRequest struct {
+	args []string
+	cmd  string
+	info TokenInfo
+}
+
+// parseAndValidateRequest parses the JSON body, validates args, and extracts cloister info.
+// Returns nil and writes an error response if validation fails.
+func (s *Server) parseAndValidateRequest(w http.ResponseWriter, r *http.Request) *validatedRequest {
+	var req CommandRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.writeJSON(w, http.StatusBadRequest, CommandResponse{Status: "error", Reason: "invalid JSON body"})
+		return nil
+	}
+
+	if len(req.Args) == 0 {
+		s.writeJSON(w, http.StatusBadRequest, CommandResponse{Status: "error", Reason: "args is required"})
+		return nil
+	}
+
+	for _, arg := range req.Args {
+		if containsNUL(arg) {
+			s.writeJSON(w, http.StatusBadRequest, CommandResponse{Status: "error", Reason: "arguments cannot contain NUL bytes"})
+			return nil
+		}
+	}
+
+	info, ok := CloisterInfo(r.Context())
+	if !ok {
+		s.writeJSON(w, http.StatusInternalServerError, CommandResponse{Status: "error", Reason: "internal error: missing cloister info"})
+		return nil
+	}
+
+	return &validatedRequest{args: req.Args, cmd: canonicalCmd(req.Args), info: info}
+}
+
+// logAudit logs an audit event if the logger is configured.
+func (s *Server) logAudit(logFn func() error) {
+	if s.AuditLogger == nil {
+		return
+	}
+	if err := logFn(); err != nil {
+		clog.Warn("failed to log audit event: %v", err)
+	}
+}
+
+// executeAndLog runs a command and logs the completion event.
+func (s *Server) executeAndLog(w http.ResponseWriter, vr *validatedRequest, status, pattern string) {
+	startTime := time.Now()
+	resp := s.executeCommand(vr.args, status, pattern)
+	s.logAudit(func() error {
+		return s.AuditLogger.LogComplete(vr.info.ProjectName, vr.info.CloisterName, vr.cmd, resp.ExitCode, time.Since(startTime))
+	})
+	s.writeJSON(w, http.StatusOK, resp)
+}
+
 // handleRequest processes POST /request from cloister containers.
 // The auth middleware has already validated the token and attached
 // TokenInfo to the context.
 func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
-	// Parse the command request
-	var req CommandRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		s.writeJSON(w, http.StatusBadRequest, CommandResponse{
-			Status: "error",
-			Reason: "invalid JSON body",
-		})
+	vr := s.parseAndValidateRequest(w, r)
+	if vr == nil {
 		return
 	}
 
-	if len(req.Args) == 0 {
-		s.writeJSON(w, http.StatusBadRequest, CommandResponse{
-			Status: "error",
-			Reason: "args is required",
-		})
-		return
-	}
+	s.logAudit(func() error {
+		return s.AuditLogger.LogRequest(vr.info.ProjectName, vr.info.CloisterName, vr.cmd)
+	})
 
-	// Reject arguments containing NUL bytes, which cannot be safely embedded
-	// in shell arguments and could cause divergent behavior.
-	for _, arg := range req.Args {
-		if containsNUL(arg) {
-			s.writeJSON(w, http.StatusBadRequest, CommandResponse{
-				Status: "error",
-				Reason: "arguments cannot contain NUL bytes",
-			})
-			return
-		}
-	}
-
-	// Reconstruct canonical command from args for pattern matching and logging.
-	// This is the authoritative representation - cmd is ignored (deprecated).
-	cmd := canonicalCmd(req.Args)
-
-	// Get cloister info from context (set by auth middleware)
-	info, ok := CloisterInfo(r.Context())
-	if !ok {
-		// This shouldn't happen if auth middleware is working correctly
-		s.writeJSON(w, http.StatusInternalServerError, CommandResponse{
-			Status: "error",
-			Reason: "internal error: missing cloister info",
-		})
-		return
-	}
-
-	// Log REQUEST event
-	_ = s.AuditLogger.LogRequest(info.ProjectName, info.CloisterName, cmd)
-
-	// Look up the pattern matcher for this project
-	var matcher PatternMatcher
-	if s.PatternLookup != nil {
-		matcher = s.PatternLookup(info.ProjectName)
-	}
-
-	// If no pattern matcher is configured, deny all commands
+	matcher := s.lookupMatcher(vr.info.ProjectName)
 	if matcher == nil {
-		_ = s.AuditLogger.LogDeny(info.ProjectName, info.CloisterName, cmd, "no approval patterns configured")
-		s.writeJSON(w, http.StatusOK, CommandResponse{
-			Status: "denied",
-			Reason: "no approval patterns configured",
+		s.logAudit(func() error {
+			return s.AuditLogger.LogDeny(vr.info.ProjectName, vr.info.CloisterName, vr.cmd, "no approval patterns configured")
 		})
+		s.writeJSON(w, http.StatusOK, CommandResponse{Status: "denied", Reason: "no approval patterns configured"})
 		return
 	}
 
-	// Match command against configured patterns
-	result := matcher.Match(cmd)
+	result := matcher.Match(vr.cmd)
+	s.dispatchByAction(w, vr, result)
+}
 
+// lookupMatcher returns the pattern matcher for a project, or nil.
+func (s *Server) lookupMatcher(projectName string) PatternMatcher {
+	if s.PatternLookup == nil {
+		return nil
+	}
+	return s.PatternLookup(projectName)
+}
+
+// dispatchByAction handles the command based on the pattern match result.
+func (s *Server) dispatchByAction(w http.ResponseWriter, vr *validatedRequest, result patterns.MatchResult) {
 	switch result.Action {
 	case patterns.AutoApprove:
-		// Log AUTO_APPROVE event
-		_ = s.AuditLogger.LogAutoApprove(info.ProjectName, info.CloisterName, cmd, result.Pattern)
-		// Auto-approved: proceed to execution
-		startTime := time.Now()
-		resp := s.executeCommand(req.Args, "auto_approved", result.Pattern)
-		// Log COMPLETE event with duration
-		_ = s.AuditLogger.LogComplete(info.ProjectName, info.CloisterName, cmd, resp.ExitCode, time.Since(startTime))
-		s.writeJSON(w, http.StatusOK, resp)
+		s.logAudit(func() error {
+			return s.AuditLogger.LogAutoApprove(vr.info.ProjectName, vr.info.CloisterName, vr.cmd, result.Pattern)
+		})
+		s.executeAndLog(w, vr, "auto_approved", result.Pattern)
 
 	case patterns.ManualApprove:
-		// Manual approval required: queue for human review
-		if s.Queue == nil {
-			_ = s.AuditLogger.LogDeny(info.ProjectName, info.CloisterName, cmd, "manual approval required but approval queue not configured")
-			s.writeJSON(w, http.StatusOK, CommandResponse{
-				Status: "denied",
-				Reason: "manual approval required but approval queue not configured",
-			})
-			return
-		}
-
-		// Create a buffered response channel to avoid blocking the approval sender
-		respChan := make(chan approval.Response, 1)
-
-		// Create pending request with metadata from token lookup
-		pendingReq := &approval.PendingRequest{
-			Cloister:  info.CloisterName,
-			Project:   info.ProjectName,
-			Agent:     "", // Not available from token; may be added later
-			Cmd:       cmd,
-			Timestamp: time.Now(),
-			Response:  respChan,
-		}
-
-		// Add to queue (this starts the timeout goroutine)
-		_, err := s.Queue.Add(pendingReq)
-		if err != nil {
-			s.writeJSON(w, http.StatusInternalServerError, CommandResponse{
-				Status: "error",
-				Reason: "failed to queue request for approval",
-			})
-			return
-		}
-
-		// Block waiting for approval, denial, or timeout
-		approvalResp := <-respChan
-
-		// If approved, execute the command
-		if approvalResp.Status == "approved" {
-			// Note: APPROVE event is logged by approval server
-			startTime := time.Now()
-			resp := s.executeCommand(req.Args, "approved", "")
-			// Log COMPLETE event with duration
-			_ = s.AuditLogger.LogComplete(info.ProjectName, info.CloisterName, cmd, resp.ExitCode, time.Since(startTime))
-			s.writeJSON(w, http.StatusOK, resp)
-			return
-		}
-
-		// Handle timeout specifically
-		if approvalResp.Status == "timeout" {
-			_ = s.AuditLogger.LogTimeout(info.ProjectName, info.CloisterName, cmd)
-		}
-		// Note: DENY events for manual approval are logged by approval server
-
-		// For denied/timeout/error, pass through the response
-		s.writeJSON(w, http.StatusOK, CommandResponse{
-			Status:   approvalResp.Status,
-			Pattern:  approvalResp.Pattern,
-			Reason:   approvalResp.Reason,
-			ExitCode: approvalResp.ExitCode,
-			Stdout:   approvalResp.Stdout,
-			Stderr:   approvalResp.Stderr,
-		})
+		s.handleManualApprove(w, vr)
 
 	case patterns.Deny:
-		// No pattern matched: deny the command
-		_ = s.AuditLogger.LogDeny(info.ProjectName, info.CloisterName, cmd, "command does not match any approval pattern")
-		s.writeJSON(w, http.StatusOK, CommandResponse{
-			Status: "denied",
-			Reason: "command does not match any approval pattern",
+		s.logAudit(func() error {
+			return s.AuditLogger.LogDeny(vr.info.ProjectName, vr.info.CloisterName, vr.cmd, "command does not match any approval pattern")
 		})
+		s.writeJSON(w, http.StatusOK, CommandResponse{Status: "denied", Reason: "command does not match any approval pattern"})
 
 	default:
-		// Unexpected action - should never happen
-		s.writeJSON(w, http.StatusInternalServerError, CommandResponse{
-			Status: "error",
-			Reason: "internal error: unknown pattern action",
+		s.writeJSON(w, http.StatusInternalServerError, CommandResponse{Status: "error", Reason: "internal error: unknown pattern action"})
+	}
+}
+
+// handleManualApprove queues a request for human approval and blocks until resolved.
+func (s *Server) handleManualApprove(w http.ResponseWriter, vr *validatedRequest) {
+	if s.Queue == nil {
+		s.logAudit(func() error {
+			return s.AuditLogger.LogDeny(vr.info.ProjectName, vr.info.CloisterName, vr.cmd, "manual approval required but approval queue not configured")
+		})
+		s.writeJSON(w, http.StatusOK, CommandResponse{Status: "denied", Reason: "manual approval required but approval queue not configured"})
+		return
+	}
+
+	respChan := make(chan approval.Response, 1)
+	pendingReq := &approval.PendingRequest{
+		Cloister:  vr.info.CloisterName,
+		Project:   vr.info.ProjectName,
+		Cmd:       vr.cmd,
+		Timestamp: time.Now(),
+		Response:  respChan,
+	}
+
+	if _, err := s.Queue.Add(pendingReq); err != nil {
+		s.writeJSON(w, http.StatusInternalServerError, CommandResponse{Status: "error", Reason: "failed to queue request for approval"})
+		return
+	}
+
+	approvalResp := <-respChan
+
+	if approvalResp.Status == "approved" {
+		s.executeAndLog(w, vr, "approved", "")
+		return
+	}
+
+	if approvalResp.Status == "timeout" {
+		s.logAudit(func() error {
+			return s.AuditLogger.LogTimeout(vr.info.ProjectName, vr.info.CloisterName, vr.cmd)
 		})
 	}
+
+	s.writeJSON(w, http.StatusOK, CommandResponse{
+		Status:   approvalResp.Status,
+		Pattern:  approvalResp.Pattern,
+		Reason:   approvalResp.Reason,
+		ExitCode: approvalResp.ExitCode,
+		Stdout:   approvalResp.Stdout,
+		Stderr:   approvalResp.Stderr,
+	})
 }
 
 // writeJSON writes a JSON response with the given status code.
 func (s *Server) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		clog.Warn("failed to encode JSON response: %v", err)
+	}
 }
 
 // executeCommand runs the command through the executor and returns a CommandResponse.

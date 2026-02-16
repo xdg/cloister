@@ -4,6 +4,7 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,7 +25,7 @@ func TestNetworkIsolation_ContainerCanReachGuardian(t *testing.T) {
 	guardianHost := guardian.ContainerName()
 
 	// Wait for request server port to be ready
-	if err := waitForPort(t, containerName, guardianHost, request.DefaultRequestPort, 5*time.Second); err != nil {
+	if err := waitForPort(t, containerName, guardianHost, request.DefaultRequestPort); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -61,7 +62,7 @@ func TestNetworkIsolation_RequestServerReachable(t *testing.T) {
 	})
 
 	// Wait for request server port to be ready
-	if err := waitForPort(t, containerName, guardianHost, request.DefaultRequestPort, 5*time.Second); err != nil {
+	if err := waitForPort(t, containerName, guardianHost, request.DefaultRequestPort); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -162,7 +163,11 @@ func TestNetworkIsolation_HostCannotReachRequestServer(t *testing.T) {
 	// Port 9998 should NOT be exposed to the host.
 	// This is a security property: only containers on cloister-net can reach it.
 	client := &http.Client{Timeout: 2 * time.Second}
-	resp, err := client.Get(fmt.Sprintf("http://localhost:%d/request", request.DefaultRequestPort))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, fmt.Sprintf("http://localhost:%d/request", request.DefaultRequestPort), http.NoBody)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	resp, err := client.Do(req)
 	if err == nil {
 		_ = resp.Body.Close()
 		t.Error("Expected connection to localhost:9998 to fail (port should not be exposed to host)")
@@ -176,7 +181,11 @@ func TestNetworkIsolation_HostCanReachAPIServer(t *testing.T) {
 	// API port should be exposed to localhost for CLI token management
 	client := &http.Client{Timeout: 2 * time.Second}
 	apiAddr := guardian.APIAddr()
-	resp, err := client.Get(fmt.Sprintf("http://%s/tokens", apiAddr))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, fmt.Sprintf("http://%s/tokens", apiAddr), http.NoBody)
+	if err != nil {
+		t.Fatalf("Failed to create request: %v", err)
+	}
+	resp, err := client.Do(req)
 	if err != nil {
 		t.Errorf("Expected connection to %s to succeed: %v", apiAddr, err)
 		return

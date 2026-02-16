@@ -146,7 +146,12 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 		t.Fatalf("failed to marshal approve body: %v", err)
 	}
 
-	resp, err := http.Post(baseURL+"/approve-domain/"+requestID, "application/json", bytes.NewReader(bodyBytes))
+	approveReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/approve-domain/"+requestID, bytes.NewReader(bodyBytes))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	approveReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(approveReq)
 	if err != nil {
 		t.Fatalf("failed to POST approve: %v", err)
 	}
@@ -281,7 +286,12 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 		t.Fatalf("failed to marshal approve body: %v", err)
 	}
 
-	resp, err := http.Post(baseURL+"/approve-domain/"+requestID, "application/json", bytes.NewReader(bodyBytes))
+	approveReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/approve-domain/"+requestID, bytes.NewReader(bodyBytes))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	approveReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(approveReq)
 	if err != nil {
 		t.Fatalf("failed to POST approve: %v", err)
 	}
@@ -384,7 +394,12 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 		t.Fatalf("failed to marshal deny body: %v", err)
 	}
 
-	resp, err := http.Post(baseURL+"/deny-domain/"+requestID, "application/json", bytes.NewReader(bodyBytes))
+	denyReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/deny-domain/"+requestID, bytes.NewReader(bodyBytes))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	denyReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(denyReq)
 	if err != nil {
 		t.Fatalf("failed to POST deny: %v", err)
 	}
@@ -489,7 +504,11 @@ func TestDomainApprovalIntegration_GetPendingDomains(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	// Query pending domains endpoint
-	resp, err := http.Get(fmt.Sprintf("%s/pending-domains", baseURL))
+	pendingHTTPReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, fmt.Sprintf("%s/pending-domains", baseURL), http.NoBody)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	resp, err := http.DefaultClient.Do(pendingHTTPReq)
 	if err != nil {
 		t.Fatalf("failed to GET pending-domains: %v", err)
 	}

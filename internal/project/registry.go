@@ -69,7 +69,7 @@ func (r *Registry) now() time.Time {
 // RegistryPath returns the path to the project registry file.
 // This is filepath.Join(ConfigDir(), "projects.yaml").
 func RegistryPath() string {
-	return filepath.Join(config.ConfigDir(), "projects.yaml")
+	return filepath.Join(config.Dir(), "projects.yaml")
 }
 
 // LoadRegistry loads the project registry from disk.
@@ -83,12 +83,12 @@ func LoadRegistry() (*Registry, error) {
 		if os.IsNotExist(err) {
 			return &Registry{}, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("read registry file: %w", err)
 	}
 
 	var reg Registry
 	if err := yaml.Unmarshal(data, &reg); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal registry: %w", err)
 	}
 
 	// Expand ~ in Root paths
@@ -103,24 +103,27 @@ func LoadRegistry() (*Registry, error) {
 // The config directory is created if it doesn't exist.
 // The file is written with 0600 permissions for security.
 func SaveRegistry(r *Registry) error {
-	if err := config.EnsureConfigDir(); err != nil {
+	if err := config.EnsureDir(); err != nil {
 		return err
 	}
 
 	data, err := yaml.Marshal(r)
 	if err != nil {
-		return err
+		return fmt.Errorf("marshal registry: %w", err)
 	}
 
-	return os.WriteFile(RegistryPath(), data, 0600)
+	if err := os.WriteFile(RegistryPath(), data, 0o600); err != nil {
+		return fmt.Errorf("write registry file: %w", err)
+	}
+	return nil
 }
 
-// Register adds or updates a project in the registry based on ProjectInfo.
+// Register adds or updates a project in the registry based on Info.
 // If a project with the same name and remote exists, it updates Root and LastUsed.
 // If a project with the same name but different remote exists, it returns a NameCollisionError.
 // Otherwise, it appends a new entry.
 // This method modifies the registry in-memory; the caller must call SaveRegistry to persist.
-func (r *Registry) Register(info *ProjectInfo) error {
+func (r *Registry) Register(info *Info) error {
 	now := r.now()
 
 	// Check for existing project with the same name

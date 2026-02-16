@@ -12,13 +12,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/xdg/cloister/internal/clog"
 )
 
 // DefaultAPIPort is the port for the internal management API.
 // This API is exposed only to the host, not to cloister containers.
 const DefaultAPIPort = 9997
 
-// TokenInfo mirrors token.TokenInfo for the interface.
+// TokenInfo mirrors token.Info for the interface.
 // This avoids an import cycle between guardian and token packages.
 type TokenInfo struct {
 	CloisterName string
@@ -79,7 +81,7 @@ func (a *APIServer) Start() error {
 		return errors.New("API server already running")
 	}
 
-	listener, err := net.Listen("tcp", a.Addr)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", a.Addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", a.Addr, err)
 	}
@@ -96,7 +98,9 @@ func (a *APIServer) Start() error {
 	a.running = true
 
 	go func() {
-		_ = a.server.Serve(listener)
+		if err := a.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			clog.Warn("API server error: %v", err)
+		}
 	}()
 
 	return nil
@@ -112,7 +116,10 @@ func (a *APIServer) Stop(ctx context.Context) error {
 	}
 
 	a.running = false
-	return a.server.Shutdown(ctx)
+	if err := a.server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown API server: %w", err)
+	}
+	return nil
 }
 
 // ListenAddr returns the actual address the server is listening on.
@@ -248,7 +255,9 @@ func (a *APIServer) handleListTokens(w http.ResponseWriter, _ *http.Request) {
 func (a *APIServer) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		clog.Warn("failed to encode JSON response: %v", err)
+	}
 }
 
 // writeError writes an error response with the given status code.

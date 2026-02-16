@@ -489,7 +489,7 @@ func TestSetupClaudeCmd_SkipPermissions_DefaultYes(t *testing.T) {
 	}
 
 	// Verify default is yes
-	if call.DefaultYes != true {
+	if !call.DefaultYes {
 		t.Error("defaultYes should be true")
 	}
 
@@ -825,7 +825,7 @@ func TestSetupClaudeCmd_ClearsOldCredentialsOnMethodChange(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create a config with existing token auth
-	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
 	existingConfig := `agents:
@@ -834,7 +834,7 @@ func TestSetupClaudeCmd_ClearsOldCredentialsOnMethodChange(t *testing.T) {
     token: old-token-value
     skip_permissions: true
 `
-	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0600); err != nil {
+	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0o600); err != nil {
 		t.Fatalf("failed to write initial config: %v", err)
 	}
 
@@ -893,7 +893,7 @@ func TestSetupClaudeCmd_PreservesOtherConfigSettings(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create a config with custom proxy settings
-	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
 	existingConfig := `proxy:
@@ -904,7 +904,7 @@ agents:
   codex:
     command: codex
 `
-	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0600); err != nil {
+	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0o600); err != nil {
 		t.Fatalf("failed to write initial config: %v", err)
 	}
 
@@ -1157,7 +1157,7 @@ func TestSetupClaudeCmd_ExistingCredentials_UserDeclinesReplace(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config with existing credentials
-	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
 	existingConfig := `agents:
@@ -1166,7 +1166,7 @@ func TestSetupClaudeCmd_ExistingCredentials_UserDeclinesReplace(t *testing.T) {
     token: original-token-value
     skip_permissions: true
 `
-	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0600); err != nil {
+	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0o600); err != nil {
 		t.Fatalf("failed to write initial config: %v", err)
 	}
 
@@ -1196,7 +1196,7 @@ func TestSetupClaudeCmd_ExistingCredentials_UserDeclinesReplace(t *testing.T) {
 	if call.Prompt != expectedPrompt {
 		t.Errorf("prompt = %q, want %q", call.Prompt, expectedPrompt)
 	}
-	if call.DefaultYes != false {
+	if call.DefaultYes {
 		t.Error("defaultYes should be false (N is default)")
 	}
 
@@ -1226,7 +1226,7 @@ func TestSetupClaudeCmd_ExistingCredentials_UserAcceptsReplace(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config with existing credentials
-	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
 	existingConfig := `agents:
@@ -1235,7 +1235,7 @@ func TestSetupClaudeCmd_ExistingCredentials_UserAcceptsReplace(t *testing.T) {
     token: original-token-value
     skip_permissions: false
 `
-	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0600); err != nil {
+	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0o600); err != nil {
 		t.Fatalf("failed to write initial config: %v", err)
 	}
 
@@ -1306,13 +1306,13 @@ func TestSetupClaudeCmd_NoExistingCredentials_NoReplacementPrompt(t *testing.T) 
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config WITHOUT existing credentials (only other settings)
-	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
 	existingConfig := `proxy:
   listen: ":9999"
 `
-	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0600); err != nil {
+	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0o600); err != nil {
 		t.Fatalf("failed to write initial config: %v", err)
 	}
 
@@ -1393,7 +1393,7 @@ func TestSetupClaudeCmd_ExistingCredentials_PromptError(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Create config with existing credentials
-	if err := os.MkdirAll(config.ConfigDir(), 0700); err != nil {
+	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
 	existingConfig := `agents:
@@ -1401,7 +1401,7 @@ func TestSetupClaudeCmd_ExistingCredentials_PromptError(t *testing.T) {
     auth_method: token
     token: existing-token-value
 `
-	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0600); err != nil {
+	if err := os.WriteFile(config.GlobalConfigPath(), []byte(existingConfig), 0o600); err != nil {
 		t.Fatalf("failed to write initial config: %v", err)
 	}
 

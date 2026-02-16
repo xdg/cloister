@@ -44,15 +44,26 @@ func strictUnmarshal(data []byte, v any) error {
 		// Empty input is valid - v remains at zero value
 		return nil
 	}
-	return err
+	if err != nil {
+		return fmt.Errorf("decode YAML: %w", err)
+	}
+	return nil
 }
 
 // MarshalProjectConfig marshals a ProjectConfig struct to YAML.
 func MarshalProjectConfig(cfg *ProjectConfig) ([]byte, error) {
-	return yaml.Marshal(cfg)
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal project config: %w", err)
+	}
+	return data, nil
 }
 
 // MarshalGlobalConfig marshals a GlobalConfig struct to YAML.
 func MarshalGlobalConfig(cfg *GlobalConfig) ([]byte, error) {
-	return yaml.Marshal(cfg)
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("marshal global config: %w", err)
+	}
+	return data, nil
 }

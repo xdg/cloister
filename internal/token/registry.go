@@ -1,11 +1,11 @@
-package token
+package token //nolint:revive // intentional: does not conflict at import path level
 
 import (
 	"sync"
 )
 
-// TokenInfo contains information associated with a registered token.
-type TokenInfo struct {
+// Info contains information associated with a registered token.
+type Info struct {
 	CloisterName string
 	ProjectName  string
 	WorktreePath string // Absolute path to the worktree on the host
@@ -15,32 +15,34 @@ type TokenInfo struct {
 // It implements the guardian.TokenValidator interface (Validate(string) bool).
 type Registry struct {
 	mu     sync.RWMutex
-	tokens map[string]TokenInfo // token -> TokenInfo
+	tokens map[string]Info // token -> Info
 }
 
 // NewRegistry creates a new empty token registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		tokens: make(map[string]TokenInfo),
+		tokens: make(map[string]Info),
 	}
 }
 
-// Deprecated: Register adds a token with its associated cloister name (without project).
+// Register adds a token with its associated cloister name (without project).
 // If the token already exists, its info is updated.
-// Prefer RegisterWithProject which includes the project name for per-project allowlists.
+//
+// Deprecated: Prefer RegisterWithProject which includes the project name for per-project allowlists.
 func (r *Registry) Register(token, cloisterName string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.tokens[token] = TokenInfo{CloisterName: cloisterName}
+	r.tokens[token] = Info{CloisterName: cloisterName}
 }
 
 // RegisterWithProject adds a token with its associated cloister and project names.
 // If the token already exists, its info is updated.
+//
 // Deprecated: Use RegisterFull to include the worktree path.
 func (r *Registry) RegisterWithProject(token, cloisterName, projectName string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.tokens[token] = TokenInfo{
+	r.tokens[token] = Info{
 		CloisterName: cloisterName,
 		ProjectName:  projectName,
 	}
@@ -51,7 +53,7 @@ func (r *Registry) RegisterWithProject(token, cloisterName, projectName string) 
 func (r *Registry) RegisterFull(token, cloisterName, projectName, worktreePath string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.tokens[token] = TokenInfo{
+	r.tokens[token] = Info{
 		CloisterName: cloisterName,
 		ProjectName:  projectName,
 		WorktreePath: worktreePath,
@@ -65,10 +67,10 @@ func (r *Registry) Validate(token string) bool {
 	return valid
 }
 
-// Lookup checks if a token is valid and returns the full TokenInfo.
-// Returns the TokenInfo and true if valid, zero value and false if invalid.
+// Lookup checks if a token is valid and returns the full Info.
+// Returns the Info and true if valid, zero value and false if invalid.
 // Callers can access info.CloisterName or info.ProjectName as needed.
-func (r *Registry) Lookup(token string) (TokenInfo, bool) {
+func (r *Registry) Lookup(token string) (Info, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	info, ok := r.tokens[token]
@@ -95,13 +97,13 @@ func (r *Registry) Count() int {
 	return len(r.tokens)
 }
 
-// List returns a map of all registered tokens to their full TokenInfo.
+// List returns a map of all registered tokens to their full Info.
 // The returned map is a copy and can be safely modified.
 // Callers can access info.CloisterName or info.ProjectName as needed.
-func (r *Registry) List() map[string]TokenInfo {
+func (r *Registry) List() map[string]Info {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	result := make(map[string]TokenInfo, len(r.tokens))
+	result := make(map[string]Info, len(r.tokens))
 	for k, v := range r.tokens {
 		result[k] = v
 	}

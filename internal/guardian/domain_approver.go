@@ -46,48 +46,50 @@ func ValidateDomain(domain string) error {
 	if domain == "" {
 		return fmt.Errorf("domain is empty")
 	}
-
-	// Check for scheme prefixes (reject http://, https://, ftp://, etc.)
 	if strings.Contains(domain, "://") {
 		return fmt.Errorf("domain contains scheme prefix (use hostname:port format, not URLs)")
 	}
 
-	// Split host and port
 	host, portStr, err := net.SplitHostPort(domain)
 	if err != nil {
-		// No port specified - that's valid, host is the entire domain
 		host = domain
 		portStr = ""
 	}
 
-	// Check hostname is not empty
 	if host == "" {
 		return fmt.Errorf("hostname is empty")
 	}
-
-	// Validate port if present
 	if portStr != "" {
-		port, err := strconv.Atoi(portStr)
-		if err != nil {
-			return fmt.Errorf("invalid port %q: %w", portStr, err)
-		}
-		if port < 1 || port > 65535 {
-			return fmt.Errorf("port %d out of valid range (1-65535)", port)
-		}
-		if blockedPorts[port] {
-			return fmt.Errorf("port %d not allowed (non-HTTP protocol)", port)
+		if err := validatePort(portStr); err != nil {
+			return err
 		}
 	}
+	return validateHostnameChars(host)
+}
 
-	// Basic hostname validation - check for obviously invalid characters
-	// We allow: alphanumeric, hyphens, dots (for subdomains), and colons (for IPv6)
-	// We reject: spaces, slashes, and other URL-like characters
-	for _, r := range host {
-		if r == ' ' || r == '/' || r == '\\' || r == '?' || r == '#' || r == '@' {
-			return fmt.Errorf("hostname contains invalid character %q", r)
-		}
+// invalidHostnameChars contains characters that are not allowed in hostnames.
+const invalidHostnameChars = " /\\?#@"
+
+// validatePort checks that a port string is a valid, non-blocked port number.
+func validatePort(portStr string) error {
+	port, err := strconv.Atoi(portStr)
+	if err != nil {
+		return fmt.Errorf("invalid port %q: %w", portStr, err)
 	}
+	if port < 1 || port > 65535 {
+		return fmt.Errorf("port %d out of valid range (1-65535)", port)
+	}
+	if blockedPorts[port] {
+		return fmt.Errorf("port %d not allowed (non-HTTP protocol)", port)
+	}
+	return nil
+}
 
+// validateHostnameChars checks for obviously invalid characters in a hostname.
+func validateHostnameChars(host string) error {
+	if idx := strings.IndexAny(host, invalidHostnameChars); idx >= 0 {
+		return fmt.Errorf("hostname contains invalid character %q", host[idx])
+	}
 	return nil
 }
 
@@ -146,8 +148,6 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 	respChan := make(chan approval.DomainResponse, 1)
 
 	// Create and submit the request
-	// Note: The DomainRequest uses project for display in the approval queue/UI
-	// Token is used for request deduplication (same token+domain = same queue entry)
 	req := &approval.DomainRequest{
 		Cloister:  cloister,
 		Project:   project,
@@ -162,91 +162,75 @@ func (d *DomainApproverImpl) RequestApproval(project, cloister, domain, token st
 		return DomainApprovalResult{}, fmt.Errorf("failed to add domain request to queue: %w", err)
 	}
 
-	// Block waiting for response
 	resp := <-respChan
 
-	// Handle timeout
-	if resp.Status == "timeout" {
+	switch resp.Status {
+	case "timeout":
+		return DomainApprovalResult{Approved: false}, nil
+	case "denied":
+		d.handleDenial(project, cloister, domain, token, resp)
+		return DomainApprovalResult{Approved: false}, nil
+	case "approved":
+		d.handleApproval(project, domain, token, resp)
+		return DomainApprovalResult{Approved: true, Scope: resp.Scope}, nil
+	default:
 		return DomainApprovalResult{Approved: false}, nil
 	}
+}
 
-	// Handle denial with scope-based persistence
-	if resp.Status == "denied" {
-		// Log the denial with scope and pattern context
-		if d.auditLogger != nil {
-			_ = d.auditLogger.LogDomainDenyWithScope(project, cloister, domain, resp.Scope, resp.Pattern)
+// handleDenial processes a denied domain response with scope-based persistence.
+func (d *DomainApproverImpl) handleDenial(project, cloister, domain, token string, resp approval.DomainResponse) {
+	if d.auditLogger != nil {
+		if err := d.auditLogger.LogDomainDenyWithScope(project, cloister, domain, resp.Scope, resp.Pattern); err != nil {
+			clog.Warn("failed to log domain deny audit event: %v", err)
 		}
-
-		// Determine what to persist: use pattern if provided (wildcard), else domain
-		target := domain
-		isPattern := false
-		if resp.Pattern != "" {
-			target = resp.Pattern
-			isPattern = true
-		}
-
-		switch resp.Scope {
-		case "session":
-			if d.sessionDenylist != nil && token != "" {
-				if err := d.sessionDenylist.Add(token, target); err != nil {
-					clog.Warn("failed to add %s to session denylist: %v", target, err)
-				}
-			}
-		case "project":
-			if err := d.persistDenial("project", project, target, isPattern); err != nil {
-				clog.Warn("failed to persist project denial for %s: %v", target, err)
-			} else {
-				d.updateDenylistCache("project", project, target, isPattern)
-			}
-		case "global":
-			if err := d.persistDenial("global", "", target, isPattern); err != nil {
-				clog.Warn("failed to persist global denial for %s: %v", target, err)
-			} else {
-				d.updateDenylistCache("global", "", target, isPattern)
-			}
-		case "once":
-			// No persistence needed
-		}
-
-		return DomainApprovalResult{Approved: false}, nil
 	}
 
-	// Handle unknown status (treat as denial)
-	if resp.Status != "approved" {
-		return DomainApprovalResult{Approved: false}, nil
+	target := domain
+	isPattern := false
+	if resp.Pattern != "" {
+		target = resp.Pattern
+		isPattern = true
 	}
 
-	// Handle approval based on scope
 	switch resp.Scope {
 	case "session":
-		// Add to session allowlist using token (token-based isolation)
-		// This ensures each cloister session has independent session cache
-		if d.sessionAllowlist != nil && token != "" {
-			if err := d.sessionAllowlist.Add(token, domain); err != nil {
-				clog.Warn("failed to add domain %s to session allowlist for token: %v", domain, err)
+		if d.sessionDenylist != nil && token != "" {
+			if err := d.sessionDenylist.Add(token, target); err != nil {
+				clog.Warn("failed to add %s to session denylist: %v", target, err)
 			}
 		}
-
-		// Add to cached allowlist for this project so subsequent requests don't re-prompt.
-		if d.allowlistCache != nil {
-			projectAllowlist := d.allowlistCache.GetProject(project)
-			if projectAllowlist != nil {
-				projectAllowlist.Add([]string{domain})
-			}
+	case "project":
+		if err := d.persistDenial("project", project, target, isPattern); err != nil {
+			clog.Warn("failed to persist project denial for %s: %v", target, err)
+		} else {
+			d.updateDenylistCache("project", project, target, isPattern)
 		}
-
-	case "project", "global":
-		// ConfigPersister handles persistence from the server handler.
-		// The guardian's config reloader will invalidate/reload AllowlistCache
-		// after the config file is written.
-		// No action needed here - the cache clear happens via SIGHUP or
-		// the ReloadNotifier callback in ConfigPersister.
+	case "global":
+		if err := d.persistDenial("global", "", target, isPattern); err != nil {
+			clog.Warn("failed to persist global denial for %s: %v", target, err)
+		} else {
+			d.updateDenylistCache("global", "", target, isPattern)
+		}
 	}
+}
 
-	return DomainApprovalResult{
-		Approved: true,
-		Scope:    resp.Scope,
-	}, nil
+// handleApproval processes an approved domain response with scope-based caching.
+func (d *DomainApproverImpl) handleApproval(project, domain, token string, resp approval.DomainResponse) {
+	if resp.Scope != "session" {
+		// project/global scopes are handled by ConfigPersister + config reloader.
+		return
+	}
+	if d.sessionAllowlist != nil && token != "" {
+		if err := d.sessionAllowlist.Add(token, domain); err != nil {
+			clog.Warn("failed to add domain %s to session allowlist for token: %v", domain, err)
+		}
+	}
+	if d.allowlistCache != nil {
+		if projectAllowlist := d.allowlistCache.GetProject(project); projectAllowlist != nil {
+			projectAllowlist.Add([]string{domain})
+		}
+	}
 }
 
 // persistDenial writes a denial to the project or global decisions file.
@@ -306,39 +290,34 @@ func (d *DomainApproverImpl) updateDenylistCache(scope, project, target string, 
 	case "global":
 		denylist := d.allowlistCache.GetGlobalDeny()
 		if denylist == nil {
-			// Create a new global denylist with this entry
-			entries := []config.AllowEntry{}
-			if isPattern {
-				entries = append(entries, config.AllowEntry{Pattern: target})
-			} else {
-				entries = append(entries, config.AllowEntry{Domain: target})
-			}
-			d.allowlistCache.SetGlobalDeny(NewAllowlistFromConfig(entries))
+			d.allowlistCache.SetGlobalDeny(NewAllowlistFromConfig(denyEntry(target, isPattern)))
 		} else {
-			if isPattern {
-				denylist.AddPatterns([]string{target})
-			} else {
-				denylist.Add([]string{target})
-			}
+			addToDenylist(denylist, target, isPattern)
 		}
 	case "project":
 		denylist := d.allowlistCache.GetProjectDeny(project)
 		globalDeny := d.allowlistCache.GetGlobalDeny()
 		if denylist == nil || denylist == globalDeny {
-			// No project-specific denylist yet; create one
-			entries := []config.AllowEntry{}
-			if isPattern {
-				entries = append(entries, config.AllowEntry{Pattern: target})
-			} else {
-				entries = append(entries, config.AllowEntry{Domain: target})
-			}
-			d.allowlistCache.SetProjectDeny(project, NewAllowlistFromConfig(entries))
+			d.allowlistCache.SetProjectDeny(project, NewAllowlistFromConfig(denyEntry(target, isPattern)))
 		} else {
-			if isPattern {
-				denylist.AddPatterns([]string{target})
-			} else {
-				denylist.Add([]string{target})
-			}
+			addToDenylist(denylist, target, isPattern)
 		}
+	}
+}
+
+// denyEntry creates a single-entry AllowEntry slice for denylist creation.
+func denyEntry(target string, isPattern bool) []config.AllowEntry {
+	if isPattern {
+		return []config.AllowEntry{{Pattern: target}}
+	}
+	return []config.AllowEntry{{Domain: target}}
+}
+
+// addToDenylist adds a domain or pattern to an existing denylist.
+func addToDenylist(denylist *Allowlist, target string, isPattern bool) {
+	if isPattern {
+		denylist.AddPatterns([]string{target})
+	} else {
+		denylist.Add([]string{target})
 	}
 }

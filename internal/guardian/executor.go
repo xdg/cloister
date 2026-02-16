@@ -3,6 +3,7 @@
 package guardian
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -14,7 +15,7 @@ import (
 )
 
 // SharedSecretEnvVar is the environment variable name for the shared secret.
-const SharedSecretEnvVar = "CLOISTER_SHARED_SECRET"
+const SharedSecretEnvVar = "CLOISTER_SHARED_SECRET" //nolint:gosec // G101: not a credential
 
 // ExecutableEnvVar is the environment variable to override the cloister binary path.
 // Used in tests to point to a built binary instead of os.Executable().
@@ -26,7 +27,11 @@ func getExecutablePath() (string, error) {
 	if path := os.Getenv(ExecutableEnvVar); path != "" {
 		return path, nil
 	}
-	return os.Executable()
+	path, err := os.Executable()
+	if err != nil {
+		return "", fmt.Errorf("get executable path: %w", err)
+	}
+	return path, nil
 }
 
 // ExecutorInfo contains information about a started executor process.
@@ -60,7 +65,7 @@ func StartExecutor() (*ExecutorInfo, error) {
 	}
 
 	// Start the executor process in the background
-	cmd := exec.Command(executablePath, "executor", "run")
+	cmd := exec.CommandContext(context.Background(), executablePath, "executor", "run") //nolint:gosec // G204: args are not user-controlled
 	cmd.Env = append(os.Environ(), SharedSecretEnvVar+"="+secret)
 	// Detach from parent process group so it survives parent exit
 	cmd.SysProcAttr = &syscall.SysProcAttr{

@@ -1,4 +1,4 @@
-package token
+package token //nolint:revive // token is the correct domain name despite stdlib go/token
 
 import (
 	"os"
@@ -31,7 +31,7 @@ func TestStore_SaveLoadRemove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Token file not created: %v", err)
 	}
-	if info.Mode().Perm() != 0600 {
+	if info.Mode().Perm() != 0o600 {
 		t.Errorf("Token file permissions = %o, want 0600", info.Mode().Perm())
 	}
 
@@ -136,7 +136,7 @@ func TestStore_DirectoryPermissions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Store directory not created: %v", err)
 	}
-	if info.Mode().Perm() != 0700 {
+	if info.Mode().Perm() != 0o700 {
 		t.Errorf("Store directory permissions = %o, want 0700", info.Mode().Perm())
 	}
 }
@@ -208,7 +208,7 @@ func TestStore_LoadLegacyPlainTextFormat(t *testing.T) {
 
 	// Write a plain text token file (old format)
 	plainTextPath := filepath.Join(tmpDir, "old-cloister")
-	if err := os.WriteFile(plainTextPath, []byte("plaintoken123\n"), 0600); err != nil {
+	if err := os.WriteFile(plainTextPath, []byte("plaintoken123\n"), 0o600); err != nil {
 		t.Fatalf("Failed to write plain text token: %v", err)
 	}
 
@@ -242,7 +242,7 @@ func TestStore_LoadSkipsDirectories(t *testing.T) {
 
 	// Create a subdirectory (should be skipped)
 	subDir := filepath.Join(tmpDir, "subdir")
-	if err := os.Mkdir(subDir, 0700); err != nil {
+	if err := os.Mkdir(subDir, 0o700); err != nil {
 		t.Fatalf("Failed to create subdirectory: %v", err)
 	}
 
@@ -271,13 +271,13 @@ func TestStore_LoadSkipsEmptyFiles(t *testing.T) {
 
 	// Create an empty file
 	emptyPath := filepath.Join(tmpDir, "empty-cloister")
-	if err := os.WriteFile(emptyPath, []byte(""), 0600); err != nil {
+	if err := os.WriteFile(emptyPath, []byte(""), 0o600); err != nil {
 		t.Fatalf("Failed to write empty file: %v", err)
 	}
 
 	// Create a file with only whitespace
 	whitespacePath := filepath.Join(tmpDir, "whitespace-cloister")
-	if err := os.WriteFile(whitespacePath, []byte("  \n\t  "), 0600); err != nil {
+	if err := os.WriteFile(whitespacePath, []byte("  \n\t  "), 0o600); err != nil {
 		t.Fatalf("Failed to write whitespace file: %v", err)
 	}
 
@@ -301,7 +301,7 @@ func TestStore_LoadSkipsInvalidJSON(t *testing.T) {
 
 	// Create a file with invalid JSON that doesn't have a token field
 	invalidPath := filepath.Join(tmpDir, "invalid-cloister")
-	if err := os.WriteFile(invalidPath, []byte(`{"other":"field"}`), 0600); err != nil {
+	if err := os.WriteFile(invalidPath, []byte(`{"other":"field"}`), 0o600); err != nil {
 		t.Fatalf("Failed to write invalid JSON file: %v", err)
 	}
 

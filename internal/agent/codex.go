@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"os/exec"
 	"path/filepath"
@@ -228,7 +229,7 @@ func appendCodexCloisterRules(containerName string) error {
 	agentsMDPath := codexDir + "/" + codexAgentsMD
 
 	// Create .codex directory if it doesn't exist
-	mkdirCmd := exec.Command("docker", "exec", containerName, "mkdir", "-p", codexDir)
+	mkdirCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "mkdir", "-p", codexDir) //nolint:gosec // G204: args are not user-controlled
 	if output, err := mkdirCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create .codex directory: %w: %s", err, output)
 	}
@@ -236,7 +237,7 @@ func appendCodexCloisterRules(containerName string) error {
 	// Append to AGENTS.md (create if doesn't exist)
 	// Use a marker to avoid duplicating the content on repeated runs
 	marker := "# Cloister Environment"
-	appendCmd := exec.Command("docker", "exec", containerName, "sh", "-c",
+	appendCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "sh", "-c", //nolint:gosec // G204: args are not user-controlled
 		fmt.Sprintf(`grep -qF %q %s 2>/dev/null || echo %q >> %s`,
 			marker, agentsMDPath, codexCloisterRulesContent, agentsMDPath))
 	if output, err := appendCmd.CombinedOutput(); err != nil {
@@ -244,7 +245,7 @@ func appendCodexCloisterRules(containerName string) error {
 	}
 
 	// Fix ownership
-	chownCmd := exec.Command("docker", "exec", containerName, "chown",
+	chownCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "chown",
 		ContainerUID+":"+ContainerGID, agentsMDPath)
 	if output, err := chownCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to fix AGENTS.md ownership: %w: %s", err, output)

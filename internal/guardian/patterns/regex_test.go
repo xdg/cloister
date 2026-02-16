@@ -9,7 +9,7 @@ import (
 )
 
 // TestRegexMatcherImplementsMatcher verifies RegexMatcher implements the Matcher interface.
-func TestRegexMatcherImplementsMatcher(t *testing.T) {
+func TestRegexMatcherImplementsMatcher(_ *testing.T) {
 	var _ Matcher = (*RegexMatcher)(nil)
 }
 

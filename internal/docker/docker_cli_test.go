@@ -57,11 +57,12 @@ func TestCheckDaemon_SentinelErrorUsage(t *testing.T) {
 		return
 	}
 
-	if errors.Is(err, ErrDockerNotRunning) {
+	switch {
+	case errors.Is(err, ErrDockerNotRunning):
 		t.Logf("Correctly detected daemon not running: %v", err)
-	} else if strings.Contains(err.Error(), "docker CLI not found") {
+	case strings.Contains(err.Error(), "docker CLI not found"):
 		t.Skip("Docker CLI not installed")
-	} else {
+	default:
 		t.Errorf("unexpected error type: %v", err)
 	}
 }

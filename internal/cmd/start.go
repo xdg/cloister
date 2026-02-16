@@ -39,7 +39,7 @@ func init() {
 	startCmd.Flags().StringVar(&startAgentFlag, "agent", "", "AI agent to use (e.g., claude, codex). Overrides config default.")
 }
 
-func runStart(cmd *cobra.Command, args []string) error {
+func runStart(_ *cobra.Command, _ []string) error {
 	// Step 0a: Validate agent flag if provided
 	if startAgentFlag != "" {
 		if agent.Get(startAgentFlag) == nil {
@@ -72,38 +72,14 @@ func runStart(cmd *cobra.Command, args []string) error {
 	}
 
 	// Step 3: Get project name and remote URL
-	projectName, err := project.ProjectName(gitRoot)
+	projectName, err := project.Name(gitRoot)
 	if err != nil {
 		return fmt.Errorf("failed to determine project name: %w", err)
 	}
 	remoteURL := project.GetRemoteURL(gitRoot)
 
 	// Step 4: Auto-register project in registry
-	reg, err := project.LoadRegistry()
-	if err != nil {
-		// Log warning but continue - registry is not critical for operation
-		clog.Warn("failed to load project registry: %v", err)
-	} else {
-		info := &project.ProjectInfo{
-			Name:   projectName,
-			Root:   gitRoot,
-			Remote: remoteURL,
-			Branch: branch,
-		}
-		if err := reg.Register(info); err != nil {
-			// Check for name collision
-			var collisionErr *project.NameCollisionError
-			if errors.As(err, &collisionErr) {
-				clog.Warn("%v", err)
-			} else {
-				clog.Warn("failed to register project: %v", err)
-			}
-		} else {
-			if err := project.SaveRegistry(reg); err != nil {
-				clog.Warn("failed to save project registry: %v", err)
-			}
-		}
-	}
+	autoRegisterProject(projectName, gitRoot, remoteURL, branch)
 
 	// Compute cloister name (user-facing) and container name (Docker internal)
 	cloisterName := container.GenerateCloisterName(projectName)
@@ -117,28 +93,7 @@ func runStart(cmd *cobra.Command, args []string) error {
 		Agent:       startAgentFlag,
 	}, cloister.WithGlobalConfig(globalCfg))
 	if err != nil {
-		// Check for common error conditions
-		if errors.Is(err, docker.ErrDockerNotRunning) {
-			return dockerNotRunningError()
-		}
-		if errors.Is(err, container.ErrContainerExists) {
-			// Container already exists - attach to it instead of erroring
-			return attachToExisting(containerName)
-		}
-		// Check if this is a guardian failure and provide actionable guidance
-		errStr := err.Error()
-		if strings.Contains(errStr, "guardian failed to start") {
-			// Detect common causes and provide specific guidance
-			if strings.Contains(errStr, "address already in use") || strings.Contains(errStr, "port is already allocated") {
-				return fmt.Errorf("%w\n\nHint: Port 9997 may be in use. Check if another guardian is running:\n  docker ps -a --filter name=cloister-guardian", err)
-			}
-			if strings.Contains(errStr, "No such image") || strings.Contains(errStr, "Unable to find image") {
-				return fmt.Errorf("%w\n\nhint: run 'docker build -t cloister:latest .' to build the image", err)
-			}
-			// Generic guardian failure message
-			return fmt.Errorf("%w\n\nHint: Check guardian status with:\n  cloister guardian status\n  docker logs cloister-guardian", err)
-		}
-		return fmt.Errorf("failed to start cloister: %w", err)
+		return handleStartError(err, containerName)
 	}
 
 	// Print startup information
@@ -174,7 +129,7 @@ func attachToExisting(containerName string) error {
 	mgr := container.NewManager()
 
 	// Derive user-facing cloister name from container name
-	cloisterName := container.ContainerNameToCloisterName(containerName)
+	cloisterName := container.NameToCloisterName(containerName)
 
 	// Check if the container is running
 	running, err := mgr.IsRunning(containerName)
@@ -210,4 +165,57 @@ func attachToExisting(containerName string) error {
 	}
 
 	return nil
+}
+
+// autoRegisterProject registers the project in the project registry (best effort).
+func autoRegisterProject(projectName, gitRoot, remoteURL, branch string) {
+	reg, err := project.LoadRegistry()
+	if err != nil {
+		clog.Warn("failed to load project registry: %v", err)
+		return
+	}
+	info := &project.Info{
+		Name:   projectName,
+		Root:   gitRoot,
+		Remote: remoteURL,
+		Branch: branch,
+	}
+	if err := reg.Register(info); err != nil {
+		var collisionErr *project.NameCollisionError
+		if errors.As(err, &collisionErr) {
+			clog.Warn("%v", err)
+		} else {
+			clog.Warn("failed to register project: %v", err)
+		}
+		return
+	}
+	if err := project.SaveRegistry(reg); err != nil {
+		clog.Warn("failed to save project registry: %v", err)
+	}
+}
+
+// handleStartError maps cloister.Start errors to user-friendly messages.
+func handleStartError(err error, containerName string) error {
+	if errors.Is(err, docker.ErrDockerNotRunning) {
+		return dockerNotRunningError()
+	}
+	if errors.Is(err, container.ErrContainerExists) {
+		return attachToExisting(containerName)
+	}
+	return guardianErrorHint(err)
+}
+
+// guardianErrorHint wraps guardian failures with actionable hints.
+func guardianErrorHint(err error) error {
+	errStr := err.Error()
+	if !strings.Contains(errStr, "guardian failed to start") {
+		return fmt.Errorf("failed to start cloister: %w", err)
+	}
+	if strings.Contains(errStr, "address already in use") || strings.Contains(errStr, "port is already allocated") {
+		return fmt.Errorf("%w\n\nHint: Port 9997 may be in use. Check if another guardian is running:\n  docker ps -a --filter name=cloister-guardian", err)
+	}
+	if strings.Contains(errStr, "No such image") || strings.Contains(errStr, "Unable to find image") {
+		return fmt.Errorf("%w\n\nhint: run 'docker build -t cloister:latest .' to build the image", err)
+	}
+	return fmt.Errorf("%w\n\nHint: Check guardian status with:\n  cloister guardian status\n  docker logs cloister-guardian", err)
 }

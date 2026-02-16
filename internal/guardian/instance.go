@@ -3,11 +3,15 @@
 package guardian
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"net"
 	"os"
+	"time"
+
+	"github.com/xdg/cloister/internal/clog"
 )
 
 // InstanceIDEnvVar is the environment variable used to set a unique instance ID
@@ -31,7 +35,10 @@ func InstanceID() string {
 // GenerateInstanceID creates a random 6-character hex ID for test isolation.
 func GenerateInstanceID() string {
 	b := make([]byte, 3)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// Fall back to a timestamp-based ID if crypto/rand fails
+		return fmt.Sprintf("%06x", time.Now().UnixNano()&0xFFFFFF)
+	}
 	return hex.EncodeToString(b)
 }
 
@@ -54,11 +61,15 @@ func ContainerName() string {
 // limitation of ephemeral port allocation and is acceptable for test isolation
 // where port collisions are rare.
 func FindFreePort() (int, error) {
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("listen on tcp: %w", err)
 	}
-	defer func() { _ = l.Close() }()
+	defer func() {
+		if err := l.Close(); err != nil {
+			clog.Warn("failed to close listener for port discovery: %v", err)
+		}
+	}()
 	addr, ok := l.Addr().(*net.TCPAddr)
 	if !ok {
 		return 0, fmt.Errorf("unexpected address type: %T", l.Addr())
@@ -72,10 +83,10 @@ const DefaultTokenAPIPort = 9997
 // DefaultApprovalPort is the default port for the guardian approval web UI.
 const DefaultApprovalPort = 9999
 
-// GuardianPorts returns the ports to use for the guardian token API and approval server.
+// Ports returns the ports to use for the guardian token API and approval server.
 // For production (no instance ID), returns fixed ports 9997 and 9999.
 // For test instances, allocates dynamic ports.
-func GuardianPorts() (tokenPort, approvalPort int, err error) {
+func Ports() (tokenPort, approvalPort int, err error) {
 	if InstanceID() == "" {
 		return DefaultTokenAPIPort, DefaultApprovalPort, nil
 	}

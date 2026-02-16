@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/term"
@@ -27,7 +28,7 @@ func init() {
 	rootCmd.AddCommand(listCmd)
 }
 
-func runList(cmd *cobra.Command, args []string) error {
+func runList(_ *cobra.Command, _ []string) error {
 	mgr := container.NewManager()
 	containers, err := mgr.List()
 	if err != nil {
@@ -38,7 +39,7 @@ func runList(cmd *cobra.Command, args []string) error {
 	}
 
 	// Filter out the guardian container and non-running containers
-	var cloisters []container.ContainerInfo
+	var cloisters []container.Info
 	for _, c := range containers {
 		// Skip the guardian container
 		if c.Name == "cloister-guardian" {
@@ -65,7 +66,7 @@ func runList(cmd *cobra.Command, args []string) error {
 
 	// Print each cloister
 	for _, c := range cloisters {
-		cloisterName := container.ContainerNameToCloisterName(c.Name)
+		cloisterName := container.NameToCloisterName(c.Name)
 		project, branch := parseCloisterName(cloisterName)
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			cloisterName,
@@ -76,7 +77,9 @@ func runList(cmd *cobra.Command, args []string) error {
 		)
 	}
 
-	_ = w.Flush()
+	if err := w.Flush(); err != nil {
+		clog.Warn("failed to flush output: %v", err)
+	}
 	return nil
 }
 

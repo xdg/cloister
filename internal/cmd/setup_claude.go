@@ -160,7 +160,7 @@ func hasExistingCredentials(cfg *config.GlobalConfig) bool {
 	return claudeCfg.AuthMethod != "" || claudeCfg.Token != "" || claudeCfg.APIKey != ""
 }
 
-func runSetupClaude(cmd *cobra.Command, args []string) error {
+func runSetupClaude(cmd *cobra.Command, _ []string) error {
 	loadConfig := getSetupClaudeConfigLoader()
 	yesNo := getSetupClaudeYesNoPrompter(cmd)
 
@@ -233,7 +233,7 @@ func runSetupClaude(cmd *cobra.Command, args []string) error {
 
 // saveCredentialsToConfig loads the global config, updates the claude agent
 // settings with the provided credentials, and writes the config back.
-func saveCredentialsToConfig(cmd *cobra.Command, creds credentialResult, skipPerms bool) error {
+func saveCredentialsToConfig(_ *cobra.Command, creds credentialResult, skipPerms bool) error {
 	loadConfig := getSetupClaudeConfigLoader()
 	writeConfig := getSetupClaudeConfigWriter()
 	getConfigPath := getSetupClaudeConfigPath()

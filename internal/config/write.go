@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 )
 
@@ -20,23 +21,29 @@ func WriteDefaultConfig() error {
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		// Some other error occurred
-		return err
+		return fmt.Errorf("stat config file: %w", err)
 	}
 
 	// Ensure config directory exists
-	if err := EnsureConfigDir(); err != nil {
+	if err := EnsureDir(); err != nil {
 		return err
 	}
 
 	// Write the config file with user-only permissions
-	return os.WriteFile(path, []byte(defaultConfigTemplate), 0600)
+	if err := os.WriteFile(path, []byte(defaultConfigTemplate), 0o600); err != nil {
+		return fmt.Errorf("write default config: %w", err)
+	}
+	return nil
 }
 
 // EnsureProjectsDir creates the projects configuration directory if it
 // doesn't exist. It uses 0700 permissions for security (user-only access).
 // Returns nil if the directory already exists or was successfully created.
 func EnsureProjectsDir() error {
-	return os.MkdirAll(ProjectsDir(), 0700)
+	if err := os.MkdirAll(ProjectsDir(), 0o700); err != nil {
+		return fmt.Errorf("ensure projects dir: %w", err)
+	}
+	return nil
 }
 
 // InitProjectConfig creates a minimal project configuration file if it doesn't exist.
@@ -44,7 +51,7 @@ func EnsureProjectsDir() error {
 // If the config file already exists, it returns nil without overwriting.
 // The projects directory is created if it doesn't exist.
 // The file is written with 0600 permissions (user read/write only).
-func InitProjectConfig(name string, remote string, root string) error {
+func InitProjectConfig(name, remote, root string) error {
 	path := ProjectConfigPath(name)
 
 	// Check if file already exists
@@ -55,7 +62,7 @@ func InitProjectConfig(name string, remote string, root string) error {
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		// Some other error occurred
-		return err
+		return fmt.Errorf("stat project config file: %w", err)
 	}
 
 	// Create a minimal config with just remote and root
@@ -76,7 +83,10 @@ func InitProjectConfig(name string, remote string, root string) error {
 	}
 
 	// Write the config file with user-only permissions
-	return os.WriteFile(path, data, 0600)
+	if err = os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write project config: %w", err)
+	}
+	return nil
 }
 
 // WriteProjectConfig writes a project configuration to the projects directory.
@@ -95,7 +105,7 @@ func WriteProjectConfig(name string, cfg *ProjectConfig, overwrite bool) error {
 	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		// Some other error occurred
-		return err
+		return fmt.Errorf("stat project config file: %w", err)
 	}
 
 	// Ensure projects directory exists
@@ -110,7 +120,10 @@ func WriteProjectConfig(name string, cfg *ProjectConfig, overwrite bool) error {
 	}
 
 	// Write the config file with user-only permissions
-	return os.WriteFile(path, data, 0600)
+	if err = os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write project config: %w", err)
+	}
+	return nil
 }
 
 // WriteGlobalConfig writes a global configuration to the config directory.
@@ -122,7 +135,7 @@ func WriteGlobalConfig(cfg *GlobalConfig) error {
 	path := GlobalConfigPath()
 
 	// Ensure config directory exists
-	if err := EnsureConfigDir(); err != nil {
+	if err := EnsureDir(); err != nil {
 		return err
 	}
 
@@ -133,5 +146,8 @@ func WriteGlobalConfig(cfg *GlobalConfig) error {
 	}
 
 	// Write the config file with user-only permissions
-	return os.WriteFile(path, data, 0600)
+	if err = os.WriteFile(path, data, 0o600); err != nil {
+		return fmt.Errorf("write global config: %w", err)
+	}
+	return nil
 }

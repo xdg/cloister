@@ -2,7 +2,9 @@
 package container
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -16,8 +18,8 @@ var ErrContainerExists = errors.New("container already exists")
 // ErrContainerNotFound indicates that the specified container does not exist.
 var ErrContainerNotFound = errors.New("container not found")
 
-// ContainerInfo holds information about a running cloister container.
-type ContainerInfo struct {
+// Info holds information about a running cloister container.
+type Info struct {
 	ID         string `json:"ID"`
 	Name       string `json:"Names"`
 	Image      string `json:"Image"`
@@ -43,24 +45,28 @@ type DockerRunner interface {
 // defaultDockerRunner implements DockerRunner using the real docker package.
 type defaultDockerRunner struct{}
 
+// Run delegates to the real docker package.
 func (d defaultDockerRunner) Run(args ...string) (string, error) {
 	return docker.Run(args...)
 }
 
+// RunJSONLines delegates to the real docker package.
 func (d defaultDockerRunner) RunJSONLines(result any, strict bool, args ...string) error {
 	// Type assert to the expected slice type and call the generic function.
-	// We only use this with []ContainerInfo in this package.
-	if containers, ok := result.(*[]ContainerInfo); ok {
+	// We only use this with []Info in this package.
+	if containers, ok := result.(*[]Info); ok {
 		return docker.RunJSONLines(containers, strict, args...)
 	}
 	// Fallback: this should not happen in practice within this package.
 	return errors.New("unsupported result type for RunJSONLines")
 }
 
+// FindContainerByExactName delegates to the real docker package.
 func (d defaultDockerRunner) FindContainerByExactName(name string) (*docker.ContainerInfo, error) {
 	return docker.FindContainerByExactName(name)
 }
 
+// StartContainer delegates to the real docker package.
 func (d defaultDockerRunner) StartContainer(name string) error {
 	return docker.StartContainer(name)
 }
@@ -172,11 +178,10 @@ func (m *Manager) Stop(containerName string) error {
 	if err != nil {
 		// If container is not running, that's okay - continue to removal
 		var cmdErr *docker.CommandError
-		if errors.As(err, &cmdErr) {
-			if !strings.Contains(cmdErr.Stderr, "is not running") {
-				return err
-			}
-		} else {
+		if !errors.As(err, &cmdErr) {
+			return err
+		}
+		if !strings.Contains(cmdErr.Stderr, "is not running") {
 			return err
 		}
 	}
@@ -192,8 +197,8 @@ func (m *Manager) Stop(containerName string) error {
 
 // List returns information about all running cloister containers.
 // Cloister containers are identified by the "cloister-" name prefix.
-func (m *Manager) List() ([]ContainerInfo, error) {
-	var containers []ContainerInfo
+func (m *Manager) List() ([]Info, error) {
+	var containers []Info
 
 	err := m.runner.RunJSONLines(&containers, false, "ps", "-a", "--filter", "name=^cloister-")
 	if err != nil {
@@ -202,7 +207,7 @@ func (m *Manager) List() ([]ContainerInfo, error) {
 
 	// Filter to only include containers that start with "cloister-"
 	// (docker filter is a substring match, so we need exact prefix matching)
-	result := make([]ContainerInfo, 0, len(containers))
+	result := make([]Info, 0, len(containers))
 	for _, c := range containers {
 		// Names field may have leading slash from docker (e.g., "/cloister-foo")
 		name := strings.TrimPrefix(c.Name, "/")
@@ -239,7 +244,7 @@ func (m *Manager) Attach(containerName string) (int, error) {
 	// Build docker exec command with interactive TTY
 	// -i: Keep STDIN open even if not attached
 	// -t: Allocate a pseudo-TTY
-	cmd := exec.Command("docker", "exec", "-it", containerName, "/bin/bash")
+	cmd := exec.CommandContext(context.Background(), "docker", "exec", "-it", containerName, "/bin/bash")
 
 	// Connect to current process's stdin/stdout/stderr
 	cmd.Stdin = os.Stdin
@@ -255,7 +260,7 @@ func (m *Manager) Attach(containerName string) (int, error) {
 			return exitErr.ExitCode(), nil
 		}
 		// Other errors (e.g., docker not found, command failed to start)
-		return 0, err
+		return 0, fmt.Errorf("run container command: %w", err)
 	}
 
 	return 0, nil
@@ -264,7 +269,7 @@ func (m *Manager) Attach(containerName string) (int, error) {
 // ContainerStatus checks if a container with the given name exists and whether it's running.
 // Returns (exists, running, error). If exists is false, running is always false.
 // This performs a single Docker call to retrieve both pieces of information.
-func (m *Manager) ContainerStatus(name string) (exists bool, running bool, err error) {
+func (m *Manager) ContainerStatus(name string) (exists, running bool, err error) {
 	info, err := m.runner.FindContainerByExactName(name)
 	if err != nil {
 		return false, false, err

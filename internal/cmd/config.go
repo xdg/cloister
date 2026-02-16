@@ -65,7 +65,7 @@ func init() {
 	configCmd.AddCommand(configInitCmd)
 }
 
-func runConfigShow(cmd *cobra.Command, args []string) error {
+func runConfigShow(_ *cobra.Command, _ []string) error {
 	cfg, err := config.LoadGlobalConfig()
 	if err != nil {
 		return fmt.Errorf("failed to load config: %w", err)
@@ -80,18 +80,18 @@ func runConfigShow(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runConfigEdit(cmd *cobra.Command, args []string) error {
+func runConfigEdit(_ *cobra.Command, _ []string) error {
 	if err := config.EditGlobalConfig(); err != nil {
 		return fmt.Errorf("failed to edit config: %w", err)
 	}
 	return nil
 }
 
-func runConfigPath(cmd *cobra.Command, args []string) {
+func runConfigPath(_ *cobra.Command, _ []string) {
 	term.Println(config.GlobalConfigPath())
 }
 
-func runConfigInit(cmd *cobra.Command, args []string) error {
+func runConfigInit(_ *cobra.Command, _ []string) error {
 	path := config.GlobalConfigPath()
 
 	if err := config.WriteDefaultConfig(); err != nil {

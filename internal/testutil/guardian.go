@@ -51,9 +51,15 @@ func RequireGuardian(t *testing.T) {
 		t.Skipf("Guardian not available: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = guardian.StopExecutor()
-		_, _ = docker.Run("stop", containerName)
-		_, _ = docker.Run("rm", containerName)
+		if err := guardian.StopExecutor(); err != nil {
+			t.Logf("cleanup: failed to stop executor: %v", err)
+		}
+		if _, err := docker.Run("stop", containerName); err != nil {
+			t.Logf("cleanup: failed to stop container %s: %v", containerName, err)
+		}
+		if _, err := docker.Run("rm", containerName); err != nil {
+			t.Logf("cleanup: failed to remove container %s: %v", containerName, err)
+		}
 	})
 }
 
@@ -81,8 +87,14 @@ func RequireCleanGuardianState(t *testing.T) {
 		t.Skip("Skipping: guardian is already running (parallel test conflict)")
 	}
 	t.Cleanup(func() {
-		_ = guardian.StopExecutor()
-		_, _ = docker.Run("stop", containerName)
-		_, _ = docker.Run("rm", containerName)
+		if err := guardian.StopExecutor(); err != nil {
+			t.Logf("cleanup: failed to stop executor: %v", err)
+		}
+		if _, err := docker.Run("stop", containerName); err != nil {
+			t.Logf("cleanup: failed to stop container %s: %v", containerName, err)
+		}
+		if _, err := docker.Run("rm", containerName); err != nil {
+			t.Logf("cleanup: failed to remove container %s: %v", containerName, err)
+		}
 	})
 }

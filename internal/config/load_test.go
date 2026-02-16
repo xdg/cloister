@@ -45,7 +45,7 @@ func TestLoadGlobalConfig_Valid(t *testing.T) {
 
 	// Create config directory and file
 	configDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -60,7 +60,7 @@ log:
   level: debug
 `
 	configPath := filepath.Join(configDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -92,7 +92,7 @@ func TestLoadGlobalConfig_Invalid(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	configDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -102,7 +102,7 @@ log:
   level: invalid_level
 `
 	configPath := filepath.Join(configDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -122,7 +122,7 @@ func TestLoadGlobalConfig_Corrupt(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	configDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -133,7 +133,7 @@ proxy:
   rate_limit: [this is not valid yaml
 `
 	configPath := filepath.Join(configDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -149,7 +149,7 @@ func TestLoadGlobalConfig_ExpandsPaths(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	configDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -163,7 +163,7 @@ devcontainer:
     - "/absolute/path"
 `
 	configPath := filepath.Join(configDir, "config.yaml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -178,12 +178,12 @@ devcontainer:
 	}
 
 	// Verify log paths are expanded
-	wantLogFile := filepath.Join(home, "logs/cloister.log")
+	wantLogFile := filepath.Join(home, "logs", "cloister.log")
 	if cfg.Log.File != wantLogFile {
 		t.Errorf("cfg.Log.File = %q, want %q", cfg.Log.File, wantLogFile)
 	}
 
-	wantPerCloisterDir := filepath.Join(home, "logs/cloisters/")
+	wantPerCloisterDir := filepath.Join(home, "logs", "cloisters")
 	if cfg.Log.PerCloisterDir != wantPerCloisterDir {
 		t.Errorf("cfg.Log.PerCloisterDir = %q, want %q", cfg.Log.PerCloisterDir, wantPerCloisterDir)
 	}
@@ -248,7 +248,7 @@ func TestLoadProjectConfig_Valid(t *testing.T) {
 
 	// Create projects directory and file
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -266,7 +266,7 @@ hostexec:
     - pattern: "^make test$"
 `
 	configPath := filepath.Join(projectsDir, "my-project.yaml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -285,7 +285,7 @@ hostexec:
 	}
 
 	// Verify root path is expanded
-	wantRoot := filepath.Join(home, "projects/repo")
+	wantRoot := filepath.Join(home, "projects", "repo")
 	if cfg.Root != wantRoot {
 		t.Errorf("cfg.Root = %q, want %q", cfg.Root, wantRoot)
 	}
@@ -294,7 +294,7 @@ hostexec:
 	if len(cfg.Refs) != 2 {
 		t.Fatalf("len(cfg.Refs) = %d, want 2", len(cfg.Refs))
 	}
-	wantRef := filepath.Join(home, "docs/api-spec")
+	wantRef := filepath.Join(home, "docs", "api-spec")
 	if cfg.Refs[0] != wantRef {
 		t.Errorf("cfg.Refs[0] = %q, want %q", cfg.Refs[0], wantRef)
 	}
@@ -326,7 +326,7 @@ func TestLoadProjectConfig_InvalidRegex(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -337,7 +337,7 @@ hostexec:
     - pattern: "[invalid(regex"
 `
 	configPath := filepath.Join(projectsDir, "bad-project.yaml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -357,7 +357,7 @@ func TestLoadProjectConfig_UnknownField(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -367,7 +367,7 @@ remote: "git@github.com:example/repo.git"
 unknown_field: "this should cause an error"
 `
 	configPath := filepath.Join(projectsDir, "unknown-field.yaml")
-	if err := os.WriteFile(configPath, []byte(configContent), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 

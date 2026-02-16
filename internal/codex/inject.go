@@ -7,10 +7,10 @@ import (
 	"github.com/xdg/cloister/internal/config"
 )
 
-// Environment variable name for credential injection.
-const EnvOpenAIAPIKey = "OPENAI_API_KEY"
+// EnvOpenAIAPIKey is the environment variable name for credential injection.
+const EnvOpenAIAPIKey = "OPENAI_API_KEY" //nolint:gosec // G101: not a credential, just the env var name
 
-// Auth method constant matching config.AgentConfig.AuthMethod value.
+// AuthMethodAPIKey is the auth method constant matching config.AgentConfig.AuthMethod value.
 const AuthMethodAPIKey = "api_key"
 
 // ErrNoAuthMethod indicates that no authentication method is configured.

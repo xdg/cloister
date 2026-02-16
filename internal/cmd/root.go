@@ -2,6 +2,8 @@
 package cmd
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
 	"github.com/xdg/cloister/internal/clog"
@@ -24,7 +26,7 @@ in Docker containers with strict security controls.
 It prevents unintentional destruction, blocks data exfiltration via allowlist-only
 network access, and maintains development velocity without constant permission prompts.`,
 	Version: version.Version,
-	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+	PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
 		// Initialize logging
 		if err := clog.Configure(clog.DefaultLogPath(), debugFlag, false); err != nil {
 			// Log to stderr if we can't set up file logging
@@ -36,9 +38,9 @@ network access, and maintains development velocity without constant permission p
 
 		return nil
 	},
-	PersistentPostRun: func(cmd *cobra.Command, args []string) {
+	PersistentPostRun: func(_ *cobra.Command, _ []string) {
 		// Ensure logs are flushed on exit
-		_ = clog.Close()
+		_ = clog.Close() //nolint:errcheck // clog's own close
 	},
 }
 
@@ -49,5 +51,8 @@ func init() {
 
 // Execute runs the root command and returns any error.
 func Execute() error {
-	return rootCmd.Execute()
+	if err := rootCmd.Execute(); err != nil {
+		return fmt.Errorf("command failed: %w", err)
+	}
+	return nil
 }

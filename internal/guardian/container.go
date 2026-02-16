@@ -3,6 +3,7 @@
 package guardian
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/executor"
@@ -78,7 +80,7 @@ const (
 	BridgeNetwork = "bridge"
 
 	// ContainerTokenDir is the path inside the guardian container where tokens are mounted.
-	ContainerTokenDir = "/var/lib/cloister/tokens"
+	ContainerTokenDir = "/var/lib/cloister/tokens" //nolint:gosec // G101: not a credential
 
 	// ContainerConfigDir is the path inside the guardian container where config is mounted.
 	// We set XDG_CONFIG_HOME=/etc so ConfigDir() returns /etc/cloister/.
@@ -92,12 +94,12 @@ const (
 // ErrGuardianNotRunning indicates the guardian container is not running.
 var ErrGuardianNotRunning = errors.New("guardian container is not running")
 
-// hostCloisterPath returns a path under config.ConfigDir()/<subdir>.
-// Uses config.ConfigDir() which respects XDG_CONFIG_HOME.
+// hostCloisterPath returns a path under config.Dir()/<subdir>.
+// Uses config.Dir() which respects XDG_CONFIG_HOME.
 func hostCloisterPath(subdir string) (string, error) {
-	base := config.ConfigDir()
+	base := config.Dir()
 	if subdir == "" {
-		// ConfigDir() has trailing slash, remove it for consistency
+		// Dir() has trailing slash, remove it for consistency
 		return strings.TrimSuffix(base, "/"), nil
 	}
 	return base + subdir, nil
@@ -146,6 +148,7 @@ func IsRunning() (bool, error) {
 // StartOptions configures guardian container startup.
 type StartOptions struct {
 	// SocketPath is the path to the hostexec socket on the host.
+	//
 	// Deprecated: Use TCPPort instead.
 	SocketPath string
 
@@ -181,82 +184,108 @@ func Start() error {
 // StartWithOptions starts the guardian container with additional options.
 // See Start for container configuration details.
 func StartWithOptions(opts StartOptions) error {
-	// Check if container already exists
-	state, err := getContainerState()
-	if err != nil {
+	if err := ensureCleanState(); err != nil {
 		return err
 	}
 
-	if state != nil {
-		if state.State == "running" {
-			return ErrGuardianAlreadyRunning
-		}
-		// Container exists but not running - remove it and start fresh
-		if err := removeContainer(); err != nil {
-			return err
-		}
-	}
-
-	// Ensure cloister-net exists
 	if err := defaultDockerOps.EnsureCloisterNetwork(); err != nil {
 		return fmt.Errorf("failed to create cloister network: %w", err)
 	}
 
-	// Get the host token directory for mounting
-	hostTokenDir, err := HostTokenDir()
+	dirs, err := ensureHostDirs()
 	if err != nil {
-		return fmt.Errorf("failed to get token directory: %w", err)
+		return err
 	}
 
-	// Ensure token directory exists (creates with 0700 permissions)
-	if err := os.MkdirAll(hostTokenDir, 0700); err != nil {
-		return fmt.Errorf("failed to create token directory: %w", err)
-	}
-
-	// Get the host config directory for mounting
-	hostConfigDir, err := HostConfigDir()
+	tokenAPIPort, approvalPort, err := resolveGuardianPorts(opts)
 	if err != nil {
-		return fmt.Errorf("failed to get config directory: %w", err)
+		return err
 	}
 
-	// Ensure config directory exists (creates with 0700 permissions)
-	if err := os.MkdirAll(hostConfigDir, 0700); err != nil {
-		return fmt.Errorf("failed to create config directory: %w", err)
+	args := buildGuardianRunArgs(opts, tokenAPIPort, approvalPort, dirs)
+
+	if _, err = defaultDockerOps.Run(args...); err != nil {
+		return fmt.Errorf("failed to start guardian container: %w", err)
 	}
 
-	// Migrate old approvals/ directory to decisions/ if needed (host-side,
-	// before creating the decisions dir so rename can succeed).
-	if _, err := config.MigrateDecisionDir(); err != nil {
-		return fmt.Errorf("failed to migrate approvals directory: %w", err)
-	}
-
-	// Decision dir is a subdirectory of config dir, mounted rw to overlay the ro config mount
-	hostDecisionDir := hostConfigDir + "/decisions"
-	if err := os.MkdirAll(hostDecisionDir, 0700); err != nil {
-		return fmt.Errorf("failed to create decision directory: %w", err)
-	}
-
-	// Determine ports to use
-	tokenAPIPort := opts.TokenAPIPort
-	approvalPort := opts.ApprovalPort
-	if tokenAPIPort == 0 || approvalPort == 0 {
-		var err error
-		tokenAPIPort, approvalPort, err = GuardianPorts()
-		if err != nil {
-			return fmt.Errorf("failed to allocate guardian ports: %w", err)
+	if _, err = defaultDockerOps.Run("network", "connect", docker.CloisterNetworkName, ContainerName()); err != nil {
+		if removeErr := removeContainer(); removeErr != nil {
+			clog.Warn("failed to clean up guardian container after network connect failure: %v", removeErr)
 		}
+		return fmt.Errorf("failed to connect guardian to cloister network: %w", err)
 	}
 
-	// Build docker run arguments
-	// Container is created on bridge network first so port publishing works.
-	// We then connect to cloister-net for internal proxy traffic.
-	// Token API port is exposed to the host for the token management API
-	// (used by CLI to register/revoke tokens)
-	// Approval port is exposed to the host for the approval web UI
-	// (used by humans to approve/deny hostexec requests)
-	// Token directory is mounted read-only for recovery on restart
-	// Config directory is mounted read-only for allowlist configuration
-	// XDG_CONFIG_HOME=/etc so ConfigDir() returns /etc/cloister/
+	return nil
+}
+
+// ensureCleanState checks for an existing container and removes it if not running.
+func ensureCleanState() error {
+	state, err := getContainerState()
+	if err != nil {
+		return err
+	}
+	if state == nil {
+		return nil
+	}
+	if state.State == "running" {
+		return ErrGuardianAlreadyRunning
+	}
+	return removeContainer()
+}
+
+// hostDirs holds the host directory paths needed for guardian container mounts.
+type hostDirs struct {
+	TokenDir    string
+	ConfigDir   string
+	DecisionDir string
+}
+
+// ensureHostDirs creates and returns the host directories needed for guardian mounts.
+func ensureHostDirs() (hostDirs, error) {
+	var dirs hostDirs
+	var err error
+	dirs.TokenDir, err = HostTokenDir()
+	if err != nil {
+		return dirs, fmt.Errorf("failed to get token directory: %w", err)
+	}
+	if err := os.MkdirAll(dirs.TokenDir, 0o700); err != nil {
+		return dirs, fmt.Errorf("failed to create token directory: %w", err)
+	}
+
+	dirs.ConfigDir, err = HostConfigDir()
+	if err != nil {
+		return dirs, fmt.Errorf("failed to get config directory: %w", err)
+	}
+	if err := os.MkdirAll(dirs.ConfigDir, 0o700); err != nil {
+		return dirs, fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	if _, err := config.MigrateDecisionDir(); err != nil {
+		return dirs, fmt.Errorf("failed to migrate approvals directory: %w", err)
+	}
+
+	dirs.DecisionDir = dirs.ConfigDir + "/decisions"
+	if err := os.MkdirAll(dirs.DecisionDir, 0o700); err != nil {
+		return dirs, fmt.Errorf("failed to create decision directory: %w", err)
+	}
+
+	return dirs, nil
+}
+
+// resolveGuardianPorts returns the token API and approval ports, allocating them if needed.
+func resolveGuardianPorts(opts StartOptions) (tokenAPIPort, approvalPort int, err error) {
+	if opts.TokenAPIPort != 0 && opts.ApprovalPort != 0 {
+		return opts.TokenAPIPort, opts.ApprovalPort, nil
+	}
+	tokenAPIPort, approvalPort, err = Ports()
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to allocate guardian ports: %w", err)
+	}
+	return tokenAPIPort, approvalPort, nil
+}
+
+// buildGuardianRunArgs builds the docker run arguments for the guardian container.
+func buildGuardianRunArgs(opts StartOptions, tokenAPIPort, approvalPort int, dirs hostDirs) []string {
 	args := []string{
 		"run", "-d",
 		"--name", ContainerName(),
@@ -264,39 +293,20 @@ func StartWithOptions(opts StartOptions) error {
 		"-p", fmt.Sprintf("127.0.0.1:%d:9997", tokenAPIPort),
 		"-p", fmt.Sprintf("127.0.0.1:%d:9999", approvalPort),
 		"-e", "XDG_CONFIG_HOME=/etc",
-		"-v", hostTokenDir + ":" + ContainerTokenDir + ":ro",
-		"-v", hostConfigDir + ":" + ContainerConfigDir + ":ro",
-		"-v", hostDecisionDir + ":" + ContainerDecisionDir,
+		"-v", dirs.TokenDir + ":" + ContainerTokenDir + ":ro",
+		"-v", dirs.ConfigDir + ":" + ContainerConfigDir + ":ro",
+		"-v", dirs.DecisionDir + ":" + ContainerDecisionDir,
 	}
 
-	// Add executor TCP port if provided (for host.docker.internal connection)
 	if opts.TCPPort > 0 {
 		args = append(args, "-e", fmt.Sprintf("%s=%d", ExecutorPortEnvVar, opts.TCPPort))
 	}
-
-	// Add shared secret environment variable if provided
 	if opts.SharedSecret != "" {
 		args = append(args, "-e", SharedSecretEnvVar+"="+opts.SharedSecret)
 	}
 
-	// Add image and command
 	args = append(args, version.DefaultImage(), "cloister", "guardian", "run")
-
-	// Create and start the container
-	_, err = defaultDockerOps.Run(args...)
-	if err != nil {
-		return fmt.Errorf("failed to start guardian container: %w", err)
-	}
-
-	// Connect to cloister-net for internal proxy traffic from cloister containers
-	_, err = defaultDockerOps.Run("network", "connect", docker.CloisterNetworkName, ContainerName())
-	if err != nil {
-		// If connecting to cloister-net fails, clean up the container
-		_ = removeContainer()
-		return fmt.Errorf("failed to connect guardian to cloister network: %w", err)
-	}
-
-	return nil
+	return args
 }
 
 // Stop stops the executor daemon and removes the guardian container.
@@ -305,7 +315,7 @@ func Stop() error {
 	// Stop the executor daemon first
 	if err := StopExecutor(); err != nil {
 		// Log but continue - we still want to stop the container
-		_ = err
+		clog.Warn("failed to stop executor daemon: %v", err)
 	}
 
 	state, err := getContainerState()
@@ -330,47 +340,25 @@ func EnsureRunning() error {
 	if err != nil {
 		return err
 	}
-
 	if running {
 		return nil
 	}
 
-	// Allocate ports for the guardian
-	tokenAPIPort, approvalPort, err := GuardianPorts()
+	tokenAPIPort, approvalPort, err := Ports()
 	if err != nil {
 		return fmt.Errorf("failed to allocate guardian ports: %w", err)
 	}
 
-	// Start the executor daemon first
 	execInfo, err := StartExecutor()
 	if err != nil {
 		return fmt.Errorf("failed to start executor: %w", err)
 	}
 
-	// Update executor state with guardian ports so clients can find them
-	execState, err := executor.LoadDaemonState()
-	if err != nil {
-		// Clean up executor if we can't read its state
-		if execInfo.Process != nil {
-			_ = execInfo.Process.Kill()
-		}
-		_ = StopExecutor()
-		return fmt.Errorf("failed to load executor state for port storage: %w", err)
-	}
-	if execState != nil {
-		execState.TokenAPIPort = tokenAPIPort
-		execState.ApprovalPort = approvalPort
-		if err := executor.SaveDaemonState(execState); err != nil {
-			// Clean up executor if we can't save state
-			if execInfo.Process != nil {
-				_ = execInfo.Process.Kill()
-			}
-			_ = StopExecutor()
-			return fmt.Errorf("failed to save guardian ports to executor state: %w", err)
-		}
+	if err := saveGuardianPorts(execInfo, tokenAPIPort, approvalPort); err != nil {
+		cleanupExecutor(execInfo)
+		return err
 	}
 
-	// Start the guardian container with executor TCP port and allocated guardian ports
 	opts := StartOptions{
 		TCPPort:      execInfo.TCPPort,
 		SharedSecret: execInfo.Secret,
@@ -378,16 +366,40 @@ func EnsureRunning() error {
 		ApprovalPort: approvalPort,
 	}
 	if err := StartWithOptions(opts); err != nil {
-		// Clean up executor if guardian fails to start
-		if execInfo.Process != nil {
-			_ = execInfo.Process.Kill()
-		}
-		_ = StopExecutor()
+		cleanupExecutor(execInfo)
 		return err
 	}
 
-	// Wait for API to be ready after fresh start
 	return WaitReadyWithPort(tokenAPIPort, 5*time.Second)
+}
+
+// saveGuardianPorts saves the guardian ports to executor state so clients can discover them.
+func saveGuardianPorts(_ *ExecutorInfo, tokenAPIPort, approvalPort int) error {
+	execState, err := executor.LoadDaemonState()
+	if err != nil {
+		return fmt.Errorf("failed to load executor state for port storage: %w", err)
+	}
+	if execState == nil {
+		return nil
+	}
+	execState.TokenAPIPort = tokenAPIPort
+	execState.ApprovalPort = approvalPort
+	if err := executor.SaveDaemonState(execState); err != nil {
+		return fmt.Errorf("failed to save guardian ports to executor state: %w", err)
+	}
+	return nil
+}
+
+// cleanupExecutor kills the executor process and stops the daemon.
+func cleanupExecutor(execInfo *ExecutorInfo) {
+	if execInfo.Process != nil {
+		if killErr := execInfo.Process.Kill(); killErr != nil {
+			clog.Warn("failed to kill executor process: %v", killErr)
+		}
+	}
+	if stopErr := StopExecutor(); stopErr != nil {
+		clog.Warn("failed to stop executor: %v", stopErr)
+	}
 }
 
 // WaitReady polls the guardian API until it responds or timeout is reached.
@@ -407,7 +419,13 @@ func WaitReadyWithPort(port int, timeout time.Duration) error {
 	var lastErr error
 
 	for time.Now().Before(deadline) {
-		resp, err := client.Get(url)
+		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+		if reqErr != nil {
+			lastErr = reqErr
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		resp, err := client.Do(req)
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
@@ -445,7 +463,9 @@ func getContainerState() (*containerState, error) {
 // removeContainer stops and removes the guardian container.
 func removeContainer() error {
 	// Stop the container (ignore errors if already stopped)
-	_, _ = defaultDockerOps.Run("stop", ContainerName())
+	if _, err := defaultDockerOps.Run("stop", ContainerName()); err != nil {
+		clog.Warn("failed to stop guardian container (may already be stopped): %v", err)
+	}
 
 	// Remove the container
 	_, err := defaultDockerOps.Run("rm", ContainerName())
@@ -508,6 +528,7 @@ func withGuardianClient() (*Client, error) {
 // RegisterToken registers a token with the guardian for a cloister.
 // The guardian must be running before calling this function.
 // The projectName is used for per-project allowlist lookups.
+//
 // Deprecated: Use RegisterTokenFull to include the worktree path.
 func RegisterToken(token, cloisterName, projectName string) error {
 	return RegisterTokenFull(token, cloisterName, projectName, "")

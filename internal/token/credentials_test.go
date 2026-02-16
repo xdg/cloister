@@ -1,4 +1,4 @@
-package token
+package token //nolint:revive // intentional: does not conflict at import path level
 
 import (
 	"os"

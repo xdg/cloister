@@ -1,6 +1,7 @@
 package guardian
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"sync"
@@ -27,9 +28,9 @@ func noProxyClient() *http.Client {
 
 // startMockUpstream creates a mock TCP server that echoes data back to the client.
 // It returns the server address and a cleanup function.
-func startMockUpstream(t *testing.T, handler func(net.Conn)) (string, func()) {
+func startMockUpstream(t *testing.T, handler func(net.Conn)) (addr string, cleanup func()) {
 	t.Helper()
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to start mock upstream: %v", err)
 	}
@@ -51,15 +52,21 @@ func startMockUpstream(t *testing.T, handler func(net.Conn)) (string, func()) {
 			wg.Add(1)
 			go func(c net.Conn) {
 				defer wg.Done()
-				defer func() { _ = c.Close() }()
+				defer func() {
+					if err := c.Close(); err != nil {
+						t.Logf("failed to close mock upstream connection: %v", err)
+					}
+				}()
 				handler(c)
 			}(conn)
 		}
 	}()
 
-	cleanup := func() {
+	cleanup = func() {
 		close(done)
-		_ = listener.Close()
+		if err := listener.Close(); err != nil {
+			t.Logf("failed to close mock upstream listener: %v", err)
+		}
 		wg.Wait()
 	}
 

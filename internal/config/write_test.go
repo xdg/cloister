@@ -31,7 +31,7 @@ func TestWriteDefaultConfig_Creates(t *testing.T) {
 
 	// Verify permissions are 0600
 	perm := info.Mode().Perm()
-	if perm != 0600 {
+	if perm != 0o600 {
 		t.Errorf("config file permissions = %o, want 0600", perm)
 	}
 
@@ -92,13 +92,13 @@ func TestWriteDefaultConfig_DoesNotOverwrite(t *testing.T) {
 
 	// Create config directory and write a custom config
 	configDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	customContent := "# My custom config\nproxy:\n  listen: \":9999\"\n"
 	path := GlobalConfigPath()
-	if err := os.WriteFile(path, []byte(customContent), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(customContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -123,7 +123,7 @@ func TestWriteDefaultConfig_CreatesDir(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Verify config directory does not exist
-	configDir := ConfigDir()
+	configDir := Dir()
 	if _, err := os.Stat(configDir); !os.IsNotExist(err) {
 		t.Fatalf("config dir should not exist before test: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestWriteDefaultConfig_CreatesDir(t *testing.T) {
 
 	// Verify directory permissions are 0700
 	perm := info.Mode().Perm()
-	if perm != 0700 {
+	if perm != 0o700 {
 		t.Errorf("config dir permissions = %o, want 0700", perm)
 	}
 }
@@ -174,7 +174,7 @@ func TestWriteProjectConfig_Creates(t *testing.T) {
 
 	// Verify permissions are 0600
 	perm := info.Mode().Perm()
-	if perm != 0600 {
+	if perm != 0o600 {
 		t.Errorf("project config file permissions = %o, want 0600", perm)
 	}
 
@@ -209,13 +209,13 @@ func TestWriteProjectConfig_DoesNotOverwrite(t *testing.T) {
 
 	// Create projects directory and write a custom config
 	projectsDir := ProjectsDir()
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	customContent := "remote: \"original-remote\"\n"
 	path := projectsDir + "test-project.yaml"
-	if err := os.WriteFile(path, []byte(customContent), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(customContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -242,7 +242,7 @@ func TestWriteProjectConfig_Overwrite(t *testing.T) {
 
 	// Create projects directory and write a custom config
 	projectsDir := ProjectsDir()
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -301,7 +301,7 @@ func TestWriteProjectConfig_CreatesDir(t *testing.T) {
 
 	// Verify directory permissions are 0700
 	perm := info.Mode().Perm()
-	if perm != 0700 {
+	if perm != 0o700 {
 		t.Errorf("projects dir permissions = %o, want 0700", perm)
 	}
 }
@@ -334,7 +334,7 @@ func TestEnsureProjectsDir(t *testing.T) {
 
 	// Verify permissions are 0700
 	perm := info.Mode().Perm()
-	if perm != 0700 {
+	if perm != 0o700 {
 		t.Errorf("projects dir permissions = %o, want 0700", perm)
 	}
 
@@ -368,7 +368,7 @@ func TestInitProjectConfig_Creates(t *testing.T) {
 
 	// Verify permissions are 0600
 	perm := info.Mode().Perm()
-	if perm != 0600 {
+	if perm != 0o600 {
 		t.Errorf("config file permissions = %o, want 0600", perm)
 	}
 
@@ -400,13 +400,13 @@ func TestInitProjectConfig_DoesNotOverwrite(t *testing.T) {
 
 	// Create projects directory and write a custom config
 	projectsDir := ProjectsDir()
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	customContent := "remote: \"original-remote\"\nroot: \"/original/path\"\n"
 	path := ProjectConfigPath("test-project")
-	if err := os.WriteFile(path, []byte(customContent), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(customContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -452,7 +452,7 @@ func TestInitProjectConfig_CreatesDir(t *testing.T) {
 
 	// Verify directory permissions are 0700
 	perm := info.Mode().Perm()
-	if perm != 0700 {
+	if perm != 0o700 {
 		t.Errorf("projects dir permissions = %o, want 0700", perm)
 	}
 }
@@ -490,7 +490,7 @@ func TestWriteGlobalConfig_Creates(t *testing.T) {
 
 	// Verify permissions are 0600
 	perm := info.Mode().Perm()
-	if perm != 0600 {
+	if perm != 0o600 {
 		t.Errorf("config file permissions = %o, want 0600", perm)
 	}
 
@@ -520,7 +520,7 @@ func TestWriteGlobalConfig_Creates(t *testing.T) {
 	if claudeCfg.Token != "test-token-value" {
 		t.Errorf("claudeCfg.Token = %q, want %q", claudeCfg.Token, "test-token-value")
 	}
-	if claudeCfg.SkipPerms == nil || *claudeCfg.SkipPerms != true {
+	if claudeCfg.SkipPerms == nil || !*claudeCfg.SkipPerms {
 		t.Error("claudeCfg.SkipPerms should be true")
 	}
 }
@@ -532,13 +532,13 @@ func TestWriteGlobalConfig_Overwrites(t *testing.T) {
 
 	// Create config directory and write initial config
 	configDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	initialContent := "proxy:\n  listen: \":1111\"\n"
 	path := GlobalConfigPath()
-	if err := os.WriteFile(path, []byte(initialContent), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(initialContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -757,7 +757,7 @@ func TestWriteGlobalConfig_CreatesDir(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	// Verify config directory does not exist
-	configDir := ConfigDir()
+	configDir := Dir()
 	if _, err := os.Stat(configDir); !os.IsNotExist(err) {
 		t.Fatalf("config dir should not exist before test: %v", err)
 	}
@@ -782,7 +782,7 @@ func TestWriteGlobalConfig_CreatesDir(t *testing.T) {
 
 	// Verify directory permissions are 0700
 	perm := info.Mode().Perm()
-	if perm != 0700 {
+	if perm != 0o700 {
 		t.Errorf("config dir permissions = %o, want 0700", perm)
 	}
 }

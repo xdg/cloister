@@ -72,11 +72,11 @@ func TestFindFreePort(t *testing.T) {
 	}
 }
 
-func TestGuardianPorts_Production(t *testing.T) {
+func TestPorts_Production(t *testing.T) {
 	t.Setenv(InstanceIDEnvVar, "")
-	tokenPort, approvalPort, err := GuardianPorts()
+	tokenPort, approvalPort, err := Ports()
 	if err != nil {
-		t.Fatalf("GuardianPorts() error: %v", err)
+		t.Fatalf("Ports() error: %v", err)
 	}
 	if tokenPort != DefaultTokenAPIPort {
 		t.Errorf("tokenPort = %d, want %d", tokenPort, DefaultTokenAPIPort)
@@ -86,11 +86,11 @@ func TestGuardianPorts_Production(t *testing.T) {
 	}
 }
 
-func TestGuardianPorts_TestInstance(t *testing.T) {
+func TestPorts_TestInstance(t *testing.T) {
 	t.Setenv(InstanceIDEnvVar, "abc123")
-	tokenPort, approvalPort, err := GuardianPorts()
+	tokenPort, approvalPort, err := Ports()
 	if err != nil {
-		t.Fatalf("GuardianPorts() error: %v", err)
+		t.Fatalf("Ports() error: %v", err)
 	}
 
 	// For test instances, ports should be dynamically allocated (not the defaults)

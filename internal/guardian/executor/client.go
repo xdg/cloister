@@ -4,14 +4,17 @@ package executor
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/executor"
 )
 
 // DefaultSocketPath is the default path to the hostexec socket inside the guardian container.
+//
 // Deprecated: Use TCP mode via NewTCPClient instead.
 const DefaultSocketPath = "/var/run/hostexec.sock"
 
@@ -26,8 +29,9 @@ type Client struct {
 }
 
 // NewClient creates a new executor client using Unix socket.
-// Deprecated: Use NewTCPClient for Docker compatibility.
 // socketPath is the path to the Unix socket (typically /var/run/hostexec.sock).
+//
+// Deprecated: Use NewTCPClient for Docker compatibility.
 // secret is the shared secret for authentication.
 func NewClient(socketPath, secret string) *Client {
 	return &Client{
@@ -54,11 +58,15 @@ func NewTCPClient(port int, secret string) *Client {
 // reads the response, and closes the connection.
 func (c *Client) Execute(req executor.ExecuteRequest) (*executor.ExecuteResponse, error) {
 	// Connect to the executor
-	conn, err := net.Dial(c.network, c.address)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), c.network, c.address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to executor (%s): %w", c.address, err)
 	}
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			clog.Warn("failed to close executor connection: %v", err)
+		}
+	}()
 
 	// Build the socket request with authentication
 	socketReq := executor.SocketRequest{

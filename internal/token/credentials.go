@@ -1,4 +1,4 @@
-package token
+package token //nolint:revive // var-naming: conflicts with go/token but renaming would be disruptive
 
 import "os"
 

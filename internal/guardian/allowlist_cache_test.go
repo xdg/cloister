@@ -154,7 +154,7 @@ func TestAllowlistCacheDenylistLoader(t *testing.T) {
 		cache := NewAllowlistCache(NewAllowlist(nil))
 
 		loadCount := 0
-		loader := func(projectName string) *Allowlist {
+		loader := func(_ string) *Allowlist {
 			loadCount++
 			return NewAllowlist([]string{"denied.example.com", "spam.example.com"})
 		}
@@ -192,7 +192,7 @@ func TestAllowlistCacheDenylistLoader(t *testing.T) {
 		globalDeny := NewAllowlist([]string{"global-denied.com"})
 		cache.SetGlobalDeny(globalDeny)
 
-		loader := func(projectName string) *Allowlist {
+		loader := func(_ string) *Allowlist {
 			return nil
 		}
 		cache.SetDenylistLoader(loader)
@@ -271,7 +271,7 @@ func TestAllowlistCacheIsBlocked(t *testing.T) {
 			name:        "project denylist via loader blocks domain",
 			globalDeny:  nil,
 			projectDeny: nil,
-			denyLoader: func(projectName string) *Allowlist {
+			denyLoader: func(_ string) *Allowlist {
 				return NewAllowlist([]string{"loaded-bad.com"})
 			},
 			project:     "my-project",
@@ -282,7 +282,7 @@ func TestAllowlistCacheIsBlocked(t *testing.T) {
 			name:        "domain not blocked by project denylist via loader",
 			globalDeny:  nil,
 			projectDeny: nil,
-			denyLoader: func(projectName string) *Allowlist {
+			denyLoader: func(_ string) *Allowlist {
 				return NewAllowlist([]string{"loaded-bad.com"})
 			},
 			project:     "my-project",

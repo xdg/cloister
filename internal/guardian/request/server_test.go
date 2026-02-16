@@ -244,7 +244,7 @@ func TestServer_HandleRequest_ViaHTTPServer(t *testing.T) {
 	cmdReq := CommandRequest{Args: []string{"echo", "hello"}}
 	body, _ := json.Marshal(cmdReq)
 
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}
@@ -758,7 +758,7 @@ func TestServer_HandleRequest_GETReturns405(t *testing.T) {
 
 	// Make a GET request (should be rejected - POST only)
 	url := "http://" + server.ListenAddr() + "/request"
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}

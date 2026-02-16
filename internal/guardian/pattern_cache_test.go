@@ -40,7 +40,7 @@ func TestPatternCache(t *testing.T) {
 
 		loadCount := 0
 		projectMatcher := patterns.NewRegexMatcher([]string{"^project$"}, nil)
-		cache.SetProjectLoader(func(projectName string) patterns.Matcher {
+		cache.SetProjectLoader(func(_ string) patterns.Matcher {
 			loadCount++
 			return projectMatcher
 		})
@@ -77,7 +77,7 @@ func TestPatternCache(t *testing.T) {
 		globalMatcher := patterns.NewRegexMatcher([]string{"^global$"}, nil)
 		cache := NewPatternCache(globalMatcher)
 
-		cache.SetProjectLoader(func(projectName string) patterns.Matcher {
+		cache.SetProjectLoader(func(_ string) patterns.Matcher {
 			return nil
 		})
 
@@ -91,7 +91,7 @@ func TestPatternCache(t *testing.T) {
 		cache := NewPatternCache(globalMatcher)
 
 		loadCount := 0
-		cache.SetProjectLoader(func(projectName string) patterns.Matcher {
+		cache.SetProjectLoader(func(_ string) patterns.Matcher {
 			loadCount++
 			return patterns.NewRegexMatcher([]string{"^project$"}, nil)
 		})

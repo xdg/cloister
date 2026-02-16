@@ -292,7 +292,7 @@ func TestResolveConfig_WithProject(t *testing.T) {
 
 	// Create project config directory
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -312,7 +312,7 @@ hostexec:
     - pattern: "^npm run build$"
 `
 	projectPath := filepath.Join(projectsDir, "myproject.yaml")
-	if err := os.WriteFile(projectPath, []byte(projectContent), 0600); err != nil {
+	if err := os.WriteFile(projectPath, []byte(projectContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -435,7 +435,7 @@ func TestResolveConfig_MergeDedup(t *testing.T) {
 
 	// Create project config directory
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -452,7 +452,7 @@ hostexec:
     - pattern: "^project-specific$"
 `
 	projectPath := filepath.Join(projectsDir, "dedup-test.yaml")
-	if err := os.WriteFile(projectPath, []byte(projectContent), 0600); err != nil {
+	if err := os.WriteFile(projectPath, []byte(projectContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -491,7 +491,7 @@ func TestResolveConfig_ManualApprovePatterns(t *testing.T) {
 
 	// Create project config directory
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -505,7 +505,7 @@ hostexec:
     - pattern: "^terraform apply.*$"
 `
 	projectPath := filepath.Join(projectsDir, "manual-test.yaml")
-	if err := os.WriteFile(projectPath, []byte(projectContent), 0600); err != nil {
+	if err := os.WriteFile(projectPath, []byte(projectContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -549,7 +549,7 @@ func TestResolveConfig_ManualApproveDedup(t *testing.T) {
 
 	// Create project config directory
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
@@ -562,7 +562,7 @@ hostexec:
     - pattern: "^project-specific-manual$"
 `
 	projectPath := filepath.Join(projectsDir, "dedup-manual.yaml")
-	if err := os.WriteFile(projectPath, []byte(projectContent), 0600); err != nil {
+	if err := os.WriteFile(projectPath, []byte(projectContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -730,7 +730,7 @@ func TestResolveConfig_WithDeny(t *testing.T) {
 
 	// Write global config with a deny entry
 	globalDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(globalDir, 0700); err != nil {
+	if err := os.MkdirAll(globalDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 	globalContent := `
@@ -740,13 +740,13 @@ proxy:
     - pattern: "*.malware.net"
 `
 	globalPath := filepath.Join(globalDir, "config.yaml")
-	if err := os.WriteFile(globalPath, []byte(globalContent), 0600); err != nil {
+	if err := os.WriteFile(globalPath, []byte(globalContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
 	// Create project config with additional deny entries
 	projectsDir := filepath.Join(globalDir, "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 	projectContent := `
@@ -757,7 +757,7 @@ proxy:
     - domain: "evil.com"
 `
 	projectPath := filepath.Join(projectsDir, "denytest.yaml")
-	if err := os.WriteFile(projectPath, []byte(projectContent), 0600); err != nil {
+	if err := os.WriteFile(projectPath, []byte(projectContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 

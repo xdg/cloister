@@ -4,6 +4,7 @@ package project
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -40,7 +41,7 @@ func (e *GitError) Unwrap() error {
 // runGit executes a git command in the specified directory and returns stdout.
 // If dir is empty, uses the current working directory.
 func runGit(dir string, args ...string) (string, error) {
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(context.Background(), "git", args...)
 	if dir != "" {
 		cmd.Dir = dir
 	}
@@ -130,10 +131,10 @@ func DetectBranch(gitRoot string) (string, error) {
 //   - ssh://git@github.com/user/repo.git
 var remoteURLPattern = regexp.MustCompile(`[/:]([^/:]+?)(?:\.git)?$`)
 
-// ProjectName extracts a short project name from the git repository at gitRoot.
+// Name extracts a short project name from the git repository at gitRoot.
 // It first tries to extract the name from the git remote URL (origin).
 // If no remote is configured or parsing fails, falls back to the directory name.
-func ProjectName(gitRoot string) (string, error) {
+func Name(gitRoot string) (string, error) {
 	// Try to get the remote URL for origin
 	out, err := runGit(gitRoot, "config", "--get", "remote.origin.url")
 	if err == nil && out != "" {
@@ -167,8 +168,8 @@ func extractProjectName(remoteURL string) string {
 	return matches[1]
 }
 
-// ProjectInfo contains detected information about a git project.
-type ProjectInfo struct {
+// Info contains detected information about a git project.
+type Info struct {
 	Name   string // Project name (from remote URL or directory)
 	Root   string // Absolute path to git root
 	Remote string // Remote URL (origin), may be empty
@@ -188,7 +189,7 @@ func GetRemoteURL(gitRoot string) string {
 // DetectProject detects project information from a path within a git repository.
 // If path is empty, uses the current working directory.
 // Returns ErrNotGitRepo if the path is not within a git repository.
-func DetectProject(path string) (*ProjectInfo, error) {
+func DetectProject(path string) (*Info, error) {
 	// Find the git root
 	gitRoot, err := DetectGitRoot(path)
 	if err != nil {
@@ -196,7 +197,7 @@ func DetectProject(path string) (*ProjectInfo, error) {
 	}
 
 	// Get the project name
-	name, err := ProjectName(gitRoot)
+	name, err := Name(gitRoot)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project name: %w", err)
 	}
@@ -210,7 +211,7 @@ func DetectProject(path string) (*ProjectInfo, error) {
 		return nil, fmt.Errorf("failed to detect branch: %w", err)
 	}
 
-	return &ProjectInfo{
+	return &Info{
 		Name:   name,
 		Root:   gitRoot,
 		Remote: remote,

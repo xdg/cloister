@@ -116,7 +116,7 @@ func TestProxyServer_ConnectMethod(t *testing.T) {
 
 	// CONNECT request should succeed (200 OK) for allowed domain
 	t.Run("CONNECT returns 200 for allowed domain", func(t *testing.T) {
-		req, err := http.NewRequest(http.MethodConnect, fmt.Sprintf("http://%s", addr), nil)
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodConnect, fmt.Sprintf("http://%s", addr), http.NoBody)
 		if err != nil {
 			t.Fatalf("failed to create request: %v", err)
 		}
@@ -165,7 +165,7 @@ func TestProxyServer_NonConnectMethods(t *testing.T) {
 
 	for _, method := range methods {
 		t.Run(method+" returns 405", func(t *testing.T) {
-			req, err := http.NewRequest(method, baseURL, nil)
+			req, err := http.NewRequestWithContext(context.Background(), method, baseURL, http.NoBody)
 			if err != nil {
 				t.Fatalf("failed to create request: %v", err)
 			}
@@ -250,7 +250,7 @@ func TestProxyServer_TunnelEstablishment(t *testing.T) {
 
 	t.Run("tunnel establishment and bidirectional copy", func(t *testing.T) {
 		// Connect to proxy
-		conn, err := net.Dial("tcp", proxyAddr)
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 		if err != nil {
 			t.Fatalf("failed to connect to proxy: %v", err)
 		}
@@ -305,7 +305,7 @@ func TestProxyServer_TunnelEstablishment(t *testing.T) {
 	})
 
 	t.Run("tunnel handles multiple round trips", func(t *testing.T) {
-		conn, err := net.Dial("tcp", proxyAddr)
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 		if err != nil {
 			t.Fatalf("failed to connect to proxy: %v", err)
 		}
@@ -359,7 +359,7 @@ func TestProxyServer_TunnelBlockedDomain(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -399,7 +399,7 @@ func TestProxyServer_TunnelUpstreamConnectionFailure(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -426,7 +426,7 @@ func TestProxyServer_TunnelUpstreamConnectionFailure(t *testing.T) {
 
 func TestProxyServer_TunnelConnectionTimeout(t *testing.T) {
 	// Start a listener that accepts connections but never responds (simulates timeout)
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to start slow upstream: %v", err)
 	}
@@ -617,7 +617,7 @@ func TestProxyServer_TunnelCleanShutdown(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -755,7 +755,7 @@ func TestProxyServer_Authentication(t *testing.T) {
 			proxyAddr := p.ListenAddr()
 
 			// Connect to proxy
-			conn, err := net.Dial("tcp", proxyAddr)
+			conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 			if err != nil {
 				t.Fatalf("failed to connect to proxy: %v", err)
 			}
@@ -859,7 +859,7 @@ func TestProxyServer_NoTokenValidatorAllowsAll(t *testing.T) {
 	proxyAddr := p.ListenAddr()
 
 	// Connect without any auth header
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -914,7 +914,7 @@ func TestProxyServer_AuthWithTunnelData(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -1055,7 +1055,7 @@ func TestProxyServer_ConfigDerivedAllowlist(t *testing.T) {
 	proxyAddr := p.ListenAddr()
 
 	// Test that config-derived allowlist works
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -1214,7 +1214,7 @@ func TestProxyServer_PerProjectAllowlist(t *testing.T) {
 
 	// Helper to make proxy request
 	makeRequest := func(token, targetAddr string) (int, error) {
-		conn, err := net.Dial("tcp", proxyAddr)
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 		if err != nil {
 			return 0, err
 		}
@@ -1316,7 +1316,7 @@ func TestProxyServer_DomainApproval_NilApproverRejects(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -1358,7 +1358,7 @@ func TestProxyServer_DomainApproval_ApprovalAllowsConnection(t *testing.T) {
 	p := NewProxyServer(":0")
 	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
 	p.DomainApprover = &mockDomainApprover{
-		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
+		approveFunc: func(_, _, _, _ string) (DomainApprovalResult, error) {
 			return DomainApprovalResult{Approved: true, Scope: "session"}, nil
 		},
 	}
@@ -1386,7 +1386,7 @@ func TestProxyServer_DomainApproval_ApprovalAllowsConnection(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -1417,7 +1417,7 @@ func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
 	p := NewProxyServer(":0")
 	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
 	p.DomainApprover = &mockDomainApprover{
-		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
+		approveFunc: func(_, _, _, _ string) (DomainApprovalResult, error) {
 			return DomainApprovalResult{Approved: false}, nil
 		},
 	}
@@ -1445,7 +1445,7 @@ func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -1473,7 +1473,7 @@ func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
 func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
 	// Test that session allowlist hit bypasses DomainApprover entirely
 	approver := &mockDomainApprover{
-		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
+		approveFunc: func(_, _, _, _ string) (DomainApprovalResult, error) {
 			t.Error("DomainApprover should not be called when session allowlist matches")
 			return DomainApprovalResult{Approved: false}, nil
 		},
@@ -1523,7 +1523,7 @@ func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -1562,7 +1562,7 @@ func TestProxyServer_DomainApproval_SingleTokenLookup(t *testing.T) {
 	p := NewProxyServer(":0")
 	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
 	p.DomainApprover = &mockDomainApprover{
-		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
+		approveFunc: func(project, _, _, _ string) (DomainApprovalResult, error) {
 			// Verify project name was extracted correctly
 			if project != "test-project" {
 				t.Errorf("expected project 'test-project', got '%s'", project)
@@ -1598,7 +1598,7 @@ func TestProxyServer_DomainApproval_SingleTokenLookup(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -1645,7 +1645,7 @@ func TestProxyServer_DomainApproval_EmptyHostRejected(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -1723,7 +1723,7 @@ func TestProxyServer_DenylistPrecedence_StaticDenyOverridesAllowlist(t *testing.
 	proxyAddr := p.ListenAddr()
 
 	makeRequest := func(token, targetAddr string) (int, error) {
-		conn, err := net.Dial("tcp", proxyAddr)
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 		if err != nil {
 			return 0, err
 		}
@@ -1776,7 +1776,7 @@ func TestProxyServer_DenylistPrecedence_SessionDenyBlocks(t *testing.T) {
 	// the same domain allowed for the same token.
 
 	approver := &mockDomainApprover{
-		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
+		approveFunc: func(_, _, _, _ string) (DomainApprovalResult, error) {
 			t.Error("DomainApprover should not be called when session denylist blocks")
 			return DomainApprovalResult{Approved: true, Scope: "session"}, nil
 		},
@@ -1825,7 +1825,7 @@ func TestProxyServer_DenylistPrecedence_SessionDenyBlocks(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	conn, err := net.Dial("tcp", proxyAddr)
+	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
 	}
@@ -1909,7 +1909,7 @@ func TestProxyServer_DenylistPrecedence_DenyPatternBlocksSubdomain(t *testing.T)
 	authHeader := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:test-token"))
 
 	makeRequest := func(targetAddr string) (int, error) {
-		conn, err := net.Dial("tcp", proxyAddr)
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 		if err != nil {
 			return 0, err
 		}

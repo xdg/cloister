@@ -62,7 +62,7 @@ func TestMatchResult(t *testing.T) {
 }
 
 // TestMatcherInterface verifies the Matcher interface can be implemented.
-func TestMatcherInterface(t *testing.T) {
+func TestMatcherInterface(_ *testing.T) {
 	// mockMatcher is a simple implementation to verify the interface compiles
 	var _ Matcher = mockMatcher{}
 }
@@ -72,7 +72,7 @@ type mockMatcher struct {
 	result MatchResult
 }
 
-func (m mockMatcher) Match(cmd string) MatchResult {
+func (m mockMatcher) Match(_ string) MatchResult {
 	return m.result
 }
 

@@ -66,10 +66,10 @@ func createAuthenticatedTestContainer(t *testing.T, suffix string) testContainer
 
 // waitForPort waits for a port to become reachable from inside a container.
 // Returns nil on success, error on timeout.
-func waitForPort(t *testing.T, containerName, host string, port int, timeout time.Duration) error {
+func waitForPort(t *testing.T, containerName, host string, port int) error {
 	t.Helper()
 
-	deadline := time.Now().Add(timeout)
+	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		// Use nc -z for port scanning (zero-I/O mode, just checks if port is open)
 		_, err := docker.Run("exec", containerName,

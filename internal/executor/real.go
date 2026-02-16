@@ -29,7 +29,7 @@ func (e *RealExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteR
 
 	// Create command with context for timeout support
 	// Command must be the executable name; Args are passed directly to exec (no shell)
-	cmd := exec.CommandContext(ctx, req.Command, req.Args...)
+	cmd := exec.CommandContext(ctx, req.Command, req.Args...) //nolint:gosec // G204: command execution is the purpose of this executor
 
 	// Set working directory if specified
 	if req.Workdir != "" {

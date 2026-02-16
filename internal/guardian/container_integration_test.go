@@ -4,6 +4,7 @@ package guardian
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -185,7 +186,7 @@ func TestGuardian_Lifecycle(t *testing.T) {
 
 		// Connect to executor via TCP (using localhost since we're on the host)
 		addr := fmt.Sprintf("127.0.0.1:%d", state.TCPPort)
-		conn, err := net.Dial("tcp", addr)
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", addr)
 		if err != nil {
 			t.Fatalf("Failed to connect to executor at %s: %v", addr, err)
 		}

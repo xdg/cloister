@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/xdg/cloister/internal/audit"
+	"github.com/xdg/cloister/internal/clog"
 )
 
 //go:embed templates/*.html
@@ -123,7 +124,7 @@ func (s *Server) Start() error {
 		return errors.New("approval server already running")
 	}
 
-	listener, err := net.Listen("tcp", s.Addr)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", s.Addr)
 	if err != nil {
 		return fmt.Errorf("failed to listen on %s: %w", s.Addr, err)
 	}
@@ -146,7 +147,9 @@ func (s *Server) Start() error {
 	s.running = true
 
 	go func() {
-		_ = s.server.Serve(listener)
+		if err := s.server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			clog.Warn("approval server error: %v", err)
+		}
 	}()
 
 	return nil
@@ -173,7 +176,10 @@ func (s *Server) Stop(ctx context.Context) error {
 		ctx = context.Background()
 	}
 
-	return s.server.Shutdown(ctx)
+	if err := s.server.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown approval server: %w", err)
+	}
+	return nil
 }
 
 // ListenAddr returns the actual address the server is listening on.
@@ -234,7 +240,7 @@ type domainResultData struct {
 }
 
 // handleIndex serves the HTML UI for the approval interface.
-func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleIndex(w http.ResponseWriter, _ *http.Request) {
 	pending := s.Queue.List()
 
 	data := indexData{
@@ -255,14 +261,14 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	if s.DomainQueue != nil {
 		pendingDomains := s.DomainQueue.List()
 		data.DomainRequests = make([]domainTemplateRequest, len(pendingDomains))
-		for i, req := range pendingDomains {
+		for i := range pendingDomains {
 			data.DomainRequests[i] = domainTemplateRequest{
-				ID:        req.ID,
-				Domain:    req.Domain,
-				Cloister:  req.Cloister,
-				Project:   req.Project,
-				Timestamp: req.Timestamp.Format(time.RFC3339),
-				Wildcard:  domainToWildcard(req.Domain),
+				ID:        pendingDomains[i].ID,
+				Domain:    pendingDomains[i].Domain,
+				Cloister:  pendingDomains[i].Cloister,
+				Project:   pendingDomains[i].Project,
+				Timestamp: pendingDomains[i].Timestamp.Format(time.RFC3339),
+				Wildcard:  domainToWildcard(pendingDomains[i].Domain),
 			}
 		}
 	}
@@ -289,7 +295,7 @@ type pendingResponse struct {
 }
 
 // handlePending returns a JSON array of pending requests.
-func (s *Server) handlePending(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePending(w http.ResponseWriter, _ *http.Request) {
 	pending := s.Queue.List()
 
 	response := pendingResponse{
@@ -401,7 +407,9 @@ func (s *Server) handleApprove(w http.ResponseWriter, r *http.Request) {
 
 	// Log APPROVE event
 	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogApprove(project, cloister, cmd, s.userIdentity)
+		if err := s.AuditLogger.LogApprove(project, cloister, cmd, s.userIdentity); err != nil {
+			clog.Warn("failed to log approve audit event: %v", err)
+		}
 	}
 
 	// Remove from queue FIRST (cancels timeout goroutine to prevent race)
@@ -462,8 +470,10 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 
 	// Parse optional reason from request body
 	var denyReq denyRequest
-	// Ignore decode errors - reason is optional
-	_ = json.NewDecoder(r.Body).Decode(&denyReq)
+	// Decode errors are non-fatal - reason is optional
+	if err := json.NewDecoder(r.Body).Decode(&denyReq); err != nil {
+		clog.Warn("failed to decode deny request body (reason will be empty): %v", err)
+	}
 
 	reason := denyReq.Reason
 	if reason == "" {
@@ -472,7 +482,9 @@ func (s *Server) handleDeny(w http.ResponseWriter, r *http.Request) {
 
 	// Log DENY event
 	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogDeny(project, cloister, cmd, reason)
+		if err := s.AuditLogger.LogDeny(project, cloister, cmd, reason); err != nil {
+			clog.Warn("failed to log deny audit event: %v", err)
+		}
 	}
 
 	// Remove from queue FIRST (cancels timeout goroutine to prevent race)
@@ -509,7 +521,9 @@ type errorResponse struct {
 func (s *Server) writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		clog.Warn("failed to encode JSON response: %v", err)
+	}
 }
 
 // writeError writes an error response with the given status code.
@@ -531,17 +545,8 @@ func (s *Server) writeResultHTML(w http.ResponseWriter, id, status, cmd string) 
 }
 
 // writeDomainResultHTML renders the domain_result template for HTML responses.
-func (s *Server) writeDomainResultHTML(w http.ResponseWriter, id, status, domain, scope, reason string, isPattern bool, persistenceError string) {
+func (s *Server) writeDomainResultHTML(w http.ResponseWriter, data domainResultData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := domainResultData{
-		ID:               id,
-		Status:           status,
-		Domain:           domain,
-		Scope:            scope,
-		Reason:           reason,
-		IsPattern:        isPattern,
-		PersistenceError: persistenceError,
-	}
 	if err := templates.ExecuteTemplate(w, "domain_result", data); err != nil {
 		http.Error(w, "template error", http.StatusInternalServerError)
 	}
@@ -562,7 +567,7 @@ type pendingDomainsResponse struct {
 }
 
 // handlePendingDomains returns a JSON array of pending domain requests.
-func (s *Server) handlePendingDomains(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePendingDomains(w http.ResponseWriter, _ *http.Request) {
 	if s.DomainQueue == nil {
 		s.writeError(w, http.StatusInternalServerError, "domain queue not initialized")
 		return
@@ -574,13 +579,13 @@ func (s *Server) handlePendingDomains(w http.ResponseWriter, r *http.Request) {
 		Requests: make([]pendingDomainRequestJSON, len(pending)),
 	}
 
-	for i, req := range pending {
+	for i := range pending {
 		response.Requests[i] = pendingDomainRequestJSON{
-			ID:        req.ID,
-			Cloister:  req.Cloister,
-			Project:   req.Project,
-			Domain:    req.Domain,
-			Timestamp: req.Timestamp.Format(time.RFC3339),
+			ID:        pending[i].ID,
+			Cloister:  pending[i].Cloister,
+			Project:   pending[i].Project,
+			Domain:    pending[i].Domain,
+			Timestamp: pending[i].Timestamp.Format(time.RFC3339),
 		}
 	}
 
@@ -600,6 +605,18 @@ type approveDomainResponse struct {
 	Scope  string `json:"scope"`
 }
 
+// domainApprovalState holds the mutable state during domain approval processing.
+type domainApprovalState struct {
+	scope            string
+	pattern          string
+	domain           string
+	project          string
+	cloister         string
+	isPattern        bool
+	persistenceError string
+	requestedScope   string
+}
+
 // handleApproveDomain approves a pending domain request by ID.
 func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 	if s.DomainQueue == nil {
@@ -613,22 +630,16 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse scope from JSON request body.
-	var scope, pattern string
 	var approveReq approveDomainRequest
 	if err := json.NewDecoder(r.Body).Decode(&approveReq); err != nil {
 		s.writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	scope = approveReq.Scope
-	pattern = approveReq.Pattern
-	if scope != "once" && scope != "session" && scope != "project" && scope != "global" {
+	if approveReq.Scope != "once" && approveReq.Scope != "session" && approveReq.Scope != "project" && approveReq.Scope != "global" {
 		s.writeError(w, http.StatusBadRequest, "scope must be once, session, project, or global")
 		return
 	}
-
-	// Check if ConfigPersister is available for project/global scopes
-	if (scope == "project" || scope == "global") && s.ConfigPersister == nil {
+	if (approveReq.Scope == "project" || approveReq.Scope == "global") && s.ConfigPersister == nil {
 		s.writeError(w, http.StatusInternalServerError, "config persistence not available")
 		return
 	}
@@ -639,91 +650,97 @@ func (s *Server) handleApproveDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Capture request info before removing from queue
-	domain := req.Domain
-	project := req.Project
-	cloister := req.Cloister
-	isPattern := pattern != ""
-
-	// Determine what to persist: exact domain or wildcard pattern
-	persistValue := domain
-	if isPattern {
-		persistValue = pattern
+	state := &domainApprovalState{
+		scope:          approveReq.Scope,
+		pattern:        approveReq.Pattern,
+		domain:         req.Domain,
+		project:        req.Project,
+		cloister:       req.Cloister,
+		isPattern:      approveReq.Pattern != "",
+		requestedScope: approveReq.Scope,
 	}
 
-	// Track persistence error - if config save fails, we fall back to session scope
-	// but still approve the domain for immediate use
-	var persistenceError string
-	requestedScope := scope
+	s.persistDomainApproval(state, req)
+	s.finalizeDomainApproval(w, r, id, req, state)
+}
 
-	// Persist to config if needed
-	switch scope {
+// persistDomainApproval persists the domain approval to config, falling back to session on error.
+func (s *Server) persistDomainApproval(state *domainApprovalState, req *DomainRequest) {
+	switch state.scope {
 	case "project":
 		var err error
-		if isPattern {
-			err = s.ConfigPersister.AddPatternToProject(req.Project, pattern)
+		if state.isPattern {
+			err = s.ConfigPersister.AddPatternToProject(req.Project, state.pattern)
 		} else {
-			err = s.ConfigPersister.AddDomainToProject(req.Project, domain)
+			err = s.ConfigPersister.AddDomainToProject(req.Project, state.domain)
 		}
 		if err != nil {
-			// Log the error but don't fail - fall back to session scope
-			persistenceError = fmt.Sprintf("failed to persist to project config: %v", err)
-			scope = "session"
-			isPattern = false // Session scope doesn't persist patterns
+			state.persistenceError = fmt.Sprintf("failed to persist to project config: %v", err)
+			state.scope = "session"
+			state.isPattern = false
 		}
 	case "global":
 		var err error
-		if isPattern {
-			err = s.ConfigPersister.AddPatternToGlobal(pattern)
+		if state.isPattern {
+			err = s.ConfigPersister.AddPatternToGlobal(state.pattern)
 		} else {
-			err = s.ConfigPersister.AddDomainToGlobal(domain)
+			err = s.ConfigPersister.AddDomainToGlobal(state.domain)
 		}
 		if err != nil {
-			// Log the error but don't fail - fall back to session scope
-			persistenceError = fmt.Sprintf("failed to persist to global config: %v", err)
-			scope = "session"
-			isPattern = false // Session scope doesn't persist patterns
+			state.persistenceError = fmt.Sprintf("failed to persist to global config: %v", err)
+			state.scope = "session"
+			state.isPattern = false
+		}
+	}
+}
+
+// finalizeDomainApproval logs, removes from queue, broadcasts, and writes the response.
+func (s *Server) finalizeDomainApproval(w http.ResponseWriter, r *http.Request, id string, req *DomainRequest, state *domainApprovalState) {
+	persistValue := state.domain
+	if state.pattern != "" && state.persistenceError == "" {
+		persistValue = state.pattern
+	}
+
+	if s.AuditLogger != nil {
+		if err := s.AuditLogger.LogDomainApprove(state.project, state.cloister, persistValue, state.scope, s.userIdentity); err != nil {
+			clog.Warn("failed to log domain approve audit event: %v", err)
 		}
 	}
 
-	// Log DOMAIN_APPROVE event (with actual scope used, not requested scope)
-	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogDomainApprove(project, cloister, persistValue, scope, s.userIdentity)
-	}
-
-	// Remove from queue FIRST (cancels timeout goroutine to prevent race)
 	s.DomainQueue.Remove(id)
-
-	// Broadcast removal event to SSE clients before unblocking the proxy
 	s.Events.BroadcastDomainRequestRemoved(id)
 
-	// Send approved response on the request's channels.
-	// Broadcasts to all waiting callers (coalesced requests).
 	resp := DomainResponse{
 		Status:           "approved",
-		Scope:            scope,
-		Pattern:          pattern,
-		PersistenceError: persistenceError,
+		Scope:            state.scope,
+		Pattern:          state.pattern,
+		PersistenceError: state.persistenceError,
 	}
-	// Clear pattern if we fell back to session scope
-	if scope == "session" && requestedScope != "session" {
+	if state.scope == "session" && state.requestedScope != "session" {
 		resp.Pattern = ""
 	}
 	broadcastDomainResponse(req, resp)
 
 	if strings.Contains(r.Header.Get("Accept"), "text/html") {
-		displayValue := domain
-		if isPattern && persistenceError == "" {
-			displayValue = pattern
+		displayValue := state.domain
+		if state.isPattern && state.persistenceError == "" {
+			displayValue = state.pattern
 		}
-		s.writeDomainResultHTML(w, id, "approved", displayValue, scope, "", isPattern && persistenceError == "", persistenceError)
+		s.writeDomainResultHTML(w, domainResultData{
+			ID:               id,
+			Status:           "approved",
+			Domain:           displayValue,
+			Scope:            state.scope,
+			IsPattern:        state.isPattern && state.persistenceError == "",
+			PersistenceError: state.persistenceError,
+		})
 		return
 	}
 
 	s.writeJSON(w, http.StatusOK, approveDomainResponse{
 		Status: "approved",
 		ID:     id,
-		Scope:  scope,
+		Scope:  state.scope,
 	})
 }
 
@@ -768,8 +785,10 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Parse optional request body (empty body is valid for backward compatibility)
 	var denyReq denyDomainRequest
-	// Ignore decode errors - all fields are optional
-	_ = json.NewDecoder(r.Body).Decode(&denyReq)
+	// Decode errors are non-fatal - all fields are optional
+	if err := json.NewDecoder(r.Body).Decode(&denyReq); err != nil {
+		clog.Warn("failed to decode domain deny request body (fields will use defaults): %v", err)
+	}
 
 	// Default scope to "once" if not provided
 	scope := denyReq.Scope
@@ -797,7 +816,9 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 
 	// Log DOMAIN_DENY event
 	if s.AuditLogger != nil {
-		_ = s.AuditLogger.LogDomainDeny(project, cloister, domain, reason)
+		if err := s.AuditLogger.LogDomainDeny(project, cloister, domain, reason); err != nil {
+			clog.Warn("failed to log domain deny audit event: %v", err)
+		}
 	}
 
 	// Remove from queue FIRST (cancels timeout goroutine to prevent race)
@@ -815,7 +836,12 @@ func (s *Server) handleDenyDomain(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if strings.Contains(r.Header.Get("Accept"), "text/html") {
-		s.writeDomainResultHTML(w, id, "denied", req.Domain, "", reason, false, "")
+		s.writeDomainResultHTML(w, domainResultData{
+			ID:     id,
+			Status: "denied",
+			Domain: req.Domain,
+			Reason: reason,
+		})
 		return
 	}
 

@@ -167,7 +167,7 @@ func TestStatusConstants(t *testing.T) {
 }
 
 // TestExecutorInterface verifies that mock implementations can satisfy the interface.
-func TestExecutorInterface(t *testing.T) {
+func TestExecutorInterface(_ *testing.T) {
 	// This test verifies the interface compiles and can be implemented.
 	var _ Executor = &mockExecutor{}
 }
@@ -177,7 +177,7 @@ type mockExecutor struct {
 	response ExecuteResponse
 }
 
-func (m *mockExecutor) Execute(ctx context.Context, req ExecuteRequest) ExecuteResponse {
+func (m *mockExecutor) Execute(_ context.Context, _ ExecuteRequest) ExecuteResponse {
 	return m.response
 }
 

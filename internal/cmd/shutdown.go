@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/cloister"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
@@ -29,7 +30,7 @@ func init() {
 	rootCmd.AddCommand(shutdownCmd)
 }
 
-func runShutdown(cmd *cobra.Command, args []string) error {
+func runShutdown(_ *cobra.Command, _ []string) error {
 	// Check if Docker is running
 	if err := docker.CheckDaemon(); err != nil {
 		if errors.Is(err, docker.ErrDockerNotRunning) {
@@ -46,7 +47,10 @@ func runShutdown(cmd *cobra.Command, args []string) error {
 	}
 
 	// Build token map (graceful if guardian is already down)
-	tokens, _ := guardian.ListTokens()
+	tokens, tokErr := guardian.ListTokens()
+	if tokErr != nil {
+		clog.Warn("failed to list tokens: %v", tokErr)
+	}
 
 	// Stop each cloister container (excluding guardian)
 	guardianPrefix := guardian.ContainerName()
@@ -56,7 +60,7 @@ func runShutdown(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
-		cloisterName := container.ContainerNameToCloisterName(c.Name)
+		cloisterName := container.NameToCloisterName(c.Name)
 		term.Printf("Stopping cloister: %s ...\n", cloisterName)
 
 		// Find token for this container

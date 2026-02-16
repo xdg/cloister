@@ -4,6 +4,7 @@ package guardian
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -37,7 +38,7 @@ func NewClient(guardianAddr string) *Client {
 // If body is not nil, it's JSON-encoded and sent as the request body.
 // If result is not nil, the response body is JSON-decoded into it.
 // Returns an error if the response status is not in acceptedStatuses.
-func (c *Client) doRequest(method, path string, body any, result any, acceptedStatuses ...int) error {
+func (c *Client) doRequest(method, path string, body, result any, acceptedStatuses ...int) error {
 	// Build request body if provided
 	var bodyReader io.Reader
 	if body != nil {
@@ -49,7 +50,7 @@ func (c *Client) doRequest(method, path string, body any, result any, acceptedSt
 	}
 
 	// Create request
-	req, err := http.NewRequest(method, c.BaseURL+path, bodyReader)
+	req, err := http.NewRequestWithContext(context.Background(), method, c.BaseURL+path, bodyReader)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -98,6 +99,7 @@ func (c *Client) doRequest(method, path string, body any, result any, acceptedSt
 
 // RegisterToken registers a new token with the guardian.
 // The token will be associated with the given cloister and project names.
+//
 // Deprecated: Use RegisterTokenFull to include the worktree path.
 func (c *Client) RegisterToken(token, cloisterName, projectName string) error {
 	return c.RegisterTokenFull(token, cloisterName, projectName, "")

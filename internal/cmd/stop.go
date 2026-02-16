@@ -28,7 +28,7 @@ func init() {
 	rootCmd.AddCommand(stopCmd)
 }
 
-func runStop(cmd *cobra.Command, args []string) error {
+func runStop(_ *cobra.Command, args []string) error {
 	var cloisterName string
 
 	if len(args) > 0 {
@@ -82,7 +82,7 @@ func detectCloisterName() (string, error) {
 	}
 
 	// Get project name
-	projectName, err := project.ProjectName(gitRoot)
+	projectName, err := project.Name(gitRoot)
 	if err != nil {
 		return "", fmt.Errorf("failed to determine project name: %w", err)
 	}

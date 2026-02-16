@@ -57,7 +57,7 @@ type mockManager struct {
 	attachError           error
 }
 
-func (m *mockManager) ContainerExists(name string) (bool, error) {
+func (m *mockManager) ContainerExists(_ string) (bool, error) {
 	return m.containerExistsResult, m.containerExistsError
 }
 
@@ -67,7 +67,7 @@ func (m *mockManager) Create(cfg *container.Config) (string, error) {
 	return m.createResult, m.createError
 }
 
-func (m *mockManager) Start(cfg *container.Config) (string, error) {
+func (m *mockManager) Start(_ *container.Config) (string, error) {
 	// Not used by cloister.Start, but required by interface
 	return "", nil
 }
@@ -207,18 +207,18 @@ func (m *mockGuardian) EnsureRunning() error {
 	return m.ensureRunningErr
 }
 
-func (m *mockGuardian) RegisterToken(token, cloisterName, projectName string) error {
+func (m *mockGuardian) RegisterToken(_, _, _ string) error {
 	return m.registerTokenErr
 }
 
-func (m *mockGuardian) RegisterTokenFull(token, cloisterName, projectName, worktreePath string) error {
+func (m *mockGuardian) RegisterTokenFull(_, _, _, _ string) error {
 	if m.registerTokenFullErr != nil {
 		return m.registerTokenFullErr
 	}
 	return m.registerTokenErr
 }
 
-func (m *mockGuardian) RevokeToken(token string) error {
+func (m *mockGuardian) RevokeToken(_ string) error {
 	return m.revokeTokenErr
 }
 
@@ -259,7 +259,7 @@ func (m *mockAgent) Setup(containerName string, agentCfg *config.AgentConfig) (*
 }
 
 // GetContainerEnvVars implements agent.ContainerEnvProvider.
-func (m *mockAgent) GetContainerEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
+func (m *mockAgent) GetContainerEnvVars(_ *config.AgentConfig) (map[string]string, error) {
 	return m.containerEnvVars, m.containerErr
 }
 

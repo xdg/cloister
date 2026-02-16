@@ -338,7 +338,7 @@ func TestAgentConfigCredentialFieldsRoundTrip(t *testing.T) {
 				if got.APIKey != "sk-ant-api-key" {
 					t.Errorf("APIKey = %q, want %q", got.APIKey, "sk-ant-api-key")
 				}
-				if got.SkipPerms == nil || *got.SkipPerms != true {
+				if got.SkipPerms == nil || !*got.SkipPerms {
 					t.Errorf("SkipPerms = %v, want ptr to true", got.SkipPerms)
 				}
 			},
@@ -364,7 +364,7 @@ func TestAgentConfigCredentialFieldsRoundTrip(t *testing.T) {
 				SkipPerms: func() *bool { b := false; return &b }(),
 			},
 			verify: func(t *testing.T, got AgentConfig) {
-				if got.SkipPerms == nil || *got.SkipPerms != false {
+				if got.SkipPerms == nil || *got.SkipPerms {
 					t.Errorf("SkipPerms = %v, want ptr to false", got.SkipPerms)
 				}
 			},
@@ -486,7 +486,7 @@ func TestAgentConfigInGlobalConfigRoundTrip(t *testing.T) {
 	if claude.Token != "my-oauth-token" {
 		t.Errorf("claude.Token = %q, want %q", claude.Token, "my-oauth-token")
 	}
-	if claude.SkipPerms == nil || *claude.SkipPerms != true {
+	if claude.SkipPerms == nil || !*claude.SkipPerms {
 		t.Errorf("claude.SkipPerms = %v, want ptr to true", claude.SkipPerms)
 	}
 

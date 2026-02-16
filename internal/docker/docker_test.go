@@ -61,7 +61,7 @@ func TestCommandError_Unwrap(t *testing.T) {
 }
 
 func TestCheckDaemon_ReturnsErrDockerNotRunning(t *testing.T) {
-	wrappedErr := fmt.Errorf("%w: %v", ErrDockerNotRunning, errors.New("connection refused"))
+	wrappedErr := fmt.Errorf("%w: %w", ErrDockerNotRunning, errors.New("connection refused"))
 	if !errors.Is(wrappedErr, ErrDockerNotRunning) {
 		t.Error("ErrDockerNotRunning should be checkable with errors.Is when wrapped with fmt.Errorf")
 	}
@@ -117,7 +117,7 @@ func TestCheckDaemon_ErrorClassification(t *testing.T) {
 				if errors.As(cmdErr.Err, &execErr) {
 					resultErr = fmt.Errorf("docker CLI not found: %w", tt.simulatedErr)
 				} else {
-					resultErr = fmt.Errorf("%w: %v", ErrDockerNotRunning, tt.simulatedErr)
+					resultErr = fmt.Errorf("%w: %w", ErrDockerNotRunning, tt.simulatedErr)
 				}
 			}
 

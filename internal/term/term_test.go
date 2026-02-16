@@ -193,7 +193,7 @@ func TestStderr(t *testing.T) {
 	}
 }
 
-func TestSetOutput_Nil(t *testing.T) {
+func TestSetOutput_Nil(_ *testing.T) {
 	defer Reset()
 
 	// Setting nil should reset to os.Stdout (not panic)
@@ -205,7 +205,7 @@ func TestSetOutput_Nil(t *testing.T) {
 	Warn("test")
 }
 
-func TestDiscard(t *testing.T) {
+func TestDiscard(_ *testing.T) {
 	defer Reset()
 	Discard()
 

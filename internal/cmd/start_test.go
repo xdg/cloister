@@ -163,9 +163,9 @@ func TestAttachToExistingNameConversion(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.containerName, func(t *testing.T) {
-			cloisterName := container.ContainerNameToCloisterName(tc.containerName)
+			cloisterName := container.NameToCloisterName(tc.containerName)
 			if cloisterName != tc.wantCloister {
-				t.Errorf("ContainerNameToCloisterName(%q) = %q, want %q",
+				t.Errorf("NameToCloisterName(%q) = %q, want %q",
 					tc.containerName, cloisterName, tc.wantCloister)
 			}
 		})

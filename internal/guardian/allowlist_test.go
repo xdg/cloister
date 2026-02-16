@@ -263,7 +263,7 @@ func TestProxyServer_AllowlistEnforcement(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			req, err := http.NewRequest(http.MethodConnect, fmt.Sprintf("http://%s", addr), nil)
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodConnect, fmt.Sprintf("http://%s", addr), http.NoBody)
 			if err != nil {
 				t.Fatalf("failed to create request: %v", err)
 			}
@@ -305,7 +305,7 @@ func TestProxyServer_NilAllowlist(t *testing.T) {
 	addr := p.ListenAddr()
 
 	// With nil allowlist, all domains should be blocked
-	req, err := http.NewRequest(http.MethodConnect, fmt.Sprintf("http://%s", addr), nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodConnect, fmt.Sprintf("http://%s", addr), http.NoBody)
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)
 	}

@@ -9,7 +9,7 @@ import (
 )
 
 // TestRealExecutorInterface verifies RealExecutor implements Executor.
-func TestRealExecutorInterface(t *testing.T) {
+func TestRealExecutorInterface(_ *testing.T) {
 	var _ Executor = &RealExecutor{}
 	var _ Executor = NewRealExecutor()
 }

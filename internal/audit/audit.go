@@ -77,29 +77,21 @@ type Event struct {
 func (e *Event) Format() string {
 	var b strings.Builder
 
-	// Timestamp in RFC3339 format
 	b.WriteString(e.Timestamp.UTC().Format(time.RFC3339))
 
-	// Determine category (HOSTEXEC or DOMAIN)
-	isDomainEvent := e.Type == EventDomainRequest || e.Type == EventDomainApprove ||
-		e.Type == EventDomainDeny || e.Type == EventDomainTimeout
-
-	if isDomainEvent {
+	if e.isDomainEvent() {
 		b.WriteString(" DOMAIN ")
 	} else {
 		b.WriteString(" HOSTEXEC ")
 	}
 	b.WriteString(string(e.Type))
 
-	// Always include project and cloister
 	b.WriteString(" project=")
 	b.WriteString(e.Project)
-
 	b.WriteString(" cloister=")
 	b.WriteString(e.Cloister)
 
-	// Include domain for domain events, cmd for hostexec events
-	if isDomainEvent {
+	if e.isDomainEvent() {
 		b.WriteString(" domain=")
 		b.WriteString(quoteValue(e.Domain))
 	} else {
@@ -107,53 +99,50 @@ func (e *Event) Format() string {
 		b.WriteString(quoteValue(e.Cmd))
 	}
 
-	// Type-specific fields
+	e.formatTypeSpecificFields(&b)
+
+	return b.String()
+}
+
+// isDomainEvent returns true if the event is a domain approval event.
+func (e *Event) isDomainEvent() bool {
+	return e.Type == EventDomainRequest || e.Type == EventDomainApprove ||
+		e.Type == EventDomainDeny || e.Type == EventDomainTimeout
+}
+
+// formatTypeSpecificFields appends type-specific key=value pairs to the builder.
+func (e *Event) formatTypeSpecificFields(b *strings.Builder) {
 	switch e.Type {
 	case EventAutoApprove:
-		if e.Pattern != "" {
-			b.WriteString(" pattern=")
-			b.WriteString(quoteValue(e.Pattern))
-		}
+		writeOptionalField(b, "pattern", e.Pattern)
 	case EventApprove:
-		if e.User != "" {
-			b.WriteString(" user=")
-			b.WriteString(quoteValue(e.User))
-		}
+		writeOptionalField(b, "user", e.User)
 	case EventDeny:
-		if e.Reason != "" {
-			b.WriteString(" reason=")
-			b.WriteString(quoteValue(e.Reason))
-		}
+		writeOptionalField(b, "reason", e.Reason)
 	case EventComplete:
 		b.WriteString(" exit=")
 		b.WriteString(strconv.Itoa(e.ExitCode))
 		b.WriteString(" duration=")
 		b.WriteString(formatDuration(e.Duration))
 	case EventDomainApprove:
-		if e.Scope != "" {
-			b.WriteString(" scope=")
-			b.WriteString(quoteValue(e.Scope))
-		}
-		if e.User != "" {
-			b.WriteString(" user=")
-			b.WriteString(quoteValue(e.User))
-		}
+		writeOptionalField(b, "scope", e.Scope)
+		writeOptionalField(b, "user", e.User)
 	case EventDomainDeny:
-		if e.Scope != "" {
-			b.WriteString(" scope=")
-			b.WriteString(quoteValue(e.Scope))
-		}
-		if e.Pattern != "" {
-			b.WriteString(" pattern=")
-			b.WriteString(quoteValue(e.Pattern))
-		}
-		if e.Reason != "" {
-			b.WriteString(" reason=")
-			b.WriteString(quoteValue(e.Reason))
-		}
+		writeOptionalField(b, "scope", e.Scope)
+		writeOptionalField(b, "pattern", e.Pattern)
+		writeOptionalField(b, "reason", e.Reason)
 	}
+}
 
-	return b.String()
+// writeOptionalField appends " key=quoted_value" to the builder if value is non-empty.
+func writeOptionalField(b *strings.Builder, key, value string) {
+	if value == "" {
+		return
+	}
+	b.WriteString(" ")
+	b.WriteString(key)
+	b.WriteString("=")
+	b.WriteString(quoteValue(value))
 }
 
 // quoteValue returns a quoted string value.
@@ -195,7 +184,10 @@ func (l *Logger) Log(e *Event) error {
 
 	line := e.Format() + "\n"
 	_, err := l.w.Write([]byte(line))
-	return err
+	if err != nil {
+		return fmt.Errorf("write audit event: %w", err)
+	}
+	return nil
 }
 
 // LogRequest logs a HOSTEXEC REQUEST event.

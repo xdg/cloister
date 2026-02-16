@@ -98,7 +98,7 @@ func (s *MemorySessionAllowlist) ClearAll() {
 
 // Size returns the number of tracked tokens and total number of domains
 // across all tokens for memory monitoring.
-func (s *MemorySessionAllowlist) Size() (tokens int, domains int) {
+func (s *MemorySessionAllowlist) Size() (tokens, domains int) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 

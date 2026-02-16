@@ -2,6 +2,7 @@ package executor
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"net"
 	"os"
@@ -38,7 +39,7 @@ func newMockServer(t *testing.T) *mockServer {
 	tmpDir := shortTempDir(t)
 	sockPath := filepath.Join(tmpDir, "test.sock")
 
-	listener, err := net.Listen("unix", sockPath)
+	listener, err := (&net.ListenConfig{}).Listen(context.Background(), "unix", sockPath)
 	if err != nil {
 		t.Fatalf("Failed to create listener: %v", err)
 	}

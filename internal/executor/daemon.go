@@ -61,7 +61,7 @@ func SaveDaemonState(state *DaemonState) error {
 	}
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 
@@ -70,7 +70,7 @@ func SaveDaemonState(state *DaemonState) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0600); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("failed to write state: %w", err)
 	}
 

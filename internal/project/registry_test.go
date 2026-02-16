@@ -65,7 +65,7 @@ func TestLoadRegistry_Valid(t *testing.T) {
 
 	// Create the cloister config directory
 	configDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
 
@@ -82,7 +82,7 @@ func TestLoadRegistry_Valid(t *testing.T) {
     last_used: 2024-06-15T10:30:00Z
 `
 	registryPath := filepath.Join(configDir, "projects.yaml")
-	if err := os.WriteFile(registryPath, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(registryPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("failed to write registry file: %v", err)
 	}
 
@@ -124,7 +124,7 @@ func TestLoadRegistry_ExpandsTilde(t *testing.T) {
 
 	// Create the cloister config directory
 	configDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestLoadRegistry_ExpandsTilde(t *testing.T) {
     last_used: 2024-06-15T10:30:00Z
 `
 	registryPath := filepath.Join(configDir, "projects.yaml")
-	if err := os.WriteFile(registryPath, []byte(content), 0600); err != nil {
+	if err := os.WriteFile(registryPath, []byte(content), 0o600); err != nil {
 		t.Fatalf("failed to write registry file: %v", err)
 	}
 
@@ -154,7 +154,7 @@ func TestLoadRegistry_ExpandsTilde(t *testing.T) {
 		t.Fatalf("os.UserHomeDir() error = %v", err)
 	}
 
-	expectedRoot := filepath.Join(home, "repos/tilde-project")
+	expectedRoot := filepath.Join(home, "repos", "tilde-project")
 	if reg.Projects[0].Root != expectedRoot {
 		t.Errorf("expected root %q, got %q", expectedRoot, reg.Projects[0].Root)
 	}
@@ -190,7 +190,7 @@ func TestSaveRegistry(t *testing.T) {
 
 	// Verify permissions are 0600
 	perm := info.Mode().Perm()
-	if perm != 0600 {
+	if perm != 0o600 {
 		t.Errorf("registry file permissions = %o, want 0600", perm)
 	}
 
@@ -308,7 +308,7 @@ func TestSaveRegistry_CreatesDirectory(t *testing.T) {
 
 	// Verify directory permissions are 0700
 	perm := info.Mode().Perm()
-	if perm != 0700 {
+	if perm != 0o700 {
 		t.Errorf("config dir permissions = %o, want 0700", perm)
 	}
 }
@@ -320,13 +320,13 @@ func TestLoadRegistry_InvalidYAML(t *testing.T) {
 
 	// Create the cloister config directory
 	configDir := filepath.Join(tmpDir, "cloister")
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("failed to create config dir: %v", err)
 	}
 
 	// Write invalid YAML
 	registryPath := filepath.Join(configDir, "projects.yaml")
-	if err := os.WriteFile(registryPath, []byte("invalid: yaml: content:"), 0600); err != nil {
+	if err := os.WriteFile(registryPath, []byte("invalid: yaml: content:"), 0o600); err != nil {
 		t.Fatalf("failed to write registry file: %v", err)
 	}
 
@@ -339,7 +339,7 @@ func TestLoadRegistry_InvalidYAML(t *testing.T) {
 func TestRegistry_Register_New(t *testing.T) {
 	reg := &Registry{}
 
-	info := &ProjectInfo{
+	info := &Info{
 		Name:   "new-project",
 		Root:   "/home/user/repos/new-project",
 		Remote: "git@github.com:user/new-project.git",
@@ -384,7 +384,7 @@ func TestRegistry_Register_SameNameSameRemote(t *testing.T) {
 	}
 
 	// Register with same name and remote but different root
-	info := &ProjectInfo{
+	info := &Info{
 		Name:   "existing-project",
 		Root:   "/new/path/existing-project",
 		Remote: "git@github.com:user/existing-project.git",
@@ -430,7 +430,7 @@ func TestRegistry_Register_NameCollision(t *testing.T) {
 	}
 
 	// Try to register a project with the same name but different remote
-	info := &ProjectInfo{
+	info := &Info{
 		Name:   "my-project",
 		Root:   "/home/user/other/my-project",
 		Remote: "git@github.com:other-user/my-project.git",
@@ -730,7 +730,7 @@ func TestRegistry_FindByPath_TildePath(t *testing.T) {
 		Projects: []RegistryEntry{
 			{
 				Name:     "home-project",
-				Root:     filepath.Join(home, "repos/home-project"),
+				Root:     filepath.Join(home, "repos", "home-project"),
 				Remote:   "git@github.com:user/home-project.git",
 				LastUsed: time.Now(),
 			},
@@ -1026,7 +1026,7 @@ func TestRegistry_Register_WithClock(t *testing.T) {
 	reg := &Registry{}
 	reg.SetClock(clock)
 
-	info := &ProjectInfo{
+	info := &Info{
 		Name:   "clock-test-project",
 		Root:   "/home/user/repos/clock-test",
 		Remote: "git@github.com:user/clock-test.git",

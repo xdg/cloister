@@ -88,10 +88,10 @@ func CloisterNameToContainerName(cloisterName string) string {
 	return "cloister-" + cloisterName
 }
 
-// ContainerNameToCloisterName converts an internal Docker container name to the
+// NameToCloisterName converts an internal Docker container name to the
 // user-facing cloister name by removing the "cloister-" prefix.
 // Returns the input unchanged if it doesn't have the prefix.
-func ContainerNameToCloisterName(containerName string) string {
+func NameToCloisterName(containerName string) string {
 	return strings.TrimPrefix(containerName, "cloister-")
 }
 

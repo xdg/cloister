@@ -45,13 +45,13 @@ func TestEditProjectConfig_ExistingFile(t *testing.T) {
 
 	// Create projects directory and write a config
 	projectsDir := ProjectsDir()
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	customContent := "remote: \"my-remote\"\nroot: \"/my/path\"\n"
 	path := ProjectConfigPath("test-project")
-	if err := os.WriteFile(path, []byte(customContent), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(customContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 
@@ -105,14 +105,14 @@ func TestEditGlobalConfig_ExistingFile(t *testing.T) {
 	t.Setenv("EDITOR", "true")
 
 	// Create config directory and write a config
-	configDir := ConfigDir()
-	if err := os.MkdirAll(configDir, 0700); err != nil {
+	configDir := Dir()
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
 		t.Fatalf("os.MkdirAll() error = %v", err)
 	}
 
 	customContent := "# Custom config\nproxy:\n  listen: \":9999\"\n"
 	path := GlobalConfigPath()
-	if err := os.WriteFile(path, []byte(customContent), 0600); err != nil {
+	if err := os.WriteFile(path, []byte(customContent), 0o600); err != nil {
 		t.Fatalf("os.WriteFile() error = %v", err)
 	}
 

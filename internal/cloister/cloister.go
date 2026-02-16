@@ -37,6 +37,7 @@ type ConfigLoader interface {
 // defaultConfigLoader implements ConfigLoader using the real config package.
 type defaultConfigLoader struct{}
 
+// LoadGlobalConfig delegates to the real config package.
 func (defaultConfigLoader) LoadGlobalConfig() (*config.GlobalConfig, error) {
 	return config.LoadGlobalConfig()
 }
@@ -48,6 +49,7 @@ type GuardianManager interface {
 	EnsureRunning() error
 
 	// RegisterToken registers a token with the guardian for a cloister.
+	//
 	// Deprecated: Use RegisterTokenFull for worktree path validation.
 	RegisterToken(token, cloisterName, projectName string) error
 
@@ -62,20 +64,24 @@ type GuardianManager interface {
 // defaultGuardianManager implements GuardianManager using the real guardian package.
 type defaultGuardianManager struct{}
 
+// EnsureRunning delegates to the real guardian package.
 func (defaultGuardianManager) EnsureRunning() error {
 	return guardian.EnsureRunning()
 }
 
-func (defaultGuardianManager) RegisterToken(token, cloisterName, projectName string) error {
-	return guardian.RegisterToken(token, cloisterName, projectName)
+// RegisterToken delegates to the real guardian package.
+func (defaultGuardianManager) RegisterToken(tok, cloisterName, projectName string) error {
+	return guardian.RegisterToken(tok, cloisterName, projectName)
 }
 
-func (defaultGuardianManager) RegisterTokenFull(token, cloisterName, projectName, worktreePath string) error {
-	return guardian.RegisterTokenFull(token, cloisterName, projectName, worktreePath)
+// RegisterTokenFull delegates to the real guardian package.
+func (defaultGuardianManager) RegisterTokenFull(tok, cloisterName, projectName, worktreePath string) error {
+	return guardian.RegisterTokenFull(tok, cloisterName, projectName, worktreePath)
 }
 
-func (defaultGuardianManager) RevokeToken(token string) error {
-	return guardian.RevokeToken(token)
+// RevokeToken delegates to the real guardian package.
+func (defaultGuardianManager) RevokeToken(tok string) error {
+	return guardian.RevokeToken(tok)
 }
 
 // Option configures cloister operations.
@@ -206,13 +212,10 @@ type StartOptions struct {
 // Options can be used to inject dependencies for testing:
 //
 //	Start(opts, WithManager(mockManager), WithGuardian(mockGuardian))
-func Start(opts StartOptions, options ...Option) (containerID string, tok string, err error) {
+func Start(opts StartOptions, options ...Option) (containerID, tok string, err error) {
 	deps := applyOptions(options...)
 
 	// Step 1: Check if container already exists before mutating any state.
-	// This prevents the bug where a second Start() for the same project
-	// would generate a new token, overwrite the existing token on disk,
-	// then delete it during error cleanup — breaking both sessions.
 	cloisterName := container.GenerateCloisterName(opts.ProjectName)
 	containerName := container.CloisterNameToContainerName(cloisterName)
 	exists, err := deps.manager.ContainerExists(containerName)
@@ -228,39 +231,110 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		return "", "", fmt.Errorf("guardian failed to start: %w", err)
 	}
 
-	// Step 3: Generate a new token
-	tok = token.Generate()
-
-	// Step 4: Persist token to disk (for recovery after guardian restart)
-	store, err := getTokenStore()
+	// Steps 3-5: Generate, persist, and register token
+	tok, store, err := registerCloisterToken(deps, cloisterName, opts)
 	if err != nil {
 		return "", "", err
 	}
-	if err := store.SaveFull(cloisterName, tok, opts.ProjectName, opts.ProjectPath); err != nil {
-		return "", "", err
-	}
 
-	// Step 5: Register the token with guardian (with project name for per-project allowlist)
-	// Include worktree path for hostexec workdir validation
-	if err := deps.guardian.RegisterTokenFull(tok, cloisterName, opts.ProjectName, opts.ProjectPath); err != nil {
-		// Clean up persisted token on failure
-		_ = store.Remove(cloisterName)
-		return "", "", err
-	}
-
-	// If container creation fails after token registration, we should revoke the token
+	// If container creation fails after token registration, revoke the token
 	defer func() {
 		if err != nil {
-			// Best effort cleanup - ignore revocation errors
-			_ = deps.guardian.RevokeToken(tok)
-			_ = store.Remove(cloisterName)
+			if revokeErr := deps.guardian.RevokeToken(tok); revokeErr != nil {
+				clog.Warn("failed to revoke token on cleanup: %v", revokeErr)
+			}
+			if removeErr := store.Remove(cloisterName); removeErr != nil {
+				clog.Warn("failed to remove token on cleanup: %v", removeErr)
+			}
 		}
 	}()
 
-	// Step 6: Load global config to determine agent and get agent config
+	// Steps 6-9: Resolve agent, create container, start, and run agent setup
+	agentImpl, agentCfg, envVars := resolveAgentAndEnv(deps, opts, tok)
+
+	containerID, err = createAndStartContainer(deps, opts, containerSetup{
+		ContainerName: containerName,
+		EnvVars:       envVars,
+		AgentImpl:     agentImpl,
+		AgentCfg:      agentCfg,
+	})
+	if err != nil {
+		return "", "", err
+	}
+
+	return containerID, tok, nil
+}
+
+// containerSetup groups the parameters needed to create and start a container.
+type containerSetup struct {
+	ContainerName string
+	EnvVars       []string
+	AgentImpl     agent.Agent
+	AgentCfg      *config.AgentConfig
+}
+
+// createAndStartContainer creates, starts, and sets up the agent in a container.
+// On failure, it cleans up the container.
+func createAndStartContainer(deps *options, opts StartOptions, cs containerSetup) (string, error) {
+	cfg := &container.Config{
+		Project:     opts.ProjectName,
+		Branch:      opts.BranchName,
+		ProjectPath: opts.ProjectPath,
+		Image:       opts.Image,
+		Network:     docker.CloisterNetworkName,
+		EnvVars:     cs.EnvVars,
+	}
+
+	containerID, err := deps.manager.Create(cfg)
+	if err != nil {
+		return "", err
+	}
+
+	if err := deps.manager.StartContainer(cs.ContainerName); err != nil {
+		if stopErr := deps.manager.Stop(cs.ContainerName); stopErr != nil {
+			clog.Warn("failed to stop container on cleanup: %v", stopErr)
+		}
+		return "", err
+	}
+
+	if cs.AgentImpl != nil {
+		if _, setupErr := cs.AgentImpl.Setup(cs.ContainerName, cs.AgentCfg); setupErr != nil {
+			if stopErr := deps.manager.Stop(cs.ContainerName); stopErr != nil {
+				clog.Warn("failed to stop container on cleanup: %v", stopErr)
+			}
+			return "", setupErr
+		}
+	}
+
+	return containerID, nil
+}
+
+// registerCloisterToken generates a token, persists it to disk, and registers with guardian.
+func registerCloisterToken(deps *options, cloisterName string, opts StartOptions) (string, *token.Store, error) {
+	tok := token.Generate()
+
+	store, err := getTokenStore()
+	if err != nil {
+		return "", nil, err
+	}
+	if err := store.SaveFull(cloisterName, tok, opts.ProjectName, opts.ProjectPath); err != nil {
+		return "", nil, err
+	}
+
+	if err := deps.guardian.RegisterTokenFull(tok, cloisterName, opts.ProjectName, opts.ProjectPath); err != nil {
+		if removeErr := store.Remove(cloisterName); removeErr != nil {
+			clog.Warn("failed to remove token on cleanup: %v", removeErr)
+		}
+		return "", nil, err
+	}
+
+	return tok, store, nil
+}
+
+// resolveAgentAndEnv resolves the agent implementation and builds container env vars.
+func resolveAgentAndEnv(deps *options, opts StartOptions, tok string) (agent.Agent, *config.AgentConfig, []string) {
 	envVars := token.ProxyEnvVars(tok, "")
 
-	// Use pre-loaded config if available, otherwise load it
 	globalCfg := deps.globalConfig
 	if globalCfg == nil {
 		var cfgErr error
@@ -270,15 +344,39 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 		}
 	}
 
-	// Resolve agent: use injected agent, or look up from registry
-	// Priority: 1) injected agent, 2) CLI flag (opts.Agent), 3) config default, 4) fallback to "claude"
+	agentImpl, agentName, agentCfg := resolveAgent(deps, globalCfg, opts.Agent)
+
+	if agentImpl != nil {
+		containerEnvVars, envErr := agent.GetContainerEnvVars(agentImpl, agentCfg)
+		if envErr != nil {
+			clog.Warn("failed to get container env vars: %v", envErr)
+		} else {
+			for key, value := range containerEnvVars {
+				envVars = append(envVars, key+"="+value)
+			}
+		}
+	}
+
+	if agentCfg == nil || agentCfg.AuthMethod == "" {
+		usedEnvVars := token.CredentialEnvVarsUsed() //nolint:staticcheck // intentional fallback
+		if len(usedEnvVars) > 0 {
+			term.Warn("Using %s from environment. Run 'cloister setup %s' to store credentials in config.", usedEnvVars[0], agentName)
+		}
+		envVars = append(envVars, token.CredentialEnvVars()...) //nolint:staticcheck // intentional fallback
+	}
+
+	return agentImpl, agentCfg, envVars
+}
+
+// resolveAgent determines the agent implementation, name, and config.
+func resolveAgent(deps *options, globalCfg *config.GlobalConfig, cliAgent string) (agent.Agent, string, *config.AgentConfig) {
 	agentImpl := deps.agent
-	agentName := "claude" // fallback default
+	agentName := "claude"
 	if globalCfg != nil && globalCfg.Defaults.Agent != "" {
 		agentName = globalCfg.Defaults.Agent
 	}
-	if opts.Agent != "" {
-		agentName = opts.Agent
+	if cliAgent != "" {
+		agentName = cliAgent
 	}
 	var agentCfg *config.AgentConfig
 	if globalCfg != nil {
@@ -289,74 +387,7 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 	if agentImpl == nil {
 		agentImpl = agent.Get(agentName)
 	}
-
-	// Get container env vars before container creation.
-	// Env vars must be set at container creation time, so we need to
-	// compute them now rather than waiting for agent.Setup().
-	//
-	// This runs independently from the credential fallback below: the agent
-	// always provides operational env vars (e.g. CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC),
-	// while credentials come from either the agent (when AuthMethod is configured)
-	// or from the host environment (fallback path).
-	if agentImpl != nil {
-		containerEnvVars, envErr := agent.GetContainerEnvVars(agentImpl, agentCfg)
-		if envErr != nil {
-			return "", "", fmt.Errorf("failed to get container env vars: %w", envErr)
-		}
-		for key, value := range containerEnvVars {
-			envVars = append(envVars, key+"="+value)
-		}
-	}
-	if agentCfg == nil || agentCfg.AuthMethod == "" {
-		// Fall back to env vars if no agent config with auth method.
-		// Using deprecated functions intentionally - this is the fallback path.
-		usedEnvVars := token.CredentialEnvVarsUsed() //nolint:staticcheck // intentional fallback
-		if len(usedEnvVars) > 0 {
-			term.Warn("Using %s from environment. Run 'cloister setup %s' to store credentials in config.", usedEnvVars[0], agentName)
-		}
-		envVars = append(envVars, token.CredentialEnvVars()...) //nolint:staticcheck // intentional fallback
-	}
-
-	cfg := &container.Config{
-		Project:     opts.ProjectName,
-		Branch:      opts.BranchName,
-		ProjectPath: opts.ProjectPath,
-		Image:       opts.Image,
-		Network:     docker.CloisterNetworkName,
-		EnvVars:     envVars,
-	}
-
-	// Step 7: Create the container (without starting)
-	containerID, err = deps.manager.Create(cfg)
-	if err != nil {
-		return "", "", err
-	}
-
-	// If starting fails after container creation, remove the container
-	defer func() {
-		if err != nil {
-			// Best effort cleanup - ignore removal errors
-			_ = deps.manager.Stop(containerName)
-		}
-	}()
-
-	// Step 8: Start the container (needed for docker exec in agent setup)
-	err = deps.manager.StartContainer(containerName)
-	if err != nil {
-		return "", "", err
-	}
-
-	// Step 9: Run agent-specific setup (settings, credentials, config files)
-	// Note: Credential env vars were already set during container creation (Step 6).
-	// Setup() handles file-based setup (copying settings, writing config files, etc.)
-	if agentImpl != nil {
-		_, setupErr := agentImpl.Setup(containerName, agentCfg)
-		if setupErr != nil {
-			return "", "", setupErr
-		}
-	}
-
-	return containerID, tok, nil
+	return agentImpl, agentName, agentCfg
 }
 
 // Stop orchestrates stopping a cloister container with proper cleanup:
@@ -370,21 +401,25 @@ func Start(opts StartOptions, options ...Option) (containerID string, tok string
 // Options can be used to inject dependencies for testing:
 //
 //	Stop(containerName, tok, WithManager(mockManager), WithGuardian(mockGuardian))
-func Stop(containerName string, tok string, options ...Option) error {
+func Stop(containerName, tok string, options ...Option) error {
 	deps := applyOptions(options...)
 	// Step 1: Revoke the token from guardian (if provided)
 	// We ignore revocation errors and continue with container stop.
 	// The token will become orphaned but won't cause security issues
 	// since the container will no longer exist.
 	if tok != "" {
-		_ = deps.guardian.RevokeToken(tok)
+		if revokeErr := deps.guardian.RevokeToken(tok); revokeErr != nil {
+			clog.Warn("failed to revoke token: %v", revokeErr)
+		}
 	}
 
 	// Step 2: Remove the token from disk (best effort)
 	// Store files are keyed by cloister name, not container name.
 	if store, err := getTokenStore(); err == nil {
-		cloisterName := container.ContainerNameToCloisterName(containerName)
-		_ = store.Remove(cloisterName)
+		cloisterName := container.NameToCloisterName(containerName)
+		if removeErr := store.Remove(cloisterName); removeErr != nil {
+			clog.Warn("failed to remove token from disk: %v", removeErr)
+		}
 	}
 
 	// Step 3: Stop and remove the container

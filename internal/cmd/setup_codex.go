@@ -101,7 +101,7 @@ func hasExistingCodexCredentials(cfg *config.GlobalConfig) bool {
 	return codexCfg.AuthMethod != "" || codexCfg.APIKey != ""
 }
 
-func runSetupCodex(cmd *cobra.Command, args []string) error {
+func runSetupCodex(cmd *cobra.Command, _ []string) error {
 	loadConfig := getSetupCodexConfigLoader()
 	yesNo := getSetupCodexYesNoPrompter(cmd)
 

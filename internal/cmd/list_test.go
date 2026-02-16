@@ -115,8 +115,8 @@ func TestParseCloisterNameEdgeCases(t *testing.T) {
 // This tests the filtering logic extracted from the loop in runList.
 func TestFilterCloisterContainers(t *testing.T) {
 	// Simulate the filtering logic from runList
-	filterCloisters := func(containers []container.ContainerInfo) []container.ContainerInfo {
-		var cloisters []container.ContainerInfo
+	filterCloisters := func(containers []container.Info) []container.Info {
+		var cloisters []container.Info
 		for _, c := range containers {
 			// Skip the guardian container
 			if c.Name == "cloister-guardian" {
@@ -133,19 +133,19 @@ func TestFilterCloisterContainers(t *testing.T) {
 
 	tests := []struct {
 		name       string
-		containers []container.ContainerInfo
+		containers []container.Info
 		wantCount  int
 		wantNames  []string
 	}{
 		{
 			name:       "empty list",
-			containers: []container.ContainerInfo{},
+			containers: []container.Info{},
 			wantCount:  0,
 			wantNames:  nil,
 		},
 		{
 			name: "only guardian running",
-			containers: []container.ContainerInfo{
+			containers: []container.Info{
 				{Name: "cloister-guardian", State: "running"},
 			},
 			wantCount: 0,
@@ -153,7 +153,7 @@ func TestFilterCloisterContainers(t *testing.T) {
 		},
 		{
 			name: "guardian and one cloister running",
-			containers: []container.ContainerInfo{
+			containers: []container.Info{
 				{Name: "cloister-guardian", State: "running"},
 				{Name: "cloister-myproject", State: "running"},
 			},
@@ -162,7 +162,7 @@ func TestFilterCloisterContainers(t *testing.T) {
 		},
 		{
 			name: "stopped cloister excluded",
-			containers: []container.ContainerInfo{
+			containers: []container.Info{
 				{Name: "cloister-myproject", State: "exited"},
 			},
 			wantCount: 0,
@@ -170,7 +170,7 @@ func TestFilterCloisterContainers(t *testing.T) {
 		},
 		{
 			name: "multiple cloisters with mixed states",
-			containers: []container.ContainerInfo{
+			containers: []container.Info{
 				{Name: "cloister-guardian", State: "running"},
 				{Name: "cloister-project1", State: "running"},
 				{Name: "cloister-project2", State: "exited"},

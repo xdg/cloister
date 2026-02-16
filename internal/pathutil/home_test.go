@@ -30,7 +30,7 @@ func TestExpandHome(t *testing.T) {
 		{
 			name:     "tilde with nested subpath",
 			input:    "~/foo/bar/baz",
-			expected: filepath.Join(home, "foo/bar/baz"),
+			expected: filepath.Join(home, "foo", "bar", "baz"),
 		},
 		{
 			name:     "absolute path unchanged",

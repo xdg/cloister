@@ -1,6 +1,7 @@
 package clog
 
 import (
+	"fmt"
 	"io"
 	"os"
 )
@@ -12,7 +13,7 @@ var std = NewLogger()
 // If logPath is empty, file logging is disabled.
 // If debug is true, debug-level messages are logged.
 // If daemonMode is true, stderr output is disabled.
-func Configure(logPath string, debug bool, daemonMode bool) error {
+func Configure(logPath string, debug, daemonMode bool) error {
 	level := LevelInfo
 	if debug {
 		level = LevelDebug
@@ -33,7 +34,7 @@ func Configure(logPath string, debug bool, daemonMode bool) error {
 
 // ConfigureWithDefaults sets up the global logger with default log path.
 // This is a convenience function for common initialization.
-func ConfigureWithDefaults(debug bool, daemonMode bool) error {
+func ConfigureWithDefaults(debug, daemonMode bool) error {
 	return Configure(DefaultLogPath(), debug, daemonMode)
 }
 
@@ -72,7 +73,7 @@ func Warn(format string, args ...any) {
 	std.Warn(format, args...)
 }
 
-// Error(format string, args ...any) logs an error message using the global logger.
+// Error logs an error message using the global logger.
 func Error(format string, args ...any) {
 	std.Error(format, args...)
 }
@@ -84,7 +85,9 @@ func Close() error {
 	defer std.mu.Unlock()
 
 	if closer, ok := std.fileWriter.(io.Closer); ok {
-		return closer.Close()
+		if err := closer.Close(); err != nil {
+			return fmt.Errorf("close log file: %w", err)
+		}
 	}
 	return nil
 }
@@ -123,9 +126,6 @@ func ReplaceGlobal(l *Logger) *Logger {
 // RedirectStdLog redirects the standard library's log package to clog.
 // Messages are logged at Info level.
 func RedirectStdLog() {
-	// Create a writer that sends to clog.Info
-	std.mu.Lock()
-	defer std.mu.Unlock()
 	// Note: This would require implementing an io.Writer adapter.
 	// For now, this is a placeholder for future implementation.
 }
@@ -143,7 +143,7 @@ type levelWriter struct {
 func (w *levelWriter) Write(p []byte) (n int, err error) {
 	msg := string(p)
 	// Trim trailing newline since log functions add their own
-	if len(msg) > 0 && msg[len(msg)-1] == '\n' {
+	if msg != "" && msg[len(msg)-1] == '\n' {
 		msg = msg[:len(msg)-1]
 	}
 	switch w.level {

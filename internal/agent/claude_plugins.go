@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,7 +35,7 @@ func claudePluginTransform(hostHomeDir string) func(tmpDir string) error {
 			if transformed, err := transformMarketplaces(data, hostHomeDir, validNames); err != nil {
 				clog.Warn("failed to transform known_marketplaces.json: %v", err)
 			} else {
-				if err := os.WriteFile(marketplacesPath, transformed, 0644); err != nil {
+				if err := os.WriteFile(marketplacesPath, transformed, 0o600); err != nil { //nolint:gosec // G306: plugin config readable by owner only in container
 					clog.Warn("failed to write transformed known_marketplaces.json: %v", err)
 				}
 			}
@@ -46,7 +47,7 @@ func claudePluginTransform(hostHomeDir string) func(tmpDir string) error {
 			if transformed, err := transformInstalledPlugins(data, hostHomeDir); err != nil {
 				clog.Warn("failed to transform installed_plugins.json: %v", err)
 			} else {
-				if err := os.WriteFile(installedPath, transformed, 0644); err != nil {
+				if err := os.WriteFile(installedPath, transformed, 0o600); err != nil { //nolint:gosec // G306: plugin config readable by owner only in container
 					clog.Warn("failed to write transformed installed_plugins.json: %v", err)
 				}
 			}
@@ -79,7 +80,7 @@ func extractMarketplaceNames(data []byte) []string {
 func transformMarketplaces(data []byte, hostHomeDir string, validNames map[string]bool) ([]byte, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal marketplaces: %w", err)
 	}
 
 	for name, entry := range raw {
@@ -101,8 +102,8 @@ func transformMarketplaces(data []byte, hostHomeDir string, validNames map[strin
 		if !ok {
 			continue
 		}
-		sourceType, _ := sourceMap["source"].(string)
-		if sourceType != "github" && sourceType != "git" {
+		sourceType, ok := sourceMap["source"].(string)
+		if !ok || (sourceType != "github" && sourceType != "git") {
 			continue
 		}
 
@@ -129,7 +130,11 @@ func transformMarketplaces(data []byte, hostHomeDir string, validNames map[strin
 		raw[name] = json.RawMessage(updated)
 	}
 
-	return json.MarshalIndent(raw, "", "  ")
+	result, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal marketplaces: %w", err)
+	}
+	return result, nil
 }
 
 // transformInstalledPlugins transforms installed_plugins.json for container use.
@@ -138,7 +143,7 @@ func transformMarketplaces(data []byte, hostHomeDir string, validNames map[strin
 func transformInstalledPlugins(data []byte, hostHomeDir string) ([]byte, error) {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("unmarshal installed plugins: %w", err)
 	}
 
 	for name, entry := range raw {
@@ -160,7 +165,11 @@ func transformInstalledPlugins(data []byte, hostHomeDir string) ([]byte, error) 
 		}
 	}
 
-	return json.MarshalIndent(raw, "", "  ")
+	result, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("marshal installed plugins: %w", err)
+	}
+	return result, nil
 }
 
 // findValidMarketplaces checks which named marketplaces have valid plugin data

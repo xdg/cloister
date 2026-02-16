@@ -1,6 +1,7 @@
 package guardian
 
 import (
+	"bytes"
 	"os"
 	"slices"
 	"testing"
@@ -692,7 +693,7 @@ func TestAddDomainToProject_StaticConfigUnchanged(t *testing.T) {
 	}
 
 	// Verify static config is identical
-	if string(beforeBytes) != string(afterBytes) {
+	if !bytes.Equal(beforeBytes, afterBytes) {
 		t.Error("static project config file should remain unchanged after persistence")
 	}
 
@@ -746,7 +747,7 @@ func TestAddDomainToGlobal_StaticConfigUnchanged(t *testing.T) {
 	}
 
 	// Verify static config is identical
-	if string(beforeBytes) != string(afterBytes) {
+	if !bytes.Equal(beforeBytes, afterBytes) {
 		t.Error("static global config file should remain unchanged after persistence")
 	}
 
@@ -802,7 +803,7 @@ func TestAddPatternToProject_StaticConfigUnchanged(t *testing.T) {
 	}
 
 	// Verify static config is identical
-	if string(beforeBytes) != string(afterBytes) {
+	if !bytes.Equal(beforeBytes, afterBytes) {
 		t.Error("static project config file should remain unchanged after persistence")
 	}
 
@@ -856,7 +857,7 @@ func TestAddPatternToGlobal_StaticConfigUnchanged(t *testing.T) {
 	}
 
 	// Verify static config is identical
-	if string(beforeBytes) != string(afterBytes) {
+	if !bytes.Equal(beforeBytes, afterBytes) {
 		t.Error("static global config file should remain unchanged after persistence")
 	}
 

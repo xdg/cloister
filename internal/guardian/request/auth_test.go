@@ -22,11 +22,11 @@ func TestAuthMiddleware_MissingHeader(t *testing.T) {
 
 	// Create a handler that should not be called
 	called := false
-	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		called = true
 	}))
 
-	req := httptest.NewRequest(http.MethodPost, "/request", nil)
+	req := httptest.NewRequest(http.MethodPost, "/request", http.NoBody)
 	rr := httptest.NewRecorder()
 
 	handler.ServeHTTP(rr, req)
@@ -50,11 +50,11 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 
 	// Create a handler that should not be called
 	called := false
-	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		called = true
 	}))
 
-	req := httptest.NewRequest(http.MethodPost, "/request", nil)
+	req := httptest.NewRequest(http.MethodPost, "/request", http.NoBody)
 	req.Header.Set(TokenHeader, "invalid-token")
 	rr := httptest.NewRecorder()
 
@@ -83,7 +83,7 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodPost, "/request", nil)
+	req := httptest.NewRequest(http.MethodPost, "/request", http.NoBody)
 	req.Header.Set(TokenHeader, "valid-token")
 	rr := httptest.NewRecorder()
 
@@ -111,11 +111,11 @@ func TestAuthMiddleware_EmptyTokenValue(t *testing.T) {
 
 	// Create a handler that should not be called
 	called := false
-	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := middleware(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		called = true
 	}))
 
-	req := httptest.NewRequest(http.MethodPost, "/request", nil)
+	req := httptest.NewRequest(http.MethodPost, "/request", http.NoBody)
 	req.Header.Set(TokenHeader, "") // Empty value is same as missing
 	rr := httptest.NewRecorder()
 
@@ -130,7 +130,7 @@ func TestAuthMiddleware_EmptyTokenValue(t *testing.T) {
 }
 
 func TestCloisterInfo_NoContext(t *testing.T) {
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/", http.NoBody)
 	info, ok := CloisterInfo(req.Context())
 
 	if ok {
@@ -156,7 +156,7 @@ func TestAuthMiddleware_TokenWithOnlyCloisterName(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	req := httptest.NewRequest(http.MethodPost, "/request", nil)
+	req := httptest.NewRequest(http.MethodPost, "/request", http.NoBody)
 	req.Header.Set(TokenHeader, "standalone-token")
 	rr := httptest.NewRecorder()
 

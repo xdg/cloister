@@ -30,7 +30,7 @@ func TestDomainDenial_GlobalScope(t *testing.T) {
 	port := approvalPort(t)
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -50,7 +50,7 @@ func TestDomainDenial_GlobalScope(t *testing.T) {
 	}()
 
 	// Wait for the domain request to appear, then deny it with global scope
-	requestID := waitForPendingDomain(t, port, testDomain, 10*time.Second)
+	requestID := waitForPendingDomain(t, port, testDomain)
 	t.Logf("Found pending domain request: id=%s", requestID)
 	denyDomain(t, port, requestID, "global", false)
 	t.Log("Denied domain with global scope")
@@ -126,7 +126,7 @@ func TestDomainDenial_SessionScope_BlocksSubsequentRequests(t *testing.T) {
 	port := approvalPort(t)
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -146,7 +146,7 @@ func TestDomainDenial_SessionScope_BlocksSubsequentRequests(t *testing.T) {
 	}()
 
 	// Wait for the domain request to appear, then deny it with session scope
-	requestID := waitForPendingDomain(t, port, testDomain, 10*time.Second)
+	requestID := waitForPendingDomain(t, port, testDomain)
 	t.Logf("Found pending domain request: id=%s", requestID)
 	denyDomain(t, port, requestID, "session", false)
 	t.Log("Denied domain with session scope")
@@ -214,7 +214,7 @@ func TestDomainApproval_OnceScope_RePrompts(t *testing.T) {
 	port := approvalPort(t)
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -235,7 +235,7 @@ func TestDomainApproval_OnceScope_RePrompts(t *testing.T) {
 	}()
 
 	// Wait for the first approval request, then approve with "once" scope
-	requestID := waitForPendingDomain(t, port, testDomain, 10*time.Second)
+	requestID := waitForPendingDomain(t, port, testDomain)
 	t.Logf("Found first pending domain request: id=%s", requestID)
 	approveDomain(t, port, requestID, "once")
 	t.Log("Approved domain with once scope")
@@ -257,7 +257,7 @@ func TestDomainApproval_OnceScope_RePrompts(t *testing.T) {
 	}()
 
 	// Verify the domain appears again in the pending queue (re-prompted)
-	requestID2 := waitForPendingDomain(t, port, testDomain, 10*time.Second)
+	requestID2 := waitForPendingDomain(t, port, testDomain)
 	t.Logf("Found second pending domain request (re-prompted): id=%s", requestID2)
 
 	if requestID2 == requestID {
@@ -286,7 +286,7 @@ func TestDomainDenial_Wildcard(t *testing.T) {
 	port := approvalPort(t)
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -310,7 +310,7 @@ func TestDomainDenial_Wildcard(t *testing.T) {
 	}()
 
 	// Wait for the domain request, then deny with wildcard
-	requestID := waitForPendingDomain(t, port, testDomain, 10*time.Second)
+	requestID := waitForPendingDomain(t, port, testDomain)
 	t.Logf("Found pending domain request: id=%s", requestID)
 	denyDomain(t, port, requestID, "global", true)
 	t.Log("Denied domain with global scope and wildcard=true")
@@ -378,7 +378,7 @@ func TestDomainDenial_DenyWinsOverAllow(t *testing.T) {
 	guardianHost := guardian.ContainerName()
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -446,7 +446,7 @@ func TestDomainDenial_LoadDecisionsOnStartup(t *testing.T) {
 	guardianHost := guardian.ContainerName()
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 

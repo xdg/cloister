@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/xdg/cloister/internal/audit"
+	"github.com/xdg/cloister/internal/clog"
 )
 
 // DomainResponse represents the result of a domain approval decision.
@@ -139,7 +140,9 @@ func (dq *DomainQueue) Add(req *DomainRequest) (string, error) {
 
 	// Log domain request event
 	if auditLogger != nil {
-		_ = auditLogger.LogDomainRequest(req.Project, req.Cloister, req.Domain)
+		if err := auditLogger.LogDomainRequest(req.Project, req.Cloister, req.Domain); err != nil {
+			clog.Warn("failed to log domain request audit event: %v", err)
+		}
 	}
 
 	// Broadcast domain-request-added event to SSE clients
@@ -160,53 +163,59 @@ func (dq *DomainQueue) Add(req *DomainRequest) (string, error) {
 func (dq *DomainQueue) handleTimeout(ctx context.Context, id string) {
 	select {
 	case <-ctx.Done():
-		// Request was approved/denied before timeout, do nothing
 		return
 	case <-time.After(dq.timeout):
-		// Timeout reached, send timeout response
-		dq.mu.Lock()
-		req, exists := dq.requests[id]
-		if exists {
-			delete(dq.requests, id)
-			delete(dq.cancels, id)
-			// Clean up pending map entry
-			key := pendingKey(req.Token, req.Domain)
-			delete(dq.pending, key)
+		req, events, auditLogger := dq.removeExpired(id)
+		if req == nil {
+			return
 		}
-		events := dq.events           // Capture reference while holding lock
-		auditLogger := dq.auditLogger // Capture reference while holding lock
-		dq.mu.Unlock()
+		logTimeoutEvent(auditLogger, req)
+		if events != nil {
+			events.BroadcastDomainRequestRemoved(id)
+		}
+		broadcastTimeoutResponse(req)
+	}
+}
 
-		// Only send timeout response if the request was still pending
-		if exists {
-			// Log domain timeout event
-			if auditLogger != nil {
-				_ = auditLogger.LogDomainTimeout(req.Project, req.Cloister, req.Domain)
-			}
+// removeExpired removes a timed-out request from the queue under lock and returns
+// the request, events hub, and audit logger. Returns nil request if not found.
+func (dq *DomainQueue) removeExpired(id string) (*DomainRequest, *EventHub, *audit.Logger) {
+	dq.mu.Lock()
+	defer dq.mu.Unlock()
 
-			// Broadcast domain-request-removed event to SSE clients
-			if events != nil {
-				events.BroadcastDomainRequestRemoved(id)
-			}
+	req, exists := dq.requests[id]
+	if !exists {
+		return nil, nil, nil
+	}
+	delete(dq.requests, id)
+	delete(dq.cancels, id)
+	delete(dq.pending, pendingKey(req.Token, req.Domain))
+	return req, dq.events, dq.auditLogger
+}
 
-			// Broadcast timeout response to all waiting channels
-			timeoutResp := DomainResponse{
-				Status: "timeout",
-				Reason: "Request timed out waiting for approval",
-			}
-			for _, respChan := range req.Responses {
-				if respChan != nil {
-					// Use non-blocking send to prevent goroutine leak if caller provided unbuffered channel
-					select {
-					case respChan <- timeoutResp:
-						// Response sent successfully
-					default:
-						// Channel full or unbuffered - drop the response
-						// This should not happen if callers follow the documented requirement
-						// to use buffered channels, but we handle it defensively
-					}
-				}
-			}
+// logTimeoutEvent logs a domain timeout audit event if the logger is configured.
+func logTimeoutEvent(auditLogger *audit.Logger, req *DomainRequest) {
+	if auditLogger == nil {
+		return
+	}
+	if err := auditLogger.LogDomainTimeout(req.Project, req.Cloister, req.Domain); err != nil {
+		clog.Warn("failed to log domain timeout audit event: %v", err)
+	}
+}
+
+// broadcastTimeoutResponse sends a timeout response to all waiting channels.
+func broadcastTimeoutResponse(req *DomainRequest) {
+	timeoutResp := DomainResponse{
+		Status: "timeout",
+		Reason: "Request timed out waiting for approval",
+	}
+	for _, respChan := range req.Responses {
+		if respChan == nil {
+			continue
+		}
+		select {
+		case respChan <- timeoutResp:
+		default:
 		}
 	}
 }

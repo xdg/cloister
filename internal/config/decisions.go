@@ -6,11 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/xdg/cloister/internal/clog"
 	"gopkg.in/yaml.v3"
+
+	"github.com/xdg/cloister/internal/clog"
 )
 
-// NOTE: In the guardian container, XDG_CONFIG_HOME=/etc so ConfigDir()
+// NOTE: In the guardian container, XDG_CONFIG_HOME=/etc so Dir()
 // returns /etc/cloister/. The host's decisions directory is mounted rw
 // at /etc/cloister/decisions (overlaying the ro config mount), so
 // DecisionDir() resolves correctly in both host and container contexts.
@@ -77,9 +78,9 @@ func (d *Decisions) DeniedPatterns() []string {
 }
 
 // DecisionDir returns the decisions persistence directory path.
-// This is always ConfigDir() + "decisions" (e.g. ~/.config/cloister/decisions).
+// This is always Dir() + "decisions" (e.g. ~/.config/cloister/decisions).
 func DecisionDir() string {
-	return ConfigDir() + "decisions"
+	return Dir() + "decisions"
 }
 
 // GlobalDecisionPath returns the full path to the global decisions file.
@@ -126,7 +127,7 @@ func loadDecisions(path string) (*Decisions, error) {
 // The decisions directory is created with 0700 permissions if it doesn't exist.
 func WriteGlobalDecisions(decisions *Decisions) error {
 	dir := DecisionDir()
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create decision dir: %w", err)
 	}
 	return writeDecisionsAtomic(GlobalDecisionPath(), decisions)
@@ -136,7 +137,7 @@ func WriteGlobalDecisions(decisions *Decisions) error {
 // The decisions/projects/ directory is created with 0700 permissions if it doesn't exist.
 func WriteProjectDecisions(project string, decisions *Decisions) error {
 	dir := DecisionDir() + "/projects"
-	if err := os.MkdirAll(dir, 0700); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("create decision projects dir: %w", err)
 	}
 	return writeDecisionsAtomic(ProjectDecisionPath(project), decisions)
@@ -146,8 +147,8 @@ func WriteProjectDecisions(project string, decisions *Decisions) error {
 // decisions/ directory does not. If so, it renames approvals/ to decisions/
 // to migrate existing data. Returns true if migration occurred.
 func MigrateDecisionDir() (bool, error) {
-	oldDir := ConfigDir() + "approvals"
-	newDir := DecisionDir() // ConfigDir() + "decisions"
+	oldDir := Dir() + "approvals"
+	newDir := DecisionDir() // Dir() + "decisions"
 
 	// Check if old directory exists
 	if _, err := os.Stat(oldDir); os.IsNotExist(err) {
@@ -192,7 +193,7 @@ func writeDecisionsAtomic(path string, decisions *Decisions) error {
 		return fmt.Errorf("write temp file: %w", err)
 	}
 
-	if err := tmp.Chmod(0600); err != nil {
+	if err := tmp.Chmod(0o600); err != nil {
 		_ = tmp.Close()
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("chmod temp file: %w", err)

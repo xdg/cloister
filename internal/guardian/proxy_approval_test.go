@@ -29,7 +29,7 @@ type mockTunnelHandler struct {
 	calls []string // records targetHostPort of each call
 }
 
-func (m *mockTunnelHandler) ServeTunnel(w http.ResponseWriter, r *http.Request, target string) {
+func (m *mockTunnelHandler) ServeTunnel(w http.ResponseWriter, _ *http.Request, target string) {
 	m.mu.Lock()
 	m.calls = append(m.calls, target)
 	m.mu.Unlock()
@@ -183,7 +183,7 @@ func (h *proxyTestHarness) sendCONNECT(domain string) (int, error) {
 	h.t.Helper()
 
 	proxyAddr := h.Proxy.ListenAddr()
-	conn, err := net.DialTimeout("tcp", proxyAddr, 5*time.Second)
+	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		return 0, fmt.Errorf("dial proxy: %w", err)
 	}
@@ -222,7 +222,12 @@ func (h *proxyTestHarness) pendingDomainID() (string, error) {
 
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		resp, err := http.Get(url)
+		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+		if reqErr != nil {
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			time.Sleep(50 * time.Millisecond)
 			continue
@@ -269,7 +274,12 @@ func (h *proxyTestHarness) approveDomain(id, scope, pattern string) error {
 		return fmt.Errorf("marshal body: %w", err)
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(jsonBody))
+	approveReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return fmt.Errorf("create approve request: %w", err)
+	}
+	approveReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(approveReq)
 	if err != nil {
 		return err
 	}
@@ -296,7 +306,12 @@ func (h *proxyTestHarness) denyDomain(id, scope string, wildcard bool) error {
 		return fmt.Errorf("marshal body: %w", err)
 	}
 
-	resp, err := http.Post(url, "application/json", bytes.NewReader(jsonBody))
+	denyReq, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(jsonBody))
+	if err != nil {
+		return fmt.Errorf("create deny request: %w", err)
+	}
+	denyReq.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(denyReq)
 	if err != nil {
 		return err
 	}
@@ -782,7 +797,7 @@ func TestProxyApproval_CaseInsensitivity(t *testing.T) {
 	allowedDomains := decisions.AllowedDomains()
 	found := false
 	for _, d := range allowedDomains {
-		if d == strings.ToLower(firstDomain) {
+		if strings.EqualFold(d, firstDomain) {
 			found = true
 			break
 		}
@@ -1307,7 +1322,7 @@ func (h *proxyTestHarness) sendCONNECTPort(domain string, port int) (int, error)
 	h.t.Helper()
 
 	proxyAddr := h.Proxy.ListenAddr()
-	conn, err := net.DialTimeout("tcp", proxyAddr, 5*time.Second)
+	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		return 0, fmt.Errorf("dial proxy: %w", err)
 	}
@@ -1344,7 +1359,11 @@ func (h *proxyTestHarness) pendingDomainCount() (int, error) {
 	approvalAddr := h.ApprovalServer.ListenAddr()
 	url := fmt.Sprintf("http://%s/pending-domains", approvalAddr)
 
-	resp, err := http.Get(url)
+	countReq, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
+	if err != nil {
+		return 0, fmt.Errorf("create request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(countReq)
 	if err != nil {
 		return 0, fmt.Errorf("GET /pending-domains: %w", err)
 	}
@@ -1563,7 +1582,7 @@ func (h *proxyTestHarness) sendHTTPViaProxy(rawURL string) (int, error) {
 	h.t.Helper()
 
 	proxyAddr := h.Proxy.ListenAddr()
-	conn, err := net.DialTimeout("tcp", proxyAddr, 5*time.Second)
+	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		return 0, fmt.Errorf("dial proxy: %w", err)
 	}

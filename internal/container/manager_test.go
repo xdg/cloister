@@ -47,7 +47,7 @@ func TestManager_WithMockRunner_Start(t *testing.T) {
 	var runCalls [][]string
 
 	mock := &mockDockerRunner{
-		findContainerByExactNameFn: func(name string) (*docker.ContainerInfo, error) {
+		findContainerByExactNameFn: func(_ string) (*docker.ContainerInfo, error) {
 			return nil, nil
 		},
 		runFunc: func(args ...string) (string, error) {
@@ -90,7 +90,7 @@ func TestManager_WithMockRunner_Stop(t *testing.T) {
 	var runCalls [][]string
 
 	mock := &mockDockerRunner{
-		findContainerByExactNameFn: func(name string) (*docker.ContainerInfo, error) {
+		findContainerByExactNameFn: func(_ string) (*docker.ContainerInfo, error) {
 			return &docker.ContainerInfo{
 				ID:    "abc123",
 				Names: "cloister-test",
@@ -123,7 +123,7 @@ func TestManager_WithMockRunner_Stop(t *testing.T) {
 
 func TestManager_WithMockRunner_ContainerNotFound(t *testing.T) {
 	mock := &mockDockerRunner{
-		findContainerByExactNameFn: func(name string) (*docker.ContainerInfo, error) {
+		findContainerByExactNameFn: func(_ string) (*docker.ContainerInfo, error) {
 			return nil, nil
 		},
 	}
@@ -138,12 +138,12 @@ func TestManager_WithMockRunner_ContainerNotFound(t *testing.T) {
 
 func TestManager_WithMockRunner_List(t *testing.T) {
 	mock := &mockDockerRunner{
-		runJSONLinesFunc: func(result any, strict bool, args ...string) error {
-			containers, ok := result.(*[]ContainerInfo)
+		runJSONLinesFunc: func(result any, _ bool, _ ...string) error {
+			containers, ok := result.(*[]Info)
 			if !ok {
-				t.Fatal("Expected *[]ContainerInfo")
+				t.Fatal("Expected *[]Info")
 			}
-			*containers = []ContainerInfo{
+			*containers = []Info{
 				{ID: "abc123", Name: "/cloister-project-main", State: "running"},
 				{ID: "def456", Name: "/cloister-other-dev", State: "exited"},
 			}

@@ -10,9 +10,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+
+	"github.com/xdg/cloister/internal/clog"
 )
 
 // DefaultSocketPath is the default path for the hostexec Unix socket.
+//
 // Deprecated: Use TCP mode instead for cross-platform compatibility.
 var DefaultSocketPath = filepath.Join(os.Getenv("HOME"), ".local", "share", "cloister", "hostexec.sock")
 
@@ -93,7 +96,7 @@ func (s *SocketServer) Start() error {
 
 	if s.tcpAddr != "" {
 		// TCP mode
-		listener, err = net.Listen("tcp", s.tcpAddr)
+		listener, err = (&net.ListenConfig{}).Listen(context.Background(), "tcp", s.tcpAddr)
 		if err != nil {
 			return fmt.Errorf("failed to listen on TCP %s: %w", s.tcpAddr, err)
 		}
@@ -101,25 +104,27 @@ func (s *SocketServer) Start() error {
 		// Unix socket mode
 		// Create parent directory if needed
 		dir := filepath.Dir(s.socketPath)
-		if err := os.MkdirAll(dir, 0700); err != nil {
-			return err
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return fmt.Errorf("create socket directory: %w", err)
 		}
 
 		// Remove existing socket if present
 		if err := os.Remove(s.socketPath); err != nil && !os.IsNotExist(err) {
-			return err
+			return fmt.Errorf("remove existing socket: %w", err)
 		}
 
 		// Listen on Unix socket
-		listener, err = net.Listen("unix", s.socketPath)
+		listener, err = (&net.ListenConfig{}).Listen(context.Background(), "unix", s.socketPath)
 		if err != nil {
-			return err
+			return fmt.Errorf("listen on unix socket %s: %w", s.socketPath, err)
 		}
 
 		// Set socket permissions to 0600 (owner read/write only)
-		if err := os.Chmod(s.socketPath, 0600); err != nil {
-			_ = listener.Close()
-			return err
+		if err := os.Chmod(s.socketPath, 0o600); err != nil {
+			if closeErr := listener.Close(); closeErr != nil {
+				clog.Warn("failed to close listener after chmod error: %v", closeErr)
+			}
+			return fmt.Errorf("chmod socket: %w", err)
 		}
 	}
 
@@ -157,7 +162,10 @@ func (s *SocketServer) Stop() error {
 		_ = os.Remove(s.socketPath)
 	}
 
-	return err
+	if err != nil {
+		return fmt.Errorf("close listener: %w", err)
+	}
+	return nil
 }
 
 // SocketPath returns the path to the Unix socket.
@@ -215,7 +223,11 @@ func (s *SocketServer) acceptLoop() {
 // and writes a JSON response.
 func (s *SocketServer) handleConnection(conn net.Conn) {
 	defer s.wg.Done()
-	defer func() { _ = conn.Close() }()
+	defer func() {
+		if err := conn.Close(); err != nil {
+			clog.Warn("failed to close connection: %v", err)
+		}
+	}()
 
 	// Read request (newline-delimited JSON)
 	reader := bufio.NewReader(conn)
@@ -271,10 +283,14 @@ func (s *SocketServer) writeError(conn net.Conn, errMsg string) {
 func (s *SocketServer) writeResponse(conn net.Conn, resp SocketResponse) {
 	data, err := json.Marshal(resp)
 	if err != nil {
-		// Last resort: write a minimal error (ignore write error)
-		_, _ = conn.Write([]byte(`{"success":false,"error":"failed to marshal response"}` + "\n"))
+		// Last resort: write a minimal error
+		if _, err := conn.Write([]byte(`{"success":false,"error":"failed to marshal response"}` + "\n")); err != nil {
+			clog.Warn("failed to write error response to connection: %v", err)
+		}
 		return
 	}
 	data = append(data, '\n')
-	_, _ = conn.Write(data) // Ignore write error; connection may be closed
+	if _, err := conn.Write(data); err != nil {
+		clog.Warn("failed to write response to connection: %v", err)
+	}
 }

@@ -244,7 +244,7 @@ func TestMockPrompter_ReturnsErrors(t *testing.T) {
 	}
 
 	_, err := m.Prompt("Select:", []string{"A"}, 0)
-	if err != testErr {
+	if !errors.Is(err, testErr) {
 		t.Errorf("got error %v, want %v", err, testErr)
 	}
 }
@@ -345,7 +345,7 @@ func TestMockCredentialReader_ReturnsErrors(t *testing.T) {
 	}
 
 	_, err := m.ReadCredential("Enter: ")
-	if err != testErr {
+	if !errors.Is(err, testErr) {
 		t.Errorf("got error %v, want %v", err, testErr)
 	}
 }
@@ -538,7 +538,7 @@ func TestStdinYesNoPrompter_DefaultNo(t *testing.T) {
 			out := &bytes.Buffer{}
 			p := NewStdinYesNoPrompter(in, out)
 
-			got, err := p.PromptYesNo("Continue? [y/N]: ", false) // defaultYes = false
+			got, err := p.PromptYesNo("Continue? [y/N]: ", false)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 				return
@@ -575,7 +575,7 @@ func TestMockYesNoPrompter_ReturnsConfiguredResponses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != true {
+	if !got {
 		t.Errorf("got %v, want true", got)
 	}
 
@@ -584,7 +584,7 @@ func TestMockYesNoPrompter_ReturnsConfiguredResponses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != false {
+	if got {
 		t.Errorf("got %v, want false", got)
 	}
 
@@ -593,7 +593,7 @@ func TestMockYesNoPrompter_ReturnsConfiguredResponses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != true {
+	if !got {
 		t.Errorf("got %v, want true", got)
 	}
 }
@@ -614,7 +614,7 @@ func TestMockYesNoPrompter_RecordsCalls(t *testing.T) {
 	if call.Prompt != "Continue? [Y/n]: " {
 		t.Errorf("call.Prompt = %q, want %q", call.Prompt, "Continue? [Y/n]: ")
 	}
-	if call.DefaultYes != true {
+	if !call.DefaultYes {
 		t.Errorf("call.DefaultYes = %v, want true", call.DefaultYes)
 	}
 }
@@ -627,7 +627,7 @@ func TestMockYesNoPrompter_ReturnsErrors(t *testing.T) {
 	}
 
 	_, err := m.PromptYesNo("Continue?", true)
-	if err != testErr {
+	if !errors.Is(err, testErr) {
 		t.Errorf("got error %v, want %v", err, testErr)
 	}
 }
@@ -640,7 +640,7 @@ func TestMockYesNoPrompter_ReturnsDefaultWhenExhausted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != true {
+	if !got {
 		t.Errorf("got %v, want default true", got)
 	}
 
@@ -649,7 +649,7 @@ func TestMockYesNoPrompter_ReturnsDefaultWhenExhausted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != false {
+	if got {
 		t.Errorf("got %v, want default false", got)
 	}
 }

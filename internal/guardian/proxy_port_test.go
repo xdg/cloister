@@ -48,11 +48,11 @@ func TestProxyPortHandling_StaticAllowlist(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create a CONNECT request with the host:port
-			req := httptest.NewRequest(http.MethodConnect, "https://example.com", nil)
+			req := httptest.NewRequest(http.MethodConnect, "https://example.com", http.NoBody)
 			req.Host = tt.connectHost
 
 			// Check if allowlist matches (simulating proxy.handleConnect logic)
-			_, _, _, _ = proxy.resolveRequest(req)
+			_ = proxy.resolveRequest(req)
 			matched := proxy.Allowlist.IsAllowed(tt.connectHost)
 
 			if matched != tt.shouldMatch {
@@ -72,7 +72,7 @@ func TestProxyPortHandling_ApprovalQueueDomain(t *testing.T) {
 	// Capture what domain was requested for approval
 	var capturedDomain string
 	approver := &mockDomainApprover{
-		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
+		approveFunc: func(_, _, domain, _ string) (DomainApprovalResult, error) {
 			capturedDomain = domain
 			return DomainApprovalResult{Approved: false}, nil // Deny to avoid connection attempt
 		},
@@ -85,7 +85,7 @@ func TestProxyPortHandling_ApprovalQueueDomain(t *testing.T) {
 	}
 
 	// Create CONNECT request for api.example.com:443
-	req := httptest.NewRequest(http.MethodConnect, "https://example.com", nil)
+	req := httptest.NewRequest(http.MethodConnect, "https://example.com", http.NoBody)
 	req.Host = "api.example.com:443"
 
 	// Create mock ResponseWriter

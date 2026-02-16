@@ -5,7 +5,6 @@ package e2e
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/xdg/cloister/internal/guardian"
 )
@@ -16,7 +15,7 @@ func TestProxy_AllowedDomain(t *testing.T) {
 	guardianHost := guardian.ContainerName()
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -64,7 +63,7 @@ func TestProxy_BlockedDomain(t *testing.T) {
 	guardianHost := guardian.ContainerName()
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, tc.Name, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 
@@ -97,7 +96,7 @@ func TestProxy_UnauthenticatedRequest(t *testing.T) {
 	guardianHost := guardian.ContainerName()
 
 	// Wait for proxy to be ready
-	if err := waitForPort(t, containerName, guardianHost, 3128, 5*time.Second); err != nil {
+	if err := waitForPort(t, containerName, guardianHost, 3128); err != nil {
 		t.Logf("Warning: %v, proceeding anyway", err)
 	}
 

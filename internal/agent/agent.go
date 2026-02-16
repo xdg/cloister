@@ -4,6 +4,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -137,7 +138,7 @@ func CopyDirToContainer(containerName, dirName string, excludePatterns []string,
 		if os.IsNotExist(err) {
 			return nil // Directory doesn't exist - skip silently
 		}
-		return err
+		return fmt.Errorf("stat settings dir: %w", err)
 	}
 	if !info.IsDir() {
 		return nil // Not a directory - skip silently
@@ -171,7 +172,7 @@ func CopyDirToContainer(containerName, dirName string, excludePatterns []string,
 	}
 
 	// Clear any pre-existing directory in the container (from image build)
-	clearCmd := exec.Command("docker", "exec", containerName, "rm", "-rf", containerHomeDir+"/"+dirName)
+	clearCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "rm", "-rf", containerHomeDir+"/"+dirName) //nolint:gosec // G204: args are not user-controlled
 	if output, err := clearCmd.CombinedOutput(); err != nil {
 		clog.Warn("failed to clear existing %s: %v: %s", dirName, err, output)
 	}
@@ -192,7 +193,7 @@ func copyWithRsync(src, dest string, excludePatterns []string) error {
 	// rsync needs trailing slash on source to copy contents, not the directory itself
 	args = append(args, src+"/", dest)
 
-	cmd := exec.Command("rsync", args...)
+	cmd := exec.CommandContext(context.Background(), "rsync", args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("rsync failed: %w: %s", err, output)
@@ -202,7 +203,7 @@ func copyWithRsync(src, dest string, excludePatterns []string) error {
 
 // copyWithCp copies src to dest using cp -rL (no exclusion support).
 func copyWithCp(src, dest string) error {
-	cmd := exec.Command("cp", "-rL", src, dest)
+	cmd := exec.CommandContext(context.Background(), "cp", "-rL", src, dest)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("cp failed: %w: %s", err, output)
@@ -231,50 +232,66 @@ func WriteFileToContainer(containerName, destPath, content string) error {
 //
 // Returns the merged JSON as an indented string with a trailing newline.
 // If the host file doesn't exist, only forcedValues are included.
-func MergeJSONConfig(hostFileName string, fieldsToCopy []string, forcedValues map[string]any, conditionalCopy map[string]any) (string, error) {
-	config := make(map[string]any)
+func MergeJSONConfig(hostFileName string, fieldsToCopy []string, forcedValues, conditionalCopy map[string]any) (string, error) {
+	merged := make(map[string]any)
 
-	// Apply forced values first
 	for key, value := range forcedValues {
-		config[key] = value
+		merged[key] = value
 	}
 
-	// Try to read host config file
-	homeDir, err := UserHomeDirFunc()
-	if err == nil {
-		hostPath := filepath.Join(homeDir, hostFileName)
-		if content, readErr := os.ReadFile(hostPath); readErr == nil {
-			var hostConfig map[string]any
-			if json.Unmarshal(content, &hostConfig) == nil {
-				// Copy specified fields from host
-				for _, field := range fieldsToCopy {
-					if value, ok := hostConfig[field]; ok {
-						config[field] = value
-					}
-				}
-				// Copy conditional fields
-				for field, value := range conditionalCopy {
-					if value == nil {
-						// nil means "copy from host if present"
-						if hostValue, ok := hostConfig[field]; ok {
-							config[field] = hostValue
-						}
-					} else {
-						// Non-nil means use this value directly
-						config[field] = value
-					}
-				}
-			}
-		}
+	hostConfig := readHostJSON(hostFileName)
+	if hostConfig != nil {
+		copyNamedFields(merged, hostConfig, fieldsToCopy)
+		copyConditionalFields(merged, hostConfig, conditionalCopy)
 	}
 
-	// Marshal the config
-	configJSON, err := json.MarshalIndent(config, "", "  ")
+	configJSON, err := json.MarshalIndent(merged, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	return string(configJSON) + "\n", nil
+}
+
+// readHostJSON reads and parses a JSON config file from the host home directory.
+// Returns nil if the file cannot be read or parsed.
+func readHostJSON(hostFileName string) map[string]any {
+	homeDir, err := UserHomeDirFunc()
+	if err != nil {
+		return nil
+	}
+	content, err := os.ReadFile(filepath.Join(homeDir, hostFileName))
+	if err != nil {
+		return nil
+	}
+	var hostConfig map[string]any
+	if json.Unmarshal(content, &hostConfig) != nil {
+		return nil
+	}
+	return hostConfig
+}
+
+// copyNamedFields copies specified top-level fields from src to dst.
+func copyNamedFields(dst, src map[string]any, fields []string) {
+	for _, field := range fields {
+		if value, ok := src[field]; ok {
+			dst[field] = value
+		}
+	}
+}
+
+// copyConditionalFields copies fields conditionally: nil values mean "copy from src
+// if present", non-nil values are used directly.
+func copyConditionalFields(dst, src, conditional map[string]any) {
+	for field, value := range conditional {
+		if value == nil {
+			if hostValue, ok := src[field]; ok {
+				dst[field] = hostValue
+			}
+		} else {
+			dst[field] = value
+		}
+	}
 }
 
 // MergeTOMLConfig reads a TOML config file from the host and appends forced values.
@@ -289,7 +306,7 @@ func MergeJSONConfig(hostFileName string, fieldsToCopy []string, forcedValues ma
 //
 // Returns the merged TOML as a string.
 // If the host file doesn't exist, only forcedValues are included.
-func MergeTOMLConfig(hostFileName string, fieldsToCopy []string, forcedValues map[string]any) (string, error) {
+func MergeTOMLConfig(hostFileName string, _ []string, forcedValues map[string]any) (string, error) {
 	var result strings.Builder
 
 	// Try to read host config file
@@ -370,7 +387,7 @@ func AppendBashAlias(containerName, aliasLine string) error {
 
 	// Use grep to check if alias already exists, then append if not.
 	// The command exits 0 if alias exists, 1 if not. We use || to append only when grep fails.
-	cmd := exec.Command("docker", "exec", containerName, "sh", "-c",
+	cmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "sh", "-c", //nolint:gosec // G204: args are not user-controlled
 		fmt.Sprintf(`grep -qF %q %s || echo %q >> %s`,
 			aliasLine, bashrcPath, aliasLine, bashrcPath))
 	output, err := cmd.CombinedOutput()

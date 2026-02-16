@@ -1,6 +1,7 @@
 package guardian
 
 import (
+	"errors"
 	"sync"
 	"testing"
 )
@@ -210,7 +211,7 @@ func TestSessionAllowlist_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent Add operations
 	for i := 0; i < goroutines; i++ {
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < operations; j++ {
 				_ = s.Add("token1", "example.com")
@@ -220,7 +221,7 @@ func TestSessionAllowlist_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent IsAllowed operations
 	for i := 0; i < goroutines; i++ {
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < operations; j++ {
 				s.IsAllowed("token1", "example.com")
@@ -230,7 +231,7 @@ func TestSessionAllowlist_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent Clear operations (on different token to avoid race on token1)
 	for i := 0; i < goroutines; i++ {
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < operations; j++ {
 				s.Clear("token2")
@@ -251,19 +252,19 @@ func TestSessionAllowlist_RejectsEmptyInputs(t *testing.T) {
 
 	// Add with empty token should fail
 	err := s.Add("", "example.com")
-	if err != ErrEmptyToken {
+	if !errors.Is(err, ErrEmptyToken) {
 		t.Errorf("Add with empty token should return ErrEmptyToken, got: %v", err)
 	}
 
 	// Add with empty domain should fail
 	err = s.Add("token1", "")
-	if err != ErrEmptyDomain {
+	if !errors.Is(err, ErrEmptyDomain) {
 		t.Errorf("Add with empty domain should return ErrEmptyDomain, got: %v", err)
 	}
 
 	// Add with both empty should fail with ErrEmptyToken (checked first)
 	err = s.Add("", "")
-	if err != ErrEmptyToken {
+	if !errors.Is(err, ErrEmptyToken) {
 		t.Errorf("Add with empty token and domain should return ErrEmptyToken, got: %v", err)
 	}
 
@@ -418,19 +419,19 @@ func TestMemorySessionDenylist_AddErrors(t *testing.T) {
 
 	// Add with empty token should fail
 	err := s.Add("", "example.com")
-	if err != ErrEmptyToken {
+	if !errors.Is(err, ErrEmptyToken) {
 		t.Errorf("Add with empty token should return ErrEmptyToken, got: %v", err)
 	}
 
 	// Add with empty domain should fail
 	err = s.Add("token1", "")
-	if err != ErrEmptyDomain {
+	if !errors.Is(err, ErrEmptyDomain) {
 		t.Errorf("Add with empty domain should return ErrEmptyDomain, got: %v", err)
 	}
 
 	// Add with both empty should fail with ErrEmptyToken (checked first)
 	err = s.Add("", "")
-	if err != ErrEmptyToken {
+	if !errors.Is(err, ErrEmptyToken) {
 		t.Errorf("Add with empty token and domain should return ErrEmptyToken, got: %v", err)
 	}
 
@@ -527,7 +528,7 @@ func TestMemorySessionDenylist_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent Add operations
 	for i := 0; i < goroutines; i++ {
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < operations; j++ {
 				_ = s.Add("token1", "example.com")
@@ -537,7 +538,7 @@ func TestMemorySessionDenylist_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent IsBlocked operations
 	for i := 0; i < goroutines; i++ {
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < operations; j++ {
 				s.IsBlocked("token1", "example.com")
@@ -547,7 +548,7 @@ func TestMemorySessionDenylist_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent Clear operations (on different token to avoid race on token1)
 	for i := 0; i < goroutines; i++ {
-		go func(id int) {
+		go func(_ int) {
 			defer wg.Done()
 			for j := 0; j < operations; j++ {
 				s.Clear("token2")

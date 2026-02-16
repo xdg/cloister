@@ -210,11 +210,11 @@ func TestProjectRemove_WithConfigFlag(t *testing.T) {
 
 	// Create a project config file
 	projectsDir := filepath.Join(tmpDir, "cloister", "projects")
-	if err := os.MkdirAll(projectsDir, 0700); err != nil {
+	if err := os.MkdirAll(projectsDir, 0o700); err != nil {
 		t.Fatalf("failed to create projects dir: %v", err)
 	}
 	configPath := filepath.Join(projectsDir, "to-remove.yaml")
-	if err := os.WriteFile(configPath, []byte("remote: test"), 0600); err != nil {
+	if err := os.WriteFile(configPath, []byte("remote: test"), 0o600); err != nil {
 		t.Fatalf("failed to create config file: %v", err)
 	}
 
