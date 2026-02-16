@@ -1,59 +1,302 @@
-# golangci-lint configuration for cloister
-# See https://golangci-lint.run/usage/configuration/
+# golangci-lint v2 configuration for cloister
+#
+# Philosophy: Aggressive linting with low false-positive rates. These rules
+# catch the structural problems AI agents consistently produce: monolithic
+# functions, bare error returns, god interfaces, global state, and poor naming.
+#
+# Usage: golangci-lint run ./...
+# Requires: golangci-lint v2.0+
+
 version: "2"
 
 run:
   timeout: 5m
   modules-download-mode: readonly
 
+output:
+  formats:
+    text:
+      path: stdout
+  sort-order:
+    - linter
+    - severity
+    - file
+
 linters:
-  # Use default linters plus useful extras
+  default: none
   enable:
-    - misspell      # Find misspelled words
-    - bodyclose     # Check HTTP response body is closed
-    - nilerr        # Find nil error returns
-    - forbidigo     # Forbid fmt.Print* and log.* outside designated packages
+    # --- Error handling (highest value) ---
+    - errcheck        # Unchecked errors — the #1 agent bug
+    - errorlint       # Correct error wrapping/comparison patterns
+    - wrapcheck       # Force error wrapping at package boundaries
+    - nilerr          # Catches `if err != nil { return nil }` bugs
 
-linters-settings:
-  errcheck:
-    # Don't require checking errors for these functions
-    exclude-functions:
-      - (io.Closer).Close
-      - (*os.File).Close
+    # --- Function complexity ---
+    - funlen          # Max function length
+    - cyclop          # Cyclomatic complexity
+    - gocognit        # Cognitive complexity (catches deeply nested logic)
 
-  misspell:
-    locale: US
+    # --- Code structure ---
+    - gocritic        # Broad set of opinionated checks
+    - revive          # Configurable metalinter (replaces golint)
+    - unparam         # Unused function parameters
+    - govet           # Go vet — catches subtle bugs
+    - staticcheck     # The gold standard static analyzer
+    - unused          # Dead code detection
+    - ineffassign     # Dead assignment detection
 
-  forbidigo:
-    forbid:
-      # Forbid direct fmt.Print* - use term.* for user output
-      - pattern: '^fmt\.Print.*$'
-        msg: "use term.* for user output or clog.* for logging"
-      # Forbid log.Print* - use clog.* for structured logging
-      - pattern: '^log\.(Print|Fatal|Panic).*$'
-        msg: "use clog.* for logging"
-    exclude-godoc-examples: true
-    analyze-types: true
+    # --- Style and naming ---
+    - misspell        # Typos in comments/strings
+    - predeclared     # Shadowing of predeclared identifiers (e.g., `error`, `len`)
 
-issues:
-  # Show all issues from a linter
-  max-issues-per-linter: 0
-  max-same-issues: 0
+    # --- Security/correctness ---
+    - gosec           # Security-oriented checks
+    - bodyclose       # Unclosed HTTP response bodies
+    - noctx           # HTTP requests without context
 
-  exclude-rules:
-    # Allow fmt.Print* in the term package (it's the designated output package)
-    - path: internal/term/
-      linters:
-        - forbidigo
-    # Allow fmt.Print* in the prompt package (interactive user input)
-    - path: internal/prompt/
-      linters:
-        - forbidigo
-    # Allow fmt.Print* in test files for debugging
-    - path: _test\.go
-      linters:
-        - forbidigo
-    # Allow fmt.Fprint in audit package (structured log writing)
-    - path: internal/audit/
-      linters:
-        - forbidigo
+    # --- Concurrency ---
+    - copyloopvar     # Loop variable capture bugs (pre-Go 1.22 patterns)
+
+    # --- Project conventions ---
+    - forbidigo       # Forbid fmt.Print* and log.* outside designated packages
+
+  exclusions:
+    rules:
+      # Test files get relaxed rules.
+      - path: _test\.go
+        linters:
+          - funlen
+          - cyclop
+          - gocognit
+          - wrapcheck
+          - errcheck
+          - gosec
+          - bodyclose
+          - forbidigo
+
+      # Generated code — skip entirely.
+      - path: \.pb\.go$
+        linters:
+          - all
+      - path: _gen\.go$
+        linters:
+          - all
+      - path: mock_.*\.go$
+        linters:
+          - all
+
+      # Allow fmt.Print* in designated output packages
+      - path: internal/term/
+        linters:
+          - forbidigo
+      - path: internal/prompt/
+        linters:
+          - forbidigo
+      - path: internal/audit/
+        linters:
+          - forbidigo
+
+    paths:
+      - vendor
+      - third_party
+      - testdata
+      - internal/generated
+
+  settings:
+    # -------------------------------------------------------------------------
+    # Error handling
+    # -------------------------------------------------------------------------
+    errcheck:
+      check-type-assertions: true
+      check-blank: true
+      exclude-functions:
+        # fmt output — errors not actionable
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Print
+        - fmt.Printf
+        - fmt.Println
+        # Interface contracts that don't error in practice
+        - (hash.Hash).Write
+        - (io.StringWriter).WriteString
+        # Cleanup/teardown — errors not actionable
+        - (io.Closer).Close
+        - (*os.File).Close
+        - os.Remove
+        - os.RemoveAll
+        - (*os.Process).Kill
+        - (*net.Listener).Close
+
+    errorlint:
+      errorf: true
+      errorf-multi: true
+      asserts: true
+      comparison: true
+
+    wrapcheck:
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+        - .WithMessage(
+        - .WithMessagef(
+        - .WithStack(
+      ignore-package-globs:
+        - github.com/xdg/cloister/*
+
+    # -------------------------------------------------------------------------
+    # Function complexity
+    # -------------------------------------------------------------------------
+    funlen:
+      lines: 80
+      statements: 50
+      ignore-comments: true
+
+    cyclop:
+      max-complexity: 15
+      package-average: 5.0
+
+    gocognit:
+      min-complexity: 20
+
+    # -------------------------------------------------------------------------
+    # Code structure and style
+    # -------------------------------------------------------------------------
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+        - opinionated
+      disabled-checks:
+        - whyNoLint
+        - hugeParam      # Agents shouldn't be forced to use pointers everywhere
+
+    revive:
+      severity: warning
+      confidence: 0.8
+      rules:
+        # --- Naming ---
+        - name: exported
+          severity: warning
+          arguments:
+            - "checkPrivateReceivers"
+            - "sayRepetitiveInsteadOfStutters"
+        - name: package-comments
+          severity: warning
+        - name: var-naming
+          severity: warning
+        - name: receiver-naming
+          severity: warning
+        - name: unexported-return
+          severity: warning
+
+        # --- Function signatures ---
+        - name: argument-limit
+          severity: warning
+          arguments: [5]
+        - name: function-result-limit
+          severity: warning
+          arguments: [3]
+
+        # --- Context parameter position ---
+        - name: context-as-argument
+          severity: error
+          arguments:
+            - allowTypesBefore: ""
+
+        # --- Structure ---
+        - name: unused-parameter
+          severity: warning
+        - name: blank-imports
+          severity: warning
+        - name: context-keys-type
+          severity: warning
+        - name: early-return
+          severity: warning
+        - name: unnecessary-stmt
+          severity: warning
+        - name: deep-exit
+          severity: warning
+        - name: superfluous-else
+          severity: warning
+        - name: confusing-naming
+          severity: warning
+        - name: modifies-parameter
+          severity: warning
+        - name: confusing-results
+          severity: warning
+        - name: defer
+          severity: warning
+          arguments:
+            - ["call-chain", "loop", "method-call", "recover", "return"]
+        - name: range-val-in-closure
+          severity: warning
+        - name: waitgroup-by-value
+          severity: error
+        - name: identical-branches
+          severity: warning
+        - name: bool-literal-in-expr
+          severity: warning
+
+        # --- Explicitly disabled ---
+        - name: add-constant
+          disabled: true   # Too noisy — magic number detection
+        - name: max-public-structs
+          disabled: true   # Not useful for agents
+
+    unparam:
+      check-exported: false  # Only flag unexported — exported may satisfy interfaces
+
+    staticcheck:
+      checks:
+        - "all"
+        - "-SA1019"  # Deprecated usage — useful but noisy during migrations
+
+    misspell:
+      locale: US
+
+    # -------------------------------------------------------------------------
+    # Security
+    # -------------------------------------------------------------------------
+    gosec:
+      excludes:
+        - G104  # Duplicates errcheck
+        - G304  # File path from variable — too many false positives
+      config:
+        global:
+          audit: false  # Set true for stricter checks in CI
+
+    # -------------------------------------------------------------------------
+    # Project conventions
+    # -------------------------------------------------------------------------
+    forbidigo:
+      forbid:
+        - pattern: '^fmt\.Print.*$'
+          msg: "use term.* for user output or clog.* for logging"
+        - pattern: '^log\.(Print|Fatal|Panic).*$'
+          msg: "use clog.* for logging"
+      exclude-godoc-examples: true
+      analyze-types: true
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/xdg/cloister
+
+severity:
+  default: warning
+  rules:
+    - linters:
+        - errcheck
+        - errorlint
+        - govet
+      severity: error
