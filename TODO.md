@@ -117,22 +117,77 @@ the rest of the package, suggesting the file belongs elsewhere.
 
 ### 2.2 Consolidate and prioritize
 
-- [ ] Merge results from passes B, C, D, E into a single candidate list
-- [ ] For each candidate: move to existing package, extract to new package, or leave as-is
-- [ ] Document each proposed move with source, destination, and justification
+- [x] Merge results from passes B, C, D, E into a single candidate list
+- [x] For each candidate: move to existing package, extract to new package, or leave as-is
+- [x] Document each proposed move with source, destination, and justification
+
+> **Approved moves (Phase 3 execution order):**
+>
+> | # | What | From | To | Justification |
+> |---|------|------|----|---------------|
+> | M1 | `DefaultRegistry`, `ImageEnvVar`, `DefaultImage()` | `version` | `container` | Image selection is container config, not version info (Pass E) |
+> | M2 | `AuthMethod` type, `AuthMethodAPIKey`, `AuthMethodToken` | `cmd` + `claude` + `codex` | `config` | Three packages define auth method concepts; unify (Pass C + E) |
+> | M3 | `CredentialEnvVars`, `CredentialEnvVarsUsed` | `token` | `cloister` (or inline) | Only consumer is `cloister.go`; deprecated passthrough (Pass B + E) |
+> | M4 | `DefaultTokenAPIPort` / `DefaultAPIPort` | `guardian` (both) | `guardian` (one name) | Same-package redundancy, consolidate to `DefaultAPIPort` (Pass C) |
+> | M5 | `DefaultRequestPort` | `guardian` | remove; use `guardian/request` | No import cycle; sub-package should own its port (Pass C) |
+>
+> **Leave as-is (justified):**
+> - `InstanceIDEnvVar` in `guardian`/`executor` — real import cycle, consistency test exists
+> - `DefaultApprovalPort` in `guardian`/`guardian/approval` — real import cycle
+> - `token/token.go` (Generate/TokenBytes) — core token concepts, no mismatch
+> - `agent.ContainerUID`/`ContainerGID` — mild mismatch but pragmatic; only used in agent setup
+> - `testutil/http.go` (NoProxyClient) — testutil is a reasonable shared location
+>
+> **Deferred to Future Phases:**
+> - `executor` daemon state management split — cohesion concern but large scope
+> - `guardian` package decomposition — 60+ symbols, needs its own planning effort
 
 ---
 
 ## Phase 3: Refactoring
 
-Execute moves sequentially. Each sub-phase is one atomic commit.
+Execute moves sequentially. Each move is one atomic commit.
 
-### 3.1 Execute moves
+### 3.1 Move M1: Image constants from `version` to `container`
 
-- [ ] For each approved move: relocate code, update all import sites, fix tests
-- [ ] **Test**: `go build ./...` after each move
-- [ ] **Test**: `make test` after each move
-- [ ] **Test**: `make lint` after each move
+- [ ] Move `DefaultRegistry`, `ImageEnvVar`, `DefaultImage()` from `version/version.go` to `container/`
+- [ ] Update all import sites to use `container.DefaultRegistry`, `container.ImageEnvVar`, `container.DefaultImage()`
+- [ ] Remove moved symbols from `version/version.go`
+- [ ] Verify: `go build ./...`, `make test`, `make lint`
+
+### 3.2 Move M2: Auth method types to `config`
+
+- [ ] Define `AuthMethod` type, `AuthMethodAPIKey`, `AuthMethodToken` in `config/`
+- [ ] Update `claude/inject.go` to use `config.AuthMethodAPIKey`, `config.AuthMethodToken`
+- [ ] Update `codex/inject.go` to use `config.AuthMethodAPIKey`
+- [ ] Update `cmd/` to use `config.AuthMethod` type and constants
+- [ ] Remove old auth method definitions from `claude`, `codex`, `cmd`
+- [ ] Verify: `go build ./...`, `make test`, `make lint`
+
+### 3.3 Move M3: Credential env vars from `token` to `cloister`
+
+- [ ] Move `CredentialEnvVars`, `CredentialEnvVarsUsed`, `credentialEnvVarNames` from `token/credentials.go` to `cloister/`
+- [ ] Update all import sites (expected: only `cloister/cloister.go`)
+- [ ] Delete `token/credentials.go`
+- [ ] Verify: `go build ./...`, `make test`, `make lint`
+
+### 3.4 Move M4: Consolidate API port constants in `guardian`
+
+- [ ] Replace `DefaultTokenAPIPort` with `DefaultAPIPort` (or vice versa) in `guardian/`
+- [ ] Update all references to the removed name
+- [ ] Verify: `go build ./...`, `make test`, `make lint`
+
+### 3.5 Move M5: Remove duplicate `DefaultRequestPort` from `guardian`
+
+- [ ] Remove `DefaultRequestPort` from `guardian/instance.go`
+- [ ] Update references to use `request.DefaultRequestPort` (adding import if needed)
+- [ ] Verify: `go build ./...`, `make test`, `make lint`
+
+### 3.6 Final verification
+
+- [ ] Full `make test` pass
+- [ ] Full `make lint` pass (0 issues)
+- [ ] Grep for any remaining "import cycle" or "mirrors" comments that are now stale
 
 ### 3.2 Final verification
 
