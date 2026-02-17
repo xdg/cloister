@@ -35,6 +35,16 @@ func (v *mockTokenValidator) Validate(token string) bool {
 	return v.validTokens[token]
 }
 
+// mockPolicyChecker is a lightweight PolicyChecker for proxy tests that
+// delegates to a caller-provided function.
+type mockPolicyChecker struct {
+	checkFunc func(token, project, domain string) Decision
+}
+
+func (m *mockPolicyChecker) Check(token, project, domain string) Decision {
+	return m.checkFunc(token, project, domain)
+}
+
 // newTestProxyPolicyEngine creates a PolicyEngine for proxy tests with
 // the given global allow domains. No project lister or file loaders are
 // configured (session/project/global reload not needed for basic proxy tests).
@@ -2009,4 +2019,100 @@ func TestProxyServer_DenylistPrecedence_DenyPatternBlocksSubdomain(t *testing.T)
 	if status != 200 {
 		t.Errorf("expected 200 for non-denied allowed domain, got %d", status)
 	}
+}
+
+func TestProxyServer_MockPolicyChecker(t *testing.T) {
+	// Verify that ProxyServer works with a mockPolicyChecker (non-*PolicyEngine)
+	// implementation of PolicyChecker, demonstrating interface decoupling.
+
+	echoHandler := func(conn net.Conn) {
+		buf := make([]byte, 1024)
+		for {
+			n, err := conn.Read(buf)
+			if err != nil {
+				return
+			}
+			_, _ = conn.Write(buf[:n])
+		}
+	}
+	upstreamAddr, cleanup := startMockUpstream(t, echoHandler)
+	defer cleanup()
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	checker := &mockPolicyChecker{
+		checkFunc: func(_, _, domain string) Decision {
+			if domain == upstreamHost {
+				return Allow
+			}
+			return Deny
+		},
+	}
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = checker
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	t.Run("allowed domain via mock", func(t *testing.T) {
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
+		if err != nil {
+			t.Fatalf("failed to connect to proxy: %v", err)
+		}
+		defer func() { _ = conn.Close() }()
+
+		connectReq := fmt.Sprintf("CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n", upstreamAddr, upstreamAddr)
+		_, err = conn.Write([]byte(connectReq))
+		if err != nil {
+			t.Fatalf("failed to send CONNECT request: %v", err)
+		}
+
+		reader := bufio.NewReader(conn)
+		statusLine, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("failed to read status line: %v", err)
+		}
+
+		if !strings.Contains(statusLine, "200") {
+			t.Errorf("expected 200 for allowed domain via mock, got: %s", statusLine)
+		}
+	})
+
+	t.Run("denied domain via mock", func(t *testing.T) {
+		conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
+		if err != nil {
+			t.Fatalf("failed to connect to proxy: %v", err)
+		}
+		defer func() { _ = conn.Close() }()
+
+		connectReq := "CONNECT denied.example.com:443 HTTP/1.1\r\nHost: denied.example.com:443\r\n\r\n"
+		_, err = conn.Write([]byte(connectReq))
+		if err != nil {
+			t.Fatalf("failed to send CONNECT request: %v", err)
+		}
+
+		reader := bufio.NewReader(conn)
+		statusLine, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("failed to read status line: %v", err)
+		}
+
+		if !strings.Contains(statusLine, "403") {
+			t.Errorf("expected 403 for denied domain via mock, got: %s", statusLine)
+		}
+	})
+
+	t.Run("SIGHUP skips reload for non-PolicyEngine", func(_ *testing.T) {
+		// mockPolicyChecker doesn't implement *PolicyEngine, so SIGHUP
+		// should log "skipped" and not panic.
+		p.handleSighup()
+	})
 }

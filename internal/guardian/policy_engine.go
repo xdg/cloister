@@ -67,6 +67,13 @@ func (p *ProxyPolicy) IsDenied(domain string) bool {
 	return p.Deny.Contains(domain)
 }
 
+// PolicyChecker evaluates domain access control decisions. ProxyServer
+// depends on this interface rather than *PolicyEngine directly, enabling
+// lightweight mocks in proxy tests.
+type PolicyChecker interface {
+	Check(token, project, domain string) Decision
+}
+
 // PolicyEngine owns all domain access policy state across three tiers:
 // global, per-project, and per-token (session). It evaluates domain access
 // using a deny-first, then allow, then fallback-to-AskHuman strategy.

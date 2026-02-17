@@ -89,7 +89,7 @@ type ProxyServer struct {
 	// it replaces AllowlistCache, SessionAllowlist, SessionDenylist, and the
 	// global Allowlist for domain checks. The proxy delegates to
 	// PolicyEngine.Check() and maps the Decision to allow/deny/requestApproval.
-	PolicyEngine *PolicyEngine
+	PolicyEngine PolicyChecker
 
 	// Allowlist controls which domains are permitted. If nil, all domains are blocked.
 	// Legacy: superseded by PolicyEngine when set. Will be removed in Phase 6.
@@ -239,11 +239,15 @@ func (p *ProxyServer) startSighupHandler() {
 func (p *ProxyServer) handleSighup() {
 	// PolicyEngine path: reload all policies from disk.
 	if p.PolicyEngine != nil {
-		if err := p.PolicyEngine.ReloadAll(); err != nil {
-			p.log("SIGHUP PolicyEngine reload failed: %v", err)
-			return
+		if pe, ok := p.PolicyEngine.(*PolicyEngine); ok {
+			if err := pe.ReloadAll(); err != nil {
+				p.log("SIGHUP PolicyEngine reload failed: %v", err)
+				return
+			}
+			p.log("SIGHUP PolicyEngine reloaded successfully")
+		} else {
+			p.log("SIGHUP skipped: PolicyChecker does not support reload")
 		}
-		p.log("SIGHUP PolicyEngine reloaded successfully")
 		return
 	}
 

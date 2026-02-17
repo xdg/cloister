@@ -139,10 +139,10 @@ TokenLookup fields with a single PolicyEngine field. Rewrite
 
 ### 3.2 Define PolicyChecker interface for testability
 
-- [ ] Extract `PolicyChecker` interface: `Check(token, project, domain string) Decision`
-- [ ] ProxyServer takes `PolicyChecker` (interface), PolicyEngine implements it
-- [ ] This lets proxy tests use a simple mock without building a full PolicyEngine
-- [ ] **Test**: Verify proxy tests still pass with mock PolicyChecker
+- [x] Extract `PolicyChecker` interface: `Check(token, project, domain string) Decision`
+- [x] ProxyServer takes `PolicyChecker` (interface), PolicyEngine implements it
+- [x] This lets proxy tests use a simple mock without building a full PolicyEngine
+- [x] **Test**: Verify proxy tests still pass with mock PolicyChecker
 
 ---
 
