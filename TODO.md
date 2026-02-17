@@ -93,13 +93,13 @@ server yet — pure policy logic with disk I/O for reload.
 
 ### 2.2 Implement PolicyEngine
 
-- [ ] `type PolicyEngine struct` with `global ProxyPolicy`, `projects map[string]*ProxyPolicy`, `tokens map[string]*ProxyPolicy`, `sync.RWMutex`
-- [ ] `Check(token, project, domain string) Decision` — deny pass (global→project→token), allow pass (global→project→token), fallback AskHuman
-- [ ] `Check` must handle missing project/token gracefully (skip that tier)
-- [ ] Constructor: `NewPolicyEngine(cfg *config.GlobalConfig, globalDecisions *config.Decisions, projectLister ProjectLister) (*PolicyEngine, error)`
+- [x] `type PolicyEngine struct` with `global ProxyPolicy`, `projects map[string]*ProxyPolicy`, `tokens map[string]*ProxyPolicy`, `sync.RWMutex`
+- [x] `Check(token, project, domain string) Decision` — deny pass (global→project→token), allow pass (global→project→token), fallback AskHuman
+- [x] `Check` must handle missing project/token gracefully (skip that tier)
+- [x] Constructor: `NewPolicyEngine(cfg *config.GlobalConfig, globalDecisions *config.Decisions, projectLister ProjectLister) (*PolicyEngine, error)`
   - Builds global ProxyPolicy from config + decisions
   - Eagerly loads all projects from `projectLister.List()` via `loadProjectPolicy(name)`
-- [ ] **Test**: `policy_engine_test.go` — Check precedence: deny beats allow, global deny beats project allow, token deny beats everything, AskHuman when nothing matches
+- [x] **Test**: `policy_engine_test.go` — Check precedence: deny beats allow, global deny beats project allow, token deny beats everything, AskHuman when nothing matches
 
 ### 2.3 Implement targeted reload and record
 

@@ -1,6 +1,12 @@
 package guardian
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+
+	"github.com/xdg/cloister/internal/config"
+	"github.com/xdg/cloister/internal/token"
+)
 
 func TestDecisionString(t *testing.T) {
 	tests := []struct {
@@ -125,5 +131,214 @@ func TestProxyPolicyBothSets(t *testing.T) {
 	}
 	if policy.IsDenied("unknown.com") {
 		t.Error("expected IsDenied false for unknown.com")
+	}
+}
+
+// sliceProjectLister is a simple ProjectLister for tests.
+type sliceProjectLister struct {
+	names []string
+}
+
+func (s *sliceProjectLister) List() map[string]token.Info {
+	m := make(map[string]token.Info, len(s.names))
+	for i, name := range s.names {
+		tok := fmt.Sprintf("fake-token-%d", i)
+		m[tok] = token.Info{ProjectName: name}
+	}
+	return m
+}
+
+// newTestPolicyEngine builds a PolicyEngine with manually set fields for testing.
+// This avoids needing real config loaders.
+func newTestPolicyEngine(global ProxyPolicy, projects, tokens map[string]*ProxyPolicy) *PolicyEngine {
+	if projects == nil {
+		projects = make(map[string]*ProxyPolicy)
+	}
+	if tokens == nil {
+		tokens = make(map[string]*ProxyPolicy)
+	}
+	return &PolicyEngine{
+		global:   global,
+		projects: projects,
+		tokens:   tokens,
+	}
+}
+
+func TestPolicyEngine_Check_GlobalAllow(t *testing.T) {
+	pe := newTestPolicyEngine(
+		ProxyPolicy{Allow: NewDomainSet([]string{"example.com"}, nil)},
+		nil, nil,
+	)
+	if got := pe.Check("tok", "proj", "example.com"); got != Allow {
+		t.Errorf("Check = %v, want Allow", got)
+	}
+}
+
+func TestPolicyEngine_Check_GlobalDeny(t *testing.T) {
+	pe := newTestPolicyEngine(
+		ProxyPolicy{Deny: NewDomainSet([]string{"evil.com"}, nil)},
+		nil, nil,
+	)
+	if got := pe.Check("tok", "proj", "evil.com"); got != Deny {
+		t.Errorf("Check = %v, want Deny", got)
+	}
+}
+
+func TestPolicyEngine_Check_DenyBeatsAllow(t *testing.T) {
+	// Domain in both global allow AND global deny -> Deny (deny pass runs first).
+	pe := newTestPolicyEngine(
+		ProxyPolicy{
+			Allow: NewDomainSet([]string{"both.com"}, nil),
+			Deny:  NewDomainSet([]string{"both.com"}, nil),
+		},
+		nil, nil,
+	)
+	if got := pe.Check("tok", "proj", "both.com"); got != Deny {
+		t.Errorf("Check = %v, want Deny", got)
+	}
+}
+
+func TestPolicyEngine_Check_GlobalDenyBeatsProjectAllow(t *testing.T) {
+	pe := newTestPolicyEngine(
+		ProxyPolicy{Deny: NewDomainSet([]string{"blocked.com"}, nil)},
+		map[string]*ProxyPolicy{
+			"myproj": {Allow: NewDomainSet([]string{"blocked.com"}, nil)},
+		},
+		nil,
+	)
+	if got := pe.Check("tok", "myproj", "blocked.com"); got != Deny {
+		t.Errorf("Check = %v, want Deny", got)
+	}
+}
+
+func TestPolicyEngine_Check_TokenDenyBeatsEverything(t *testing.T) {
+	pe := newTestPolicyEngine(
+		ProxyPolicy{Allow: NewDomainSet([]string{"site.com"}, nil)},
+		map[string]*ProxyPolicy{
+			"proj": {Allow: NewDomainSet([]string{"site.com"}, nil)},
+		},
+		map[string]*ProxyPolicy{
+			"tok1": {Deny: NewDomainSet([]string{"site.com"}, nil)},
+		},
+	)
+	if got := pe.Check("tok1", "proj", "site.com"); got != Deny {
+		t.Errorf("Check = %v, want Deny", got)
+	}
+}
+
+func TestPolicyEngine_Check_ProjectAllow(t *testing.T) {
+	pe := newTestPolicyEngine(
+		ProxyPolicy{}, // global has nothing
+		map[string]*ProxyPolicy{
+			"proj": {Allow: NewDomainSet([]string{"project-only.com"}, nil)},
+		},
+		nil,
+	)
+	if got := pe.Check("tok", "proj", "project-only.com"); got != Allow {
+		t.Errorf("Check = %v, want Allow", got)
+	}
+}
+
+func TestPolicyEngine_Check_TokenAllow(t *testing.T) {
+	pe := newTestPolicyEngine(
+		ProxyPolicy{}, // global has nothing
+		nil,
+		map[string]*ProxyPolicy{
+			"tok1": {Allow: NewDomainSet([]string{"session-only.com"}, nil)},
+		},
+	)
+	if got := pe.Check("tok1", "proj", "session-only.com"); got != Allow {
+		t.Errorf("Check = %v, want Allow", got)
+	}
+}
+
+func TestPolicyEngine_Check_AskHuman(t *testing.T) {
+	pe := newTestPolicyEngine(ProxyPolicy{}, nil, nil)
+	if got := pe.Check("tok", "proj", "unknown.com"); got != AskHuman {
+		t.Errorf("Check = %v, want AskHuman", got)
+	}
+}
+
+func TestPolicyEngine_Check_MissingProject(t *testing.T) {
+	// Unknown project name should be skipped gracefully.
+	pe := newTestPolicyEngine(ProxyPolicy{}, nil, nil)
+	if got := pe.Check("tok", "no-such-project", "example.com"); got != AskHuman {
+		t.Errorf("Check = %v, want AskHuman", got)
+	}
+}
+
+func TestPolicyEngine_Check_MissingToken(t *testing.T) {
+	// Unknown token should be skipped gracefully.
+	pe := newTestPolicyEngine(ProxyPolicy{}, nil, nil)
+	if got := pe.Check("no-such-token", "proj", "example.com"); got != AskHuman {
+		t.Errorf("Check = %v, want AskHuman", got)
+	}
+}
+
+func TestNewPolicyEngine(t *testing.T) {
+	cfg := &config.GlobalConfig{
+		Proxy: config.ProxyConfig{
+			Allow: []config.AllowEntry{{Domain: "cfg-allowed.com"}},
+			Deny:  []config.AllowEntry{{Domain: "cfg-denied.com"}},
+		},
+	}
+	decisions := &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: "dec-allowed.com"}},
+			Deny:  []config.AllowEntry{{Domain: "dec-denied.com"}},
+		},
+	}
+
+	projectCfgLoader := func(name string) (*config.ProjectConfig, error) {
+		if name == "testproj" {
+			return &config.ProjectConfig{
+				Proxy: config.ProjectProxyConfig{
+					Allow: []config.AllowEntry{{Domain: "proj-allowed.com"}},
+				},
+			}, nil
+		}
+		return &config.ProjectConfig{}, nil
+	}
+	projectDecLoader := func(_ string) (*config.Decisions, error) {
+		return &config.Decisions{}, nil
+	}
+
+	lister := &sliceProjectLister{names: []string{"testproj"}}
+
+	pe, err := NewPolicyEngine(cfg, decisions, lister,
+		WithProjectConfigLoader(projectCfgLoader),
+		WithProjectDecisionLoader(projectDecLoader),
+	)
+	if err != nil {
+		t.Fatalf("NewPolicyEngine error: %v", err)
+	}
+
+	// Global allow from config.
+	if got := pe.Check("tok", "other", "cfg-allowed.com"); got != Allow {
+		t.Errorf("cfg-allowed.com: got %v, want Allow", got)
+	}
+	// Global allow from decisions.
+	if got := pe.Check("tok", "other", "dec-allowed.com"); got != Allow {
+		t.Errorf("dec-allowed.com: got %v, want Allow", got)
+	}
+	// Global deny from config.
+	if got := pe.Check("tok", "other", "cfg-denied.com"); got != Deny {
+		t.Errorf("cfg-denied.com: got %v, want Deny", got)
+	}
+	// Global deny from decisions.
+	if got := pe.Check("tok", "other", "dec-denied.com"); got != Deny {
+		t.Errorf("dec-denied.com: got %v, want Deny", got)
+	}
+	// Default allowed domain.
+	if got := pe.Check("tok", "other", "api.anthropic.com"); got != Allow {
+		t.Errorf("api.anthropic.com (default): got %v, want Allow", got)
+	}
+	// Project allow.
+	if got := pe.Check("tok", "testproj", "proj-allowed.com"); got != Allow {
+		t.Errorf("proj-allowed.com: got %v, want Allow", got)
+	}
+	// Unknown domain -> AskHuman.
+	if got := pe.Check("tok", "testproj", "random.com"); got != AskHuman {
+		t.Errorf("random.com: got %v, want AskHuman", got)
 	}
 }
