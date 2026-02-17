@@ -206,7 +206,10 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	}
 
 	// Check cached allowlist (domain should be added without port)
-	projectAllowlist := cache.GetProject(testProject)
+	projectAllowlist, getErr := cache.GetProject(testProject)
+	if getErr != nil {
+		t.Fatalf("GetProject error: %v", getErr)
+	}
 	if projectAllowlist == nil {
 		t.Fatal("project allowlist should exist")
 	}
@@ -431,7 +434,10 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 		t.Error("denied domain should not be in session allowlist")
 	}
 
-	projectAllowlist := cache.GetProject(testProject)
+	projectAllowlist, getErr := cache.GetProject(testProject)
+	if getErr != nil {
+		t.Fatalf("GetProject error: %v", getErr)
+	}
 	if projectAllowlist != nil && projectAllowlist.IsAllowed(testDomain) {
 		t.Error("denied domain should not be in cached allowlist")
 	}

@@ -227,7 +227,10 @@ func (d *DomainApproverImpl) handleApproval(project, domain, token string, resp 
 		}
 	}
 	if d.allowlistCache != nil {
-		if projectAllowlist := d.allowlistCache.GetProject(project); projectAllowlist != nil {
+		projectAllowlist, err := d.allowlistCache.GetProject(project)
+		if err != nil {
+			clog.Warn("failed to get project allowlist for %s: %v", project, err)
+		} else if projectAllowlist != nil {
 			projectAllowlist.Add([]string{domain})
 		}
 	}
@@ -295,7 +298,11 @@ func (d *DomainApproverImpl) updateDenylistCache(scope, project, target string, 
 			addToDenylist(denylist, target, isPattern)
 		}
 	case "project":
-		denylist := d.allowlistCache.GetProjectDeny(project)
+		denylist, err := d.allowlistCache.GetProjectDeny(project)
+		if err != nil {
+			clog.Warn("failed to get project denylist for %s: %v", project, err)
+			return
+		}
 		globalDeny := d.allowlistCache.GetGlobalDeny()
 		if denylist == nil || denylist == globalDeny {
 			d.allowlistCache.SetProjectDeny(project, NewAllowlistFromConfig(denyEntry(target, isPattern)))

@@ -1,6 +1,7 @@
 package guardian
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/xdg/cloister/internal/clog"
@@ -66,25 +67,24 @@ func (r *CacheReloader) SetStaticConfig(allow, deny []config.AllowEntry) {
 // LoadProjectAllowlist loads and returns the merged allowlist for a project.
 // It reads the project's static config and decision files from disk, then
 // merges them with the global static allow entries and global decisions.
-// Returns nil if there are no project-specific entries (matching the
+// Returns (nil, nil) if there are no project-specific entries (matching the
 // AllowlistCache convention where nil means "use global allowlist").
-func (r *CacheReloader) LoadProjectAllowlist(projectName string) *Allowlist {
+// Returns (nil, err) if the project config or decisions file is malformed.
+func (r *CacheReloader) LoadProjectAllowlist(projectName string) (*Allowlist, error) {
 	projectCfg, err := config.LoadProjectConfig(projectName)
 	if err != nil {
-		clog.Warn("failed to load project config for %s: %v", projectName, err)
-		return nil
+		return nil, fmt.Errorf("load project config: %w", err)
 	}
 
 	projectDecisions, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		clog.Warn("failed to load project decisions for %s: %v", projectName, err)
-		projectDecisions = &config.Decisions{}
+		return nil, fmt.Errorf("load project decisions: %w", err)
 	}
 
 	hasProjectConfig := len(projectCfg.Proxy.Allow) > 0
 	hasProjectDecisions := len(projectDecisions.Proxy.Allow) > 0
 	if !hasProjectConfig && !hasProjectDecisions {
-		return nil
+		return nil, nil
 	}
 
 	// Read static config and global decisions under read lock.
@@ -103,33 +103,32 @@ func (r *CacheReloader) LoadProjectAllowlist(projectName string) *Allowlist {
 	}
 	allowlist := NewAllowlistFromConfig(merged)
 	clog.Info("loaded allowlist for project %s (%d entries)", projectName, len(allowlist.Domains()))
-	return allowlist
+	return allowlist, nil
 }
 
 // LoadProjectDenylist loads and returns the merged denylist for a project.
 // It reads the project's static config and decision files from disk, then
-// merges them. Returns nil if no deny entries exist.
-func (r *CacheReloader) LoadProjectDenylist(projectName string) *Allowlist {
+// merges them. Returns (nil, nil) if no deny entries exist.
+// Returns (nil, err) if the project config or decisions file is malformed.
+func (r *CacheReloader) LoadProjectDenylist(projectName string) (*Allowlist, error) {
 	projectCfg, err := config.LoadProjectConfig(projectName)
 	if err != nil {
-		clog.Warn("failed to load project config (deny) for %s: %v", projectName, err)
-		return nil
+		return nil, fmt.Errorf("load project config: %w", err)
 	}
 
 	projectDecisions, err := config.LoadProjectDecisions(projectName)
 	if err != nil {
-		clog.Warn("failed to load project decisions (deny) for %s: %v", projectName, err)
-		projectDecisions = &config.Decisions{}
+		return nil, fmt.Errorf("load project decisions: %w", err)
 	}
 
 	projectDeny := config.MergeDenylists(projectCfg.Proxy.Deny, projectDecisions.Proxy.Deny)
 	if len(projectDeny) == 0 {
-		return nil
+		return nil, nil
 	}
 	denylist := NewAllowlistFromConfig(projectDeny)
 	clog.Info("loaded denylist for project %s: %d static + %d decisions = %d total",
 		projectName, len(projectCfg.Proxy.Deny), len(projectDecisions.Proxy.Deny), len(projectDeny))
-	return denylist
+	return denylist, nil
 }
 
 // Reload reloads global decisions from disk and rebuilds all caches.
@@ -186,7 +185,11 @@ func (r *CacheReloader) Reload() {
 	// entry is absent.
 	for _, info := range r.lister.List() {
 		if info.ProjectName != "" {
-			allowlist := r.LoadProjectAllowlist(info.ProjectName)
+			allowlist, err := r.LoadProjectAllowlist(info.ProjectName)
+			if err != nil {
+				clog.Warn("failed to reload project allowlist for %s: %v", info.ProjectName, err)
+				continue
+			}
 			if allowlist != nil {
 				r.cache.SetProject(info.ProjectName, allowlist)
 			}

@@ -1,6 +1,8 @@
 package guardian
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/xdg/cloister/internal/config"
@@ -121,7 +123,10 @@ func TestCacheReloader_LoadProjectAllowlist_AllFourSources(t *testing.T) {
 	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, staticAllow, nil, globalDecisions)
 
-	allowlist := reloader.LoadProjectAllowlist(projectName)
+	allowlist, err := reloader.LoadProjectAllowlist(projectName)
+	if err != nil {
+		t.Fatalf("LoadProjectAllowlist error: %v", err)
+	}
 	if allowlist == nil {
 		t.Fatal("LoadProjectAllowlist returned nil, expected merged allowlist")
 	}
@@ -145,7 +150,10 @@ func TestCacheReloader_LoadProjectAllowlist_NilWhenNoProjectEntries(t *testing.T
 	reloader := NewCacheReloader(cache, lister, staticAllow, nil, &config.Decisions{})
 
 	// No project config or decisions files exist → nil
-	allowlist := reloader.LoadProjectAllowlist("nonexistent-project")
+	allowlist, err := reloader.LoadProjectAllowlist("nonexistent-project")
+	if err != nil {
+		t.Fatalf("LoadProjectAllowlist error: %v", err)
+	}
 	if allowlist != nil {
 		t.Errorf("LoadProjectAllowlist returned non-nil for project with no entries: %v", allowlist.Domains())
 	}
@@ -181,7 +189,10 @@ func TestCacheReloader_LoadProjectAllowlist_IncludesGlobalDecisions(t *testing.T
 	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, nil, nil, globalDecisions)
 
-	allowlist := reloader.LoadProjectAllowlist(projectName)
+	allowlist, err := reloader.LoadProjectAllowlist(projectName)
+	if err != nil {
+		t.Fatalf("LoadProjectAllowlist error: %v", err)
+	}
 	if allowlist == nil {
 		t.Fatal("LoadProjectAllowlist returned nil")
 	}
@@ -224,7 +235,10 @@ func TestCacheReloader_LoadProjectDenylist_MergesConfigAndDecisions(t *testing.T
 	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, nil, nil, &config.Decisions{})
 
-	denylist := reloader.LoadProjectDenylist(projectName)
+	denylist, err := reloader.LoadProjectDenylist(projectName)
+	if err != nil {
+		t.Fatalf("LoadProjectDenylist error: %v", err)
+	}
 	if denylist == nil {
 		t.Fatal("LoadProjectDenylist returned nil, expected merged denylist")
 	}
@@ -245,7 +259,10 @@ func TestCacheReloader_LoadProjectDenylist_NilWhenNoDenyEntries(t *testing.T) {
 	lister := &mockProjectLister{projects: map[string]token.Info{}}
 	reloader := NewCacheReloader(cache, lister, nil, nil, &config.Decisions{})
 
-	denylist := reloader.LoadProjectDenylist("nonexistent-project")
+	denylist, err := reloader.LoadProjectDenylist("nonexistent-project")
+	if err != nil {
+		t.Fatalf("LoadProjectDenylist error: %v", err)
+	}
 	if denylist != nil {
 		t.Errorf("LoadProjectDenylist returned non-nil for project with no deny entries")
 	}
@@ -351,12 +368,89 @@ func TestCacheReloader_Reload_ProjectAllowlist(t *testing.T) {
 
 	// GetProject should return the merged allowlist directly from cache
 	// (not via loader, since Reload eagerly populates it)
-	proj := cache.GetProject(projectName)
+	proj, err := cache.GetProject(projectName)
+	if err != nil {
+		t.Fatalf("GetProject error: %v", err)
+	}
 	if proj == nil {
 		t.Fatal("GetProject returned nil after Reload")
 	}
 	if !proj.IsAllowed("project.com") {
 		t.Error("project allowlist does not contain project.com after Reload")
+	}
+}
+
+func TestCacheReloader_LoadProjectAllowlist_InvalidProjectConfigReturnsError(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	projectName := "bad-config-proj"
+
+	// Write a project config file with an unknown field (triggers strictUnmarshal error)
+	projectsDir := filepath.Join(configDir, "cloister", "projects")
+	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	badConfig := []byte("unknown_field: true\n")
+	if err := os.WriteFile(filepath.Join(projectsDir, projectName+".yaml"), badConfig, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Write valid project decisions
+	err := config.WriteProjectDecisions(projectName, &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Allow: []config.AllowEntry{{Domain: "decision-domain.com"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteProjectDecisions: %v", err)
+	}
+
+	cache := NewAllowlistCache(NewAllowlist(nil))
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
+	reloader := NewCacheReloader(cache, lister, nil, nil, &config.Decisions{})
+
+	_, loadErr := reloader.LoadProjectAllowlist(projectName)
+	if loadErr == nil {
+		t.Fatal("LoadProjectAllowlist should return error for invalid project config")
+	}
+}
+
+func TestCacheReloader_LoadProjectDenylist_InvalidProjectConfigReturnsError(t *testing.T) {
+	configDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	projectName := "bad-config-proj"
+
+	// Write a project config file with an unknown field (triggers strictUnmarshal error)
+	projectsDir := filepath.Join(configDir, "cloister", "projects")
+	if err := os.MkdirAll(projectsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	badConfig := []byte("unknown_field: true\n")
+	if err := os.WriteFile(filepath.Join(projectsDir, projectName+".yaml"), badConfig, 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	// Write valid project decisions with a deny entry
+	err := config.WriteProjectDecisions(projectName, &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Deny: []config.AllowEntry{{Domain: "denied-domain.com"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteProjectDecisions: %v", err)
+	}
+
+	cache := NewAllowlistCache(NewAllowlist(nil))
+	lister := &mockProjectLister{projects: map[string]token.Info{}}
+	reloader := NewCacheReloader(cache, lister, nil, nil, &config.Decisions{})
+
+	_, loadErr := reloader.LoadProjectDenylist(projectName)
+	if loadErr == nil {
+		t.Fatal("LoadProjectDenylist should return error for invalid project config")
 	}
 }
 
@@ -388,7 +482,10 @@ func TestCacheReloader_Reload_StaleCacheCleared(t *testing.T) {
 
 	// First reload — should populate with first.com
 	reloader.Reload()
-	proj := cache.GetProject(projectName)
+	proj, err := cache.GetProject(projectName)
+	if err != nil {
+		t.Fatalf("GetProject error: %v", err)
+	}
 	if !proj.IsAllowed("first.com") {
 		t.Error("first.com not in project allowlist after first Reload")
 	}
@@ -404,7 +501,10 @@ func TestCacheReloader_Reload_StaleCacheCleared(t *testing.T) {
 	}
 
 	reloader.Reload()
-	proj = cache.GetProject(projectName)
+	proj, err = cache.GetProject(projectName)
+	if err != nil {
+		t.Fatalf("GetProject error: %v", err)
+	}
 	if !proj.IsAllowed("second.com") {
 		t.Error("second.com not in project allowlist after second Reload")
 	}

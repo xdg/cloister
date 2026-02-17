@@ -402,13 +402,27 @@ func isTimeoutError(err error) bool {
 func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	targetHostPort := r.Host
 	domain := strings.ToLower(stripPort(targetHostPort))
-	resolved := p.resolveRequest(r)
+	resolved, err := p.resolveRequest(r)
+	if err != nil {
+		var cfgErr *ConfigError
+		if errors.As(err, &cfgErr) {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+		} else {
+			http.Error(w, err.Error(), http.StatusForbidden)
+		}
+		return
+	}
 
 	clog.Debug("handleConnect: host=%s, domain=%s, project=%s, allowlist=%v",
 		targetHostPort, domain, resolved.ProjectName, resolved.Allowlist != nil)
 
 	if err := p.checkDomainAccess(domain, resolved); err != nil {
-		http.Error(w, err.Error(), http.StatusForbidden)
+		var cfgErr *ConfigError
+		if errors.As(err, &cfgErr) {
+			http.Error(w, err.Error(), http.StatusBadGateway)
+		} else {
+			http.Error(w, err.Error(), http.StatusForbidden)
+		}
 		return
 	}
 
@@ -421,10 +435,17 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 
 // checkDomainAccess evaluates deny/allow rules in strict precedence order.
 // Returns nil if the domain is allowed, or an error message if denied.
+// Returns a ConfigError-wrapped error if the project config is malformed.
 func (p *ProxyServer) checkDomainAccess(domain string, resolved resolvedRequest) error {
 	// 1. Static denylist
-	if p.AllowlistCache != nil && p.AllowlistCache.IsBlocked(resolved.ProjectName, domain) {
-		return fmt.Errorf("forbidden - domain denied")
+	if p.AllowlistCache != nil {
+		blocked, err := p.AllowlistCache.IsBlocked(resolved.ProjectName, domain)
+		if err != nil {
+			return err // already wrapped as ConfigError by IsBlocked
+		}
+		if blocked {
+			return fmt.Errorf("forbidden - domain denied")
+		}
 	}
 
 	// 2. Session denylist
@@ -588,7 +609,8 @@ type resolvedRequest struct {
 // resolveRequest determines the allowlist, project name, cloister name, and token for a request.
 // It extracts the token from the Proxy-Authorization header and performs a single lookup.
 // Falls back to the global allowlist with empty project/cloister if lookup is unavailable.
-func (p *ProxyServer) resolveRequest(r *http.Request) resolvedRequest {
+// Returns a ConfigError-wrapped error if the project config is malformed.
+func (p *ProxyServer) resolveRequest(r *http.Request) (resolvedRequest, error) {
 	clog.Debug("resolveRequest: AllowlistCache=%v, TokenLookup=%v", p.AllowlistCache != nil, p.TokenLookup != nil)
 
 	var token string
@@ -604,24 +626,29 @@ func (p *ProxyServer) resolveRequest(r *http.Request) resolvedRequest {
 	// If no per-project support is configured, use global allowlist
 	if p.AllowlistCache == nil || p.TokenLookup == nil {
 		clog.Debug("resolveRequest: returning p.Allowlist (global)")
-		return resolvedRequest{Allowlist: p.Allowlist, Token: token}
+		return resolvedRequest{Allowlist: p.Allowlist, Token: token}, nil
 	}
 
 	if token == "" {
-		return resolvedRequest{Allowlist: p.Allowlist}
+		return resolvedRequest{Allowlist: p.Allowlist}, nil
 	}
 
 	// Single token lookup for project and cloister
 	result, valid := p.TokenLookup(token)
 	if !valid || result.ProjectName == "" {
-		return resolvedRequest{Allowlist: p.Allowlist, Token: token}
+		return resolvedRequest{Allowlist: p.Allowlist, Token: token}, nil
 	}
 
 	// Get project-specific allowlist
+	allowlist, err := p.AllowlistCache.GetProject(result.ProjectName)
+	if err != nil {
+		return resolvedRequest{}, fmt.Errorf("project %q config error: %w", result.ProjectName, &ConfigError{Err: err})
+	}
+
 	return resolvedRequest{
-		Allowlist:    p.AllowlistCache.GetProject(result.ProjectName),
+		Allowlist:    allowlist,
 		ProjectName:  result.ProjectName,
 		CloisterName: result.CloisterName,
 		Token:        token,
-	}
+	}, nil
 }

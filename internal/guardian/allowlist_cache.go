@@ -3,8 +3,24 @@
 package guardian
 
 import (
+	"fmt"
 	"sync"
 )
+
+// ConfigError wraps a config loading error to distinguish it from access denials.
+// The proxy uses this to return 502 (Bad Gateway) instead of 403 (Forbidden)
+// when a project's config file is malformed.
+type ConfigError struct {
+	Err error
+}
+
+func (e *ConfigError) Error() string {
+	return e.Err.Error()
+}
+
+func (e *ConfigError) Unwrap() error {
+	return e.Err
+}
 
 // TokenLookupResult holds the result of a token lookup.
 type TokenLookupResult struct {
@@ -18,11 +34,15 @@ type TokenLookupFunc func(token string) (TokenLookupResult, bool)
 
 // ProjectAllowlistLoader loads and returns the allowlist for a project.
 // It should merge the project config with the global config.
-type ProjectAllowlistLoader func(projectName string) *Allowlist
+// Returns (nil, nil) when there are no project-specific entries (use global).
+// Returns (nil, err) when the project config is malformed.
+type ProjectAllowlistLoader func(projectName string) (*Allowlist, error)
 
 // ProjectDenylistLoader loads and returns the denylist for a project.
 // It should merge the project config with the global config.
-type ProjectDenylistLoader func(projectName string) *Allowlist
+// Returns (nil, nil) when there are no project-specific entries (use global).
+// Returns (nil, err) when the project config is malformed.
+type ProjectDenylistLoader func(projectName string) (*Allowlist, error)
 
 // AllowlistCache provides per-project allowlist lookups with caching.
 type AllowlistCache struct {
@@ -103,13 +123,13 @@ func (c *AllowlistCache) SetProjectDeny(projectName string, denylist *Allowlist)
 // GetProjectDeny returns the denylist for a specific project.
 // If the project is not cached and a denylistLoader is set, it loads and caches the denylist.
 // If no loader is set or loading returns nil, falls back to the global denylist.
-// Returns nil if globalDeny is also nil.
-func (c *AllowlistCache) GetProjectDeny(projectName string) *Allowlist {
+// Returns an error if the loader encounters a config error (do NOT fall back to global).
+func (c *AllowlistCache) GetProjectDeny(projectName string) (*Allowlist, error) {
 	// First try with read lock
 	c.mu.RLock()
 	if denylist, ok := c.perProjectDeny[projectName]; ok {
 		c.mu.RUnlock()
-		return denylist
+		return denylist, nil
 	}
 	loader := c.denylistLoader
 	globalDeny := c.globalDeny
@@ -117,13 +137,16 @@ func (c *AllowlistCache) GetProjectDeny(projectName string) *Allowlist {
 
 	// If no loader, return globalDeny (may be nil)
 	if loader == nil {
-		return globalDeny
+		return globalDeny, nil
 	}
 
 	// Load the project denylist
-	denylist := loader(projectName)
+	denylist, err := loader(projectName)
+	if err != nil {
+		return nil, err
+	}
 	if denylist == nil {
-		return globalDeny
+		return globalDeny, nil
 	}
 
 	// Cache and return
@@ -131,11 +154,12 @@ func (c *AllowlistCache) GetProjectDeny(projectName string) *Allowlist {
 	c.perProjectDeny[projectName] = denylist
 	c.mu.Unlock()
 
-	return denylist
+	return denylist, nil
 }
 
 // IsBlocked checks if a domain is blocked by the global or project denylist.
 // Returns true if either the global denylist or the project denylist matches the domain.
+// Returns an error if the project denylist loader encounters a config error.
 //
 // Note: Denylists reuse the Allowlist type as a set-membership structure.
 // Calling IsAllowed on a denylist checks whether the domain is in the deny set
@@ -144,48 +168,56 @@ func (c *AllowlistCache) GetProjectDeny(projectName string) *Allowlist {
 // The globalDeny snapshot and GetProjectDeny call are not atomic with respect to
 // concurrent SetGlobalDeny calls, but SetGlobalDeny is only called at startup
 // and on SIGHUP reload, not per-request, so this is safe in practice.
-func (c *AllowlistCache) IsBlocked(projectName, domain string) bool {
+func (c *AllowlistCache) IsBlocked(projectName, domain string) (bool, error) {
 	c.mu.RLock()
 	globalDeny := c.globalDeny
 	c.mu.RUnlock()
 
 	// Check global denylist first (IsAllowed = "is this domain in the deny set?")
 	if globalDeny != nil && globalDeny.IsAllowed(domain) {
-		return true
+		return true, nil
 	}
 
 	// Check project denylist (uses GetProjectDeny which handles loader + fallback).
 	// Skip if projectDeny is the same pointer as globalDeny to avoid double-checking.
-	projectDeny := c.GetProjectDeny(projectName)
+	projectDeny, err := c.GetProjectDeny(projectName)
+	if err != nil {
+		return false, fmt.Errorf("project %q config error: %w", projectName, &ConfigError{Err: err})
+	}
 	if projectDeny != nil && projectDeny != globalDeny && projectDeny.IsAllowed(domain) {
-		return true
+		return true, nil
 	}
 
-	return false
+	return false, nil
 }
 
 // GetProject returns the allowlist for a specific project.
 // If the project is not cached and a projectLoader is set, it loads and caches the allowlist.
-// If no loader is set or loading fails, returns the global allowlist.
-func (c *AllowlistCache) GetProject(projectName string) *Allowlist {
+// If no loader is set, returns the global allowlist.
+// Returns an error if the loader encounters a config error (do NOT fall back to global).
+func (c *AllowlistCache) GetProject(projectName string) (*Allowlist, error) {
 	// First try with read lock
 	c.mu.RLock()
 	if allowlist, ok := c.perProject[projectName]; ok {
 		c.mu.RUnlock()
-		return allowlist
+		return allowlist, nil
 	}
 	loader := c.projectLoader
+	global := c.global
 	c.mu.RUnlock()
 
 	// If no loader, return global
 	if loader == nil {
-		return c.global
+		return global, nil
 	}
 
 	// Load the project allowlist
-	allowlist := loader(projectName)
+	allowlist, err := loader(projectName)
+	if err != nil {
+		return nil, err
+	}
 	if allowlist == nil {
-		return c.global
+		return global, nil
 	}
 
 	// Cache and return
@@ -193,7 +225,7 @@ func (c *AllowlistCache) GetProject(projectName string) *Allowlist {
 	c.perProject[projectName] = allowlist
 	c.mu.Unlock()
 
-	return allowlist
+	return allowlist, nil
 }
 
 // Clear removes all project-specific allowlists and denylists.

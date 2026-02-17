@@ -1,6 +1,7 @@
 package guardian
 
 import (
+	"errors"
 	"testing"
 )
 
@@ -15,7 +16,11 @@ func TestAllowlistCache(t *testing.T) {
 		}
 
 		// GetProject for unknown project returns global
-		if cache.GetProject("unknown") != globalAllowlist {
+		got, err := cache.GetProject("unknown")
+		if err != nil {
+			t.Fatalf("GetProject error: %v", err)
+		}
+		if got != globalAllowlist {
 			t.Error("GetProject for unknown should return global")
 		}
 
@@ -24,12 +29,20 @@ func TestAllowlistCache(t *testing.T) {
 		cache.SetProject("my-project", projectAllowlist)
 
 		// GetProject returns project allowlist
-		if cache.GetProject("my-project") != projectAllowlist {
+		got, err = cache.GetProject("my-project")
+		if err != nil {
+			t.Fatalf("GetProject error: %v", err)
+		}
+		if got != projectAllowlist {
 			t.Error("GetProject should return project allowlist")
 		}
 
 		// Other projects still get global
-		if cache.GetProject("other-project") != globalAllowlist {
+		got, err = cache.GetProject("other-project")
+		if err != nil {
+			t.Fatalf("GetProject error: %v", err)
+		}
+		if got != globalAllowlist {
 			t.Error("GetProject for other project should return global")
 		}
 	})
@@ -58,11 +71,34 @@ func TestAllowlistCache(t *testing.T) {
 		cache.Clear()
 
 		// Projects should now return global
-		if cache.GetProject("project1") != globalAllowlist {
+		got, err := cache.GetProject("project1")
+		if err != nil {
+			t.Fatalf("GetProject error: %v", err)
+		}
+		if got != globalAllowlist {
 			t.Error("after Clear, projects should return global")
 		}
-		if cache.GetProject("project2") != globalAllowlist {
+		got, err = cache.GetProject("project2")
+		if err != nil {
+			t.Fatalf("GetProject error: %v", err)
+		}
+		if got != globalAllowlist {
 			t.Error("after Clear, projects should return global")
+		}
+	})
+
+	t.Run("GetProject propagates loader error", func(t *testing.T) {
+		cache := NewAllowlistCache(NewAllowlist(nil))
+		cache.SetProjectLoader(func(_ string) (*Allowlist, error) {
+			return nil, errors.New("bad config")
+		})
+
+		got, err := cache.GetProject("broken")
+		if err == nil {
+			t.Fatal("expected error from GetProject, got nil")
+		}
+		if got != nil {
+			t.Error("expected nil allowlist on error")
 		}
 	})
 }
@@ -99,7 +135,10 @@ func TestAllowlistCacheDenyBasicOperations(t *testing.T) {
 		projectDeny := NewAllowlist([]string{"bad.example.com"})
 		cache.SetProjectDeny("my-project", projectDeny)
 
-		got := cache.GetProjectDeny("my-project")
+		got, err := cache.GetProjectDeny("my-project")
+		if err != nil {
+			t.Fatalf("GetProjectDeny error: %v", err)
+		}
 		if got != projectDeny {
 			t.Error("GetProjectDeny should return the set project denylist")
 		}
@@ -110,7 +149,10 @@ func TestAllowlistCacheDenyBasicOperations(t *testing.T) {
 		globalDeny := NewAllowlist([]string{"blocked.com"})
 		cache.SetGlobalDeny(globalDeny)
 
-		got := cache.GetProjectDeny("unknown-project")
+		got, err := cache.GetProjectDeny("unknown-project")
+		if err != nil {
+			t.Fatalf("GetProjectDeny error: %v", err)
+		}
 		if got != globalDeny {
 			t.Error("GetProjectDeny with no loader should fall back to globalDeny")
 		}
@@ -119,7 +161,10 @@ func TestAllowlistCacheDenyBasicOperations(t *testing.T) {
 	t.Run("GetProjectDeny with no loader and nil globalDeny returns nil", func(t *testing.T) {
 		cache := NewAllowlistCache(NewAllowlist(nil))
 
-		got := cache.GetProjectDeny("unknown-project")
+		got, err := cache.GetProjectDeny("unknown-project")
+		if err != nil {
+			t.Fatalf("GetProjectDeny error: %v", err)
+		}
 		if got != nil {
 			t.Error("GetProjectDeny with no loader and nil globalDeny should return nil")
 		}
@@ -137,7 +182,10 @@ func TestAllowlistCacheDenyBasicOperations(t *testing.T) {
 		cache.Clear()
 
 		// After clear, project denylists should be gone; with no loader, falls back to globalDeny
-		got := cache.GetProjectDeny("project1")
+		got, err := cache.GetProjectDeny("project1")
+		if err != nil {
+			t.Fatalf("GetProjectDeny error: %v", err)
+		}
 		if got != globalDeny {
 			t.Error("after Clear, GetProjectDeny should fall back to globalDeny")
 		}
@@ -147,6 +195,21 @@ func TestAllowlistCacheDenyBasicOperations(t *testing.T) {
 			t.Error("Clear should not remove the global denylist")
 		}
 	})
+
+	t.Run("GetProjectDeny propagates loader error", func(t *testing.T) {
+		cache := NewAllowlistCache(NewAllowlist(nil))
+		cache.SetDenylistLoader(func(_ string) (*Allowlist, error) {
+			return nil, errors.New("bad config")
+		})
+
+		got, err := cache.GetProjectDeny("broken")
+		if err == nil {
+			t.Fatal("expected error from GetProjectDeny, got nil")
+		}
+		if got != nil {
+			t.Error("expected nil denylist on error")
+		}
+	})
 }
 
 func TestAllowlistCacheDenylistLoader(t *testing.T) {
@@ -154,14 +217,17 @@ func TestAllowlistCacheDenylistLoader(t *testing.T) {
 		cache := NewAllowlistCache(NewAllowlist(nil))
 
 		loadCount := 0
-		loader := func(_ string) *Allowlist {
+		loader := func(_ string) (*Allowlist, error) {
 			loadCount++
-			return NewAllowlist([]string{"denied.example.com", "spam.example.com"})
+			return NewAllowlist([]string{"denied.example.com", "spam.example.com"}), nil
 		}
 		cache.SetDenylistLoader(loader)
 
 		// First call: loader should be invoked
-		denylist := cache.GetProjectDeny("my-project")
+		denylist, err := cache.GetProjectDeny("my-project")
+		if err != nil {
+			t.Fatalf("GetProjectDeny error: %v", err)
+		}
 		if denylist == nil {
 			t.Fatal("GetProjectDeny should return a denylist from the loader")
 		}
@@ -178,7 +244,10 @@ func TestAllowlistCacheDenylistLoader(t *testing.T) {
 		}
 
 		// Second call: should use cache, not call loader again
-		denylist2 := cache.GetProjectDeny("my-project")
+		denylist2, err := cache.GetProjectDeny("my-project")
+		if err != nil {
+			t.Fatalf("GetProjectDeny error: %v", err)
+		}
 		if loadCount != 1 {
 			t.Errorf("loader should NOT have been called again, got %d calls", loadCount)
 		}
@@ -192,12 +261,15 @@ func TestAllowlistCacheDenylistLoader(t *testing.T) {
 		globalDeny := NewAllowlist([]string{"global-denied.com"})
 		cache.SetGlobalDeny(globalDeny)
 
-		loader := func(_ string) *Allowlist {
-			return nil
+		loader := func(_ string) (*Allowlist, error) {
+			return nil, nil
 		}
 		cache.SetDenylistLoader(loader)
 
-		got := cache.GetProjectDeny("my-project")
+		got, err := cache.GetProjectDeny("my-project")
+		if err != nil {
+			t.Fatalf("GetProjectDeny error: %v", err)
+		}
 		if got != globalDeny {
 			t.Error("loader returning nil should fall back to globalDeny")
 		}
@@ -271,8 +343,8 @@ func TestAllowlistCacheIsBlocked(t *testing.T) {
 			name:        "project denylist via loader blocks domain",
 			globalDeny:  nil,
 			projectDeny: nil,
-			denyLoader: func(_ string) *Allowlist {
-				return NewAllowlist([]string{"loaded-bad.com"})
+			denyLoader: func(_ string) (*Allowlist, error) {
+				return NewAllowlist([]string{"loaded-bad.com"}), nil
 			},
 			project:     "my-project",
 			domain:      "loaded-bad.com",
@@ -282,8 +354,8 @@ func TestAllowlistCacheIsBlocked(t *testing.T) {
 			name:        "domain not blocked by project denylist via loader",
 			globalDeny:  nil,
 			projectDeny: nil,
-			denyLoader: func(_ string) *Allowlist {
-				return NewAllowlist([]string{"loaded-bad.com"})
+			denyLoader: func(_ string) (*Allowlist, error) {
+				return NewAllowlist([]string{"loaded-bad.com"}), nil
 			},
 			project:     "my-project",
 			domain:      "safe.com",
@@ -305,11 +377,30 @@ func TestAllowlistCacheIsBlocked(t *testing.T) {
 				cache.SetDenylistLoader(tc.denyLoader)
 			}
 
-			got := cache.IsBlocked(tc.project, tc.domain)
+			got, err := cache.IsBlocked(tc.project, tc.domain)
+			if err != nil {
+				t.Fatalf("IsBlocked error: %v", err)
+			}
 			if got != tc.wantBlocked {
 				t.Errorf("IsBlocked(%q, %q) = %v, want %v",
 					tc.project, tc.domain, got, tc.wantBlocked)
 			}
 		})
+	}
+}
+
+func TestAllowlistCacheIsBlocked_PropagatesLoaderError(t *testing.T) {
+	cache := NewAllowlistCache(NewAllowlist(nil))
+	cache.SetDenylistLoader(func(_ string) (*Allowlist, error) {
+		return nil, errors.New("corrupt decisions file")
+	})
+
+	_, err := cache.IsBlocked("broken-project", "example.com")
+	if err == nil {
+		t.Fatal("expected error from IsBlocked, got nil")
+	}
+	var cfgErr *ConfigError
+	if !errors.As(err, &cfgErr) {
+		t.Errorf("expected ConfigError, got %T: %v", err, err)
 	}
 }

@@ -399,7 +399,10 @@ func TestDomainApproverImpl_RequestApproval_SessionScope(t *testing.T) {
 	}
 
 	// Verify domain was added to cached allowlist
-	projectAllowlist := cache.GetProject("test-project")
+	projectAllowlist, err := cache.GetProject("test-project")
+	if err != nil {
+		t.Fatalf("GetProject error: %v", err)
+	}
 	if !projectAllowlist.IsAllowed("example.com") {
 		t.Errorf("Domain not added to cached allowlist")
 	}

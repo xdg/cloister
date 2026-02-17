@@ -52,7 +52,7 @@ func TestProxyPortHandling_StaticAllowlist(t *testing.T) {
 			req.Host = tt.connectHost
 
 			// Check if allowlist matches (simulating proxy.handleConnect logic)
-			_ = proxy.resolveRequest(req)
+			_, _ = proxy.resolveRequest(req)
 			matched := proxy.Allowlist.IsAllowed(tt.connectHost)
 
 			if matched != tt.shouldMatch {
