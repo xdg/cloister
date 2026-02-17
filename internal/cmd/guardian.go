@@ -503,7 +503,12 @@ func setupDomainApproval(gs *guardianState, _ *guardian.ProxyServer) domainAppro
 	domainQueue := approval.NewDomainQueueWithTimeout(approvalTimeout)
 	sessionAllowlist := guardian.NewSessionAllowlist()
 	sessionDenylist := guardian.NewSessionDenylist()
-	domainApprover := guardian.NewDomainApprover(domainQueue, sessionAllowlist, sessionDenylist, gs.allowlistCache, gs.auditLogger)
+	recorder := &guardian.LegacyDecisionRecorder{
+		SessionAllowlist: sessionAllowlist,
+		SessionDenylist:  sessionDenylist,
+		AllowlistCache:   gs.allowlistCache,
+	}
+	domainApprover := guardian.NewDomainApprover(domainQueue, recorder, gs.auditLogger)
 	clog.Info("domain approval enabled (timeout: %v)", approvalTimeout)
 
 	return domainApprovalResult{

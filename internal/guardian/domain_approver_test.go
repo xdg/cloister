@@ -8,45 +8,32 @@ import (
 	"time"
 
 	"github.com/xdg/cloister/internal/audit"
-	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/guardian/approval"
 )
 
-// mockSessionDenylist implements SessionDenylist for testing.
-type mockSessionDenylist struct {
-	mu      sync.Mutex
-	blocked map[string]map[string]bool // token -> domain -> bool
+// mockDecisionRecorder implements DecisionRecorder for testing.
+type mockDecisionRecorder struct {
+	mu    sync.Mutex
+	calls []RecordDecisionParams
 }
 
-func newMockSessionDenylist() *mockSessionDenylist {
-	return &mockSessionDenylist{
-		blocked: make(map[string]map[string]bool),
-	}
+func newMockDecisionRecorder() *mockDecisionRecorder {
+	return &mockDecisionRecorder{}
 }
 
-func (m *mockSessionDenylist) IsBlocked(token, domain string) bool {
+func (m *mockDecisionRecorder) RecordDecision(p RecordDecisionParams) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if domains, ok := m.blocked[token]; ok {
-		return domains[domain]
-	}
-	return false
-}
-
-func (m *mockSessionDenylist) Add(token, domain string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.blocked[token] == nil {
-		m.blocked[token] = make(map[string]bool)
-	}
-	m.blocked[token][domain] = true
+	m.calls = append(m.calls, p)
 	return nil
 }
 
-func (m *mockSessionDenylist) Clear(token string) {
+func (m *mockDecisionRecorder) getCalls() []RecordDecisionParams {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	delete(m.blocked, token)
+	result := make([]RecordDecisionParams, len(m.calls))
+	copy(result, m.calls)
+	return result
 }
 
 func TestValidateDomain(t *testing.T) {
@@ -270,10 +257,9 @@ func findSubstring(s, substr string) bool {
 
 func TestDomainApproverImpl_RequestApproval_Timeout(t *testing.T) {
 	queue := approval.NewDomainQueueWithTimeout(50 * time.Millisecond)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request and wait for timeout
 	result, err := approver.RequestApproval("test-project", "test-cloister", "example.com:443", "test-token")
@@ -288,10 +274,9 @@ func TestDomainApproverImpl_RequestApproval_Timeout(t *testing.T) {
 
 func TestDomainApproverImpl_RequestApproval_Denied(t *testing.T) {
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -340,11 +325,9 @@ func TestDomainApproverImpl_RequestApproval_Denied(t *testing.T) {
 
 func TestDomainApproverImpl_RequestApproval_SessionScope(t *testing.T) {
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
-	cache.SetProject("test-project", NewAllowlist([]string{}))
+	recorder := newMockDecisionRecorder()
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -393,27 +376,34 @@ func TestDomainApproverImpl_RequestApproval_SessionScope(t *testing.T) {
 		t.Errorf("Expected Scope=session, got %s", result.Scope)
 	}
 
-	// Verify domain was added to session allowlist (using token, not project)
-	if !sessionAllowlist.IsAllowed("test-token", "example.com") {
-		t.Errorf("Domain not added to session allowlist")
+	// Verify recorder was called with correct params
+	calls := recorder.getCalls()
+	if len(calls) != 1 {
+		t.Fatalf("Expected 1 recorder call, got %d", len(calls))
 	}
-
-	// Verify domain was added to cached allowlist
-	projectAllowlist, err := cache.GetProject("test-project")
-	if err != nil {
-		t.Fatalf("GetProject error: %v", err)
+	call := calls[0]
+	if call.Token != "test-token" {
+		t.Errorf("Expected Token=test-token, got %s", call.Token)
 	}
-	if !projectAllowlist.IsAllowed("example.com") {
-		t.Errorf("Domain not added to cached allowlist")
+	if call.Project != "test-project" {
+		t.Errorf("Expected Project=test-project, got %s", call.Project)
+	}
+	if call.Domain != "example.com" {
+		t.Errorf("Expected Domain=example.com, got %s", call.Domain)
+	}
+	if call.Scope != ScopeSession {
+		t.Errorf("Expected Scope=session, got %s", call.Scope)
+	}
+	if !call.Allowed {
+		t.Errorf("Expected Allowed=true, got false")
 	}
 }
 
 func TestDomainApproverImpl_RequestApproval_ProjectScope(t *testing.T) {
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -457,19 +447,18 @@ func TestDomainApproverImpl_RequestApproval_ProjectScope(t *testing.T) {
 		t.Errorf("Expected Scope=project, got %s", result.Scope)
 	}
 
-	// For project scope, the domain should NOT be added to session allowlist
-	// (ConfigPersister handles persistence, cache reload happens via SIGHUP)
-	if sessionAllowlist.IsAllowed("test-token", "example.com") {
-		t.Errorf("Domain should not be in session allowlist for project scope")
+	// For project scope, recorder should NOT be called (ConfigPersister handles it)
+	calls := recorder.getCalls()
+	if len(calls) != 0 {
+		t.Errorf("Expected 0 recorder calls for project scope approval, got %d", len(calls))
 	}
 }
 
 func TestDomainApproverImpl_RequestApproval_GlobalScope(t *testing.T) {
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -513,20 +502,18 @@ func TestDomainApproverImpl_RequestApproval_GlobalScope(t *testing.T) {
 		t.Errorf("Expected Scope=global, got %s", result.Scope)
 	}
 
-	// For global scope, the domain should NOT be added to session allowlist
-	// (ConfigPersister handles persistence, cache reload happens via SIGHUP)
-	if sessionAllowlist.IsAllowed("test-token", "example.com") {
-		t.Errorf("Domain should not be in session allowlist for global scope")
+	// For global scope, recorder should NOT be called (ConfigPersister handles it)
+	calls := recorder.getCalls()
+	if len(calls) != 0 {
+		t.Errorf("Expected 0 recorder calls for global scope approval, got %d", len(calls))
 	}
 }
 
 func TestRequestApproval_DenialSessionScope(t *testing.T) {
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	sessionDenylist := newMockSessionDenylist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
-	approver := NewDomainApprover(queue, sessionAllowlist, sessionDenylist, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -568,21 +555,31 @@ func TestRequestApproval_DenialSessionScope(t *testing.T) {
 		t.Errorf("Expected Approved=false for denial, got true")
 	}
 
-	// Verify domain was added to session denylist
-	if !sessionDenylist.IsBlocked("test-token", "evil.example.com") {
-		t.Errorf("Domain not added to session denylist")
+	// Verify recorder was called with session denial
+	calls := recorder.getCalls()
+	if len(calls) != 1 {
+		t.Fatalf("Expected 1 recorder call, got %d", len(calls))
+	}
+	call := calls[0]
+	if call.Token != "test-token" {
+		t.Errorf("Expected Token=test-token, got %s", call.Token)
+	}
+	if call.Domain != "evil.example.com" {
+		t.Errorf("Expected Domain=evil.example.com, got %s", call.Domain)
+	}
+	if call.Scope != ScopeSession {
+		t.Errorf("Expected Scope=session, got %s", call.Scope)
+	}
+	if call.Allowed {
+		t.Errorf("Expected Allowed=false, got true")
 	}
 }
 
 func TestRequestApproval_DenialProjectScope(t *testing.T) {
-	// Set up temp config dir for decisions persistence
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -624,30 +621,34 @@ func TestRequestApproval_DenialProjectScope(t *testing.T) {
 		t.Errorf("Expected Approved=false for denial, got true")
 	}
 
-	// Verify the domain was persisted to the project decisions file
-	decisions, loadErr := config.LoadProjectDecisions("test-project")
-	if loadErr != nil {
-		t.Fatalf("Failed to load project decisions: %v", loadErr)
+	// Verify recorder was called with project denial
+	calls := recorder.getCalls()
+	if len(calls) != 1 {
+		t.Fatalf("Expected 1 recorder call, got %d", len(calls))
 	}
-	deniedDomains := decisions.DeniedDomains()
-	if len(deniedDomains) != 1 || deniedDomains[0] != "evil.example.com" {
-		t.Errorf("Expected DeniedDomains=[evil.example.com], got %v", deniedDomains)
+	call := calls[0]
+	if call.Project != "test-project" {
+		t.Errorf("Expected Project=test-project, got %s", call.Project)
 	}
-	deniedPatterns := decisions.DeniedPatterns()
-	if len(deniedPatterns) != 0 {
-		t.Errorf("Expected empty DeniedPatterns, got %v", deniedPatterns)
+	if call.Domain != "evil.example.com" {
+		t.Errorf("Expected Domain=evil.example.com, got %s", call.Domain)
+	}
+	if call.Scope != ScopeProject {
+		t.Errorf("Expected Scope=project, got %s", call.Scope)
+	}
+	if call.Allowed {
+		t.Errorf("Expected Allowed=false, got true")
+	}
+	if call.IsPattern {
+		t.Errorf("Expected IsPattern=false, got true")
 	}
 }
 
 func TestRequestApproval_DenialGlobalScope(t *testing.T) {
-	// Set up temp config dir for decisions persistence
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -689,30 +690,28 @@ func TestRequestApproval_DenialGlobalScope(t *testing.T) {
 		t.Errorf("Expected Approved=false for denial, got true")
 	}
 
-	// Verify the domain was persisted to the global decisions file
-	decisions, loadErr := config.LoadGlobalDecisions()
-	if loadErr != nil {
-		t.Fatalf("Failed to load global decisions: %v", loadErr)
+	// Verify recorder was called with global denial
+	calls := recorder.getCalls()
+	if len(calls) != 1 {
+		t.Fatalf("Expected 1 recorder call, got %d", len(calls))
 	}
-	deniedDomains := decisions.DeniedDomains()
-	if len(deniedDomains) != 1 || deniedDomains[0] != "evil.example.com" {
-		t.Errorf("Expected DeniedDomains=[evil.example.com], got %v", deniedDomains)
+	call := calls[0]
+	if call.Domain != "evil.example.com" {
+		t.Errorf("Expected Domain=evil.example.com, got %s", call.Domain)
 	}
-	deniedPatterns := decisions.DeniedPatterns()
-	if len(deniedPatterns) != 0 {
-		t.Errorf("Expected empty DeniedPatterns, got %v", deniedPatterns)
+	if call.Scope != ScopeGlobal {
+		t.Errorf("Expected Scope=global, got %s", call.Scope)
+	}
+	if call.Allowed {
+		t.Errorf("Expected Allowed=false, got true")
 	}
 }
 
 func TestRequestApproval_DenialWithWildcard(t *testing.T) {
-	// Set up temp config dir for decisions persistence
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -755,30 +754,34 @@ func TestRequestApproval_DenialWithWildcard(t *testing.T) {
 		t.Errorf("Expected Approved=false for denial, got true")
 	}
 
-	// Verify the pattern was persisted to Proxy.Deny (not as a domain)
-	decisions, loadErr := config.LoadProjectDecisions("test-project")
-	if loadErr != nil {
-		t.Fatalf("Failed to load project decisions: %v", loadErr)
+	// Verify recorder was called with pattern
+	calls := recorder.getCalls()
+	if len(calls) != 1 {
+		t.Fatalf("Expected 1 recorder call, got %d", len(calls))
 	}
-	deniedPatterns := decisions.DeniedPatterns()
-	if len(deniedPatterns) != 1 || deniedPatterns[0] != "*.evil.example.com" {
-		t.Errorf("Expected DeniedPatterns=[*.evil.example.com], got %v", deniedPatterns)
+	call := calls[0]
+	if call.Domain != "*.evil.example.com" {
+		t.Errorf("Expected Domain=*.evil.example.com, got %s", call.Domain)
 	}
-	deniedDomains := decisions.DeniedDomains()
-	if len(deniedDomains) != 0 {
-		t.Errorf("Expected empty DeniedDomains, got %v", deniedDomains)
+	if call.Scope != ScopeProject {
+		t.Errorf("Expected Scope=project, got %s", call.Scope)
+	}
+	if !call.IsPattern {
+		t.Errorf("Expected IsPattern=true, got false")
+	}
+	if call.Allowed {
+		t.Errorf("Expected Allowed=false, got true")
 	}
 }
 
 func TestRequestApproval_DenialAuditLog(t *testing.T) {
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
 	var buf bytes.Buffer
 	auditLogger := audit.NewLogger(&buf)
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, auditLogger)
+	approver := NewDomainApprover(queue, recorder, auditLogger)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -834,13 +837,12 @@ func TestRequestApproval_DenialAuditLog(t *testing.T) {
 
 func TestRequestApproval_DenialAuditLog_WithPattern(t *testing.T) {
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
 	var buf bytes.Buffer
 	auditLogger := audit.NewLogger(&buf)
 
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, auditLogger)
+	approver := NewDomainApprover(queue, recorder, auditLogger)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -897,11 +899,10 @@ func TestRequestApproval_DenialAuditLog_WithPattern(t *testing.T) {
 
 func TestRequestApproval_DenialNoAuditLog_NilLogger(t *testing.T) {
 	queue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	cache := NewAllowlistCache(NewDefaultAllowlist())
+	recorder := newMockDecisionRecorder()
 
 	// No audit logger (nil)
-	approver := NewDomainApprover(queue, sessionAllowlist, nil, cache, nil)
+	approver := NewDomainApprover(queue, recorder, nil)
 
 	// Submit request in background
 	done := make(chan struct{})
@@ -940,5 +941,11 @@ func TestRequestApproval_DenialNoAuditLog_NilLogger(t *testing.T) {
 	}
 	if result.Approved {
 		t.Errorf("Expected Approved=false for denial, got true")
+	}
+
+	// "once" scope should not record anything
+	calls := recorder.getCalls()
+	if len(calls) != 0 {
+		t.Errorf("Expected 0 recorder calls for 'once' scope denial, got %d", len(calls))
 	}
 }

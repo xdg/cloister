@@ -153,12 +153,12 @@ Rewire `DomainApproverImpl` and `approval.Server` to use
 
 ### 4.1 Simplify DomainApproverImpl
 
-- [ ] Replace `sessionAllowlist`, `sessionDenylist`, `allowlistCache` fields with `PolicyEngine` (or `PolicyChecker` + `DecisionRecorder` interface)
-- [ ] `handleApproval` → call `pe.RecordDecision(token, project, domain, scope, true, false)`
-- [ ] `handleDenial` → call `pe.RecordDecision(token, project, domain, scope, false, isPattern)`
-- [ ] Delete `persistDenial`, `updateDenylistCache`, `containsDenyEntry` methods
-- [ ] Update `NewDomainApprover` signature
-- [ ] **Test**: Update `domain_approver_test.go` — mock PolicyEngine instead of mocking SessionAllowlist/Denylist/AllowlistCache
+- [x] Replace `sessionAllowlist`, `sessionDenylist`, `allowlistCache` fields with `PolicyEngine` (or `PolicyChecker` + `DecisionRecorder` interface)
+- [x] `handleApproval` → call `pe.RecordDecision(token, project, domain, scope, true, false)`
+- [x] `handleDenial` → call `pe.RecordDecision(token, project, domain, scope, false, isPattern)`
+- [x] Delete `persistDenial`, `updateDenylistCache`, `containsDenyEntry` methods
+- [x] Update `NewDomainApprover` signature
+- [x] **Test**: Update `domain_approver_test.go` — mock PolicyEngine instead of mocking SessionAllowlist/Denylist/AllowlistCache
 
 ### 4.2 Replace ConfigPersister on approval.Server
 

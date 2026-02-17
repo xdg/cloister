@@ -74,6 +74,12 @@ type PolicyChecker interface {
 	Check(token, project, domain string) Decision
 }
 
+// DecisionRecorder persists a domain access decision at the appropriate scope.
+// *PolicyEngine implements this interface via its RecordDecision method.
+type DecisionRecorder interface {
+	RecordDecision(RecordDecisionParams) error
+}
+
 // PolicyEngine owns all domain access policy state across three tiers:
 // global, per-project, and per-token (session). It evaluates domain access
 // using a deny-first, then allow, then fallback-to-AskHuman strategy.

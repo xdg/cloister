@@ -128,8 +128,14 @@ func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTest
 	sessionAllowlist := NewSessionAllowlist()
 	sessionDenylist := NewSessionDenylist()
 
-	// Create domain approver
-	domainApprover := NewDomainApprover(domainQueue, sessionAllowlist, sessionDenylist, allowlistCache, nil)
+	// Create domain approver with a legacy bridge recorder that updates the
+	// session allowlist/denylist and allowlist cache for the legacy proxy path.
+	recorder := &LegacyDecisionRecorder{
+		SessionAllowlist: sessionAllowlist,
+		SessionDenylist:  sessionDenylist,
+		AllowlistCache:   allowlistCache,
+	}
+	domainApprover := NewDomainApprover(domainQueue, recorder, nil)
 
 	// Create tunnel handler mock (can't do real upstream connections in unit tests).
 	tunnelHandler := &mockTunnelHandler{}

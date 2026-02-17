@@ -96,45 +96,31 @@ func validateHostnameChars(host string) error {
 // DomainApproverImpl implements the DomainApprover interface using DomainQueue
 // to request human approval for unlisted domains.
 type DomainApproverImpl struct {
-	queue            *approval.DomainQueue
-	sessionAllowlist SessionAllowlist
-	sessionDenylist  SessionDenylist
-	allowlistCache   *AllowlistCache
-	auditLogger      *audit.Logger
+	queue       *approval.DomainQueue
+	recorder    DecisionRecorder
+	auditLogger *audit.Logger
 }
 
 // NewDomainApprover creates a new DomainApproverImpl.
-// The sessionAllowlist and allowlistCache parameters are required for updating
-// the in-memory allowlists after approval. The sessionDenylist parameter is
-// optional (may be nil) and is used for session-scoped denial persistence.
-// The auditLogger parameter is optional (may be nil) and is used for logging
-// domain denial events with scope and pattern context.
-func NewDomainApprover(queue *approval.DomainQueue, sessionAllowlist SessionAllowlist, sessionDenylist SessionDenylist, allowlistCache *AllowlistCache, auditLogger *audit.Logger) *DomainApproverImpl {
+// The recorder parameter handles all decision persistence (session, project,
+// global scopes) via RecordDecision. The auditLogger parameter is optional
+// (may be nil) and is used for logging domain denial events.
+func NewDomainApprover(queue *approval.DomainQueue, recorder DecisionRecorder, auditLogger *audit.Logger) *DomainApproverImpl {
 	return &DomainApproverImpl{
-		queue:            queue,
-		sessionAllowlist: sessionAllowlist,
-		sessionDenylist:  sessionDenylist,
-		allowlistCache:   allowlistCache,
-		auditLogger:      auditLogger,
+		queue:       queue,
+		recorder:    recorder,
+		auditLogger: auditLogger,
 	}
 }
 
 // RequestApproval submits a domain approval request and blocks until the human
 // responds with approval/denial or the request times out.
 //
-// The token parameter is used for session allowlist/denylist updates (token-based
-// isolation), while project is used for the approval queue/UI display.
+// The token parameter identifies the session for token-scoped decisions, while
+// project is used for the approval queue/UI display and project-scoped persistence.
 //
-// On approval:
-//   - "session" scope: adds domain to SessionAllowlist and project's cached Allowlist
-//   - "project"/"global" scope: ConfigPersister handles persistence; AllowlistCache
-//     is invalidated/reloaded by the guardian's config reloader
-//
-// On denial:
-//   - "once" scope: no persistence, immediate rejection only
-//   - "session" scope: adds domain (or wildcard pattern) to SessionDenylist
-//   - "project"/"global" scope: persists to decisions file via persistDenial
-//   - All denial scopes log an audit event (project, cloister, domain, scope, pattern)
+// On approval/denial, delegates to DecisionRecorder.RecordDecision with the
+// appropriate scope and parameters. Denial events are also logged via auditLogger.
 //
 // Returns an error if the queue add operation fails, otherwise returns the
 // approval result (approved/denied/timeout).
@@ -193,24 +179,21 @@ func (d *DomainApproverImpl) handleDenial(project, cloister, domain, token strin
 		isPattern = true
 	}
 
-	switch resp.Scope {
-	case "session":
-		if d.sessionDenylist != nil && token != "" {
-			if err := d.sessionDenylist.Add(token, target); err != nil {
-				clog.Warn("failed to add %s to session denylist: %v", target, err)
-			}
-		}
-	case "project":
-		if err := d.persistDenial("project", project, target, isPattern); err != nil {
-			clog.Warn("failed to persist project denial for %s: %v", target, err)
-		} else {
-			d.updateDenylistCache("project", project, target, isPattern)
-		}
-	case "global":
-		if err := d.persistDenial("global", "", target, isPattern); err != nil {
-			clog.Warn("failed to persist global denial for %s: %v", target, err)
-		} else {
-			d.updateDenylistCache("global", "", target, isPattern)
+	scope := Scope(resp.Scope)
+	if scope == ScopeOnce {
+		return
+	}
+
+	if d.recorder != nil {
+		if err := d.recorder.RecordDecision(RecordDecisionParams{
+			Token:     token,
+			Project:   project,
+			Domain:    target,
+			Scope:     scope,
+			Allowed:   false,
+			IsPattern: isPattern,
+		}); err != nil {
+			clog.Warn("failed to record denial for %s (scope=%s): %v", target, scope, err)
 		}
 	}
 }
@@ -218,28 +201,82 @@ func (d *DomainApproverImpl) handleDenial(project, cloister, domain, token strin
 // handleApproval processes an approved domain response with scope-based caching.
 func (d *DomainApproverImpl) handleApproval(project, domain, token string, resp approval.DomainResponse) {
 	if resp.Scope != "session" {
-		// project/global scopes are handled by ConfigPersister + config reloader.
+		// project/global scopes are handled by ConfigPersister on the
+		// approval.Server side; DomainApprover only records session approvals.
 		return
 	}
-	if d.sessionAllowlist != nil && token != "" {
-		if err := d.sessionAllowlist.Add(token, domain); err != nil {
-			clog.Warn("failed to add domain %s to session allowlist for token: %v", domain, err)
-		}
-	}
-	if d.allowlistCache != nil {
-		projectAllowlist, err := d.allowlistCache.GetProject(project)
-		if err != nil {
-			clog.Warn("failed to get project allowlist for %s: %v", project, err)
-		} else if projectAllowlist != nil {
-			projectAllowlist.Add([]string{domain})
+	if d.recorder != nil {
+		if err := d.recorder.RecordDecision(RecordDecisionParams{
+			Token:   token,
+			Project: project,
+			Domain:  domain,
+			Scope:   ScopeSession,
+			Allowed: true,
+		}); err != nil {
+			clog.Warn("failed to record session approval for %s: %v", domain, err)
 		}
 	}
 }
 
-// persistDenial writes a denial to the project or global decisions file.
-// If isPattern is true, the target is added as a Pattern entry to Proxy.Deny;
-// otherwise as a Domain entry. Duplicate entries are skipped.
-func (d *DomainApproverImpl) persistDenial(scope, project, target string, isPattern bool) error {
+// LegacyDecisionRecorder bridges the DecisionRecorder interface with the old
+// SessionAllowlist, SessionDenylist, and AllowlistCache types. This allows
+// DomainApproverImpl to work with the legacy proxy path during the migration
+// to PolicyEngine. It will be removed in Phase 5 when guardian.go is rewired
+// to use PolicyEngine directly.
+type LegacyDecisionRecorder struct {
+	SessionAllowlist SessionAllowlist
+	SessionDenylist  SessionDenylist
+	AllowlistCache   *AllowlistCache
+}
+
+// RecordDecision records a domain access decision using legacy session objects
+// and allowlist cache.
+func (r *LegacyDecisionRecorder) RecordDecision(p RecordDecisionParams) error {
+	switch p.Scope {
+	case ScopeSession:
+		return r.recordSession(p)
+	case ScopeProject:
+		if !p.Allowed {
+			return r.persistAndCacheDenial("project", p.Project, p.Domain, p.IsPattern)
+		}
+	case ScopeGlobal:
+		if !p.Allowed {
+			return r.persistAndCacheDenial("global", "", p.Domain, p.IsPattern)
+		}
+	}
+	return nil
+}
+
+// recordSession handles session-scoped allow/deny decisions.
+func (r *LegacyDecisionRecorder) recordSession(p RecordDecisionParams) error {
+	if p.Allowed {
+		return r.recordSessionAllow(p.Token, p.Project, p.Domain)
+	}
+	if r.SessionDenylist != nil && p.Token != "" {
+		return r.SessionDenylist.Add(p.Token, p.Domain)
+	}
+	return nil
+}
+
+// recordSessionAllow adds a domain to the session allowlist and project cache.
+func (r *LegacyDecisionRecorder) recordSessionAllow(token, project, domain string) error {
+	if r.SessionAllowlist != nil && token != "" {
+		if err := r.SessionAllowlist.Add(token, domain); err != nil {
+			return err
+		}
+	}
+	if r.AllowlistCache != nil {
+		projectAllowlist, err := r.AllowlistCache.GetProject(project)
+		if err == nil && projectAllowlist != nil {
+			projectAllowlist.Add([]string{domain})
+		}
+	}
+	return nil
+}
+
+// persistAndCacheDenial writes a denial to the decisions file and updates the
+// in-memory cache for the legacy proxy path.
+func (r *LegacyDecisionRecorder) persistAndCacheDenial(scope, project, target string, isPattern bool) error {
 	entry := config.AllowEntry{}
 	if isPattern {
 		entry.Pattern = target
@@ -253,26 +290,34 @@ func (d *DomainApproverImpl) persistDenial(scope, project, target string, isPatt
 		if err != nil {
 			return fmt.Errorf("load project decisions: %w", err)
 		}
-		if !containsDenyEntry(decisions.Proxy.Deny, entry) {
+		if !containsAllowEntry(decisions.Proxy.Deny, entry) {
 			decisions.Proxy.Deny = append(decisions.Proxy.Deny, entry)
 		}
-		return config.WriteProjectDecisions(project, decisions)
+		if err := config.WriteProjectDecisions(project, decisions); err != nil {
+			return err
+		}
 	case "global":
 		decisions, err := config.LoadGlobalDecisions()
 		if err != nil {
 			return fmt.Errorf("load global decisions: %w", err)
 		}
-		if !containsDenyEntry(decisions.Proxy.Deny, entry) {
+		if !containsAllowEntry(decisions.Proxy.Deny, entry) {
 			decisions.Proxy.Deny = append(decisions.Proxy.Deny, entry)
 		}
-		return config.WriteGlobalDecisions(decisions)
-	default:
-		return fmt.Errorf("unknown scope: %s", scope)
+		if err := config.WriteGlobalDecisions(decisions); err != nil {
+			return err
+		}
 	}
+
+	// Update in-memory cache for immediate effect.
+	if r.AllowlistCache != nil {
+		r.updateDenylistCache(scope, project, target, isPattern)
+	}
+	return nil
 }
 
-// containsDenyEntry checks if an AllowEntry already exists in the slice.
-func containsDenyEntry(entries []config.AllowEntry, entry config.AllowEntry) bool {
+// containsAllowEntry checks if an AllowEntry already exists in the slice.
+func containsAllowEntry(entries []config.AllowEntry, entry config.AllowEntry) bool {
 	for _, e := range entries {
 		if e.Domain == entry.Domain && e.Pattern == entry.Pattern {
 			return true
@@ -282,46 +327,42 @@ func containsDenyEntry(entries []config.AllowEntry, entry config.AllowEntry) boo
 }
 
 // updateDenylistCache updates the in-memory AllowlistCache denylist after a
-// denial is persisted to disk. This ensures subsequent proxy requests see the
-// denial immediately without waiting for a SIGHUP/config reload.
-func (d *DomainApproverImpl) updateDenylistCache(scope, project, target string, isPattern bool) {
-	if d.allowlistCache == nil {
-		return
-	}
+// denial is persisted to disk.
+func (r *LegacyDecisionRecorder) updateDenylistCache(scope, project, target string, isPattern bool) {
+	entries := legacyDenyEntries(target, isPattern)
 
 	switch scope {
 	case "global":
-		denylist := d.allowlistCache.GetGlobalDeny()
+		denylist := r.AllowlistCache.GetGlobalDeny()
 		if denylist == nil {
-			d.allowlistCache.SetGlobalDeny(NewAllowlistFromConfig(denyEntry(target, isPattern)))
+			r.AllowlistCache.SetGlobalDeny(NewAllowlistFromConfig(entries))
 		} else {
-			addToDenylist(denylist, target, isPattern)
+			addToLegacyDenylist(denylist, target, isPattern)
 		}
 	case "project":
-		denylist, err := d.allowlistCache.GetProjectDeny(project)
+		denylist, err := r.AllowlistCache.GetProjectDeny(project)
 		if err != nil {
-			clog.Warn("failed to get project denylist for %s: %v", project, err)
 			return
 		}
-		globalDeny := d.allowlistCache.GetGlobalDeny()
+		globalDeny := r.AllowlistCache.GetGlobalDeny()
 		if denylist == nil || denylist == globalDeny {
-			d.allowlistCache.SetProjectDeny(project, NewAllowlistFromConfig(denyEntry(target, isPattern)))
+			r.AllowlistCache.SetProjectDeny(project, NewAllowlistFromConfig(entries))
 		} else {
-			addToDenylist(denylist, target, isPattern)
+			addToLegacyDenylist(denylist, target, isPattern)
 		}
 	}
 }
 
-// denyEntry creates a single-entry AllowEntry slice for denylist creation.
-func denyEntry(target string, isPattern bool) []config.AllowEntry {
+// legacyDenyEntries creates a single-entry AllowEntry slice for denylist creation.
+func legacyDenyEntries(target string, isPattern bool) []config.AllowEntry {
 	if isPattern {
 		return []config.AllowEntry{{Pattern: target}}
 	}
 	return []config.AllowEntry{{Domain: target}}
 }
 
-// addToDenylist adds a domain or pattern to an existing denylist.
-func addToDenylist(denylist *Allowlist, target string, isPattern bool) {
+// addToLegacyDenylist adds a domain or pattern to an existing denylist.
+func addToLegacyDenylist(denylist *Allowlist, target string, isPattern bool) {
 	if isPattern {
 		denylist.AddPatterns([]string{target})
 	} else {
