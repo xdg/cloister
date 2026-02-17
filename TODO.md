@@ -162,11 +162,11 @@ Rewire `DomainApproverImpl` and `approval.Server` to use
 
 ### 4.2 Replace ConfigPersister on approval.Server
 
-- [ ] The `approval.Server.ConfigPersister` interface is used for project/global scope approvals
-- [ ] Option A: PolicyEngine implements `approval.ConfigPersister` interface directly (4 methods map to RecordDecision calls)
-- [ ] Option B: Thin adapter that wraps PolicyEngine and implements ConfigPersister
-- [ ] Either way, `ConfigPersisterImpl` type is eliminated
-- [ ] **Test**: Update `approval/server_test.go` mock to match new interface (or keep existing interface if using adapter)
+- [x] The `approval.Server.ConfigPersister` interface is used for project/global scope approvals
+- [x] Option A: PolicyEngine implements `approval.ConfigPersister` interface directly (4 methods map to RecordDecision calls) — skipped in favor of Option B
+- [x] Option B: Thin adapter that wraps PolicyEngine and implements ConfigPersister — implemented as `PolicyConfigPersister` in `policy_config_persister.go`
+- [x] Either way, `ConfigPersisterImpl` type is eliminated — deferred to Phase 6; `ConfigPersisterImpl` still used by legacy code in `cmd/guardian.go`
+- [x] **Test**: Update `approval/server_test.go` mock to match new interface (or keep existing interface if using adapter) — interface unchanged; `approval/server_test.go` unaffected; adapter tested in `policy_config_persister_test.go`
 
 ### 4.3 Wire token revocation
 
