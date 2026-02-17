@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,14 +16,22 @@ import (
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian/approval"
 	"github.com/xdg/cloister/internal/guardian/patterns"
-	"github.com/xdg/cloister/internal/testutil"
 	"github.com/xdg/cloister/internal/token"
 )
 
 // noProxyClient returns an HTTP client that doesn't use any proxy.
-// Delegates to testutil.NoProxyClient for the canonical implementation.
+// This is necessary for tests running inside the cloister container where
+// HTTP_PROXY is set to the guardian proxy.
 func noProxyClient() *http.Client {
-	return testutil.NoProxyClient()
+	return &http.Client{
+		Transport: &http.Transport{
+			Proxy: nil,
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).DialContext,
+		},
+	}
 }
 
 func TestNewServer(t *testing.T) {

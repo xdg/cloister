@@ -16,17 +16,8 @@ import (
 
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/executor"
+	"github.com/xdg/cloister/internal/testutil"
 )
-
-// requireDocker skips the test if Docker is not available.
-// Note: We can't use testutil.RequireDocker here because testutil imports guardian,
-// which would create an import cycle.
-func requireDocker(t *testing.T) {
-	t.Helper()
-	if err := docker.CheckDaemon(); err != nil {
-		t.Skipf("Docker not available: %v", err)
-	}
-}
 
 // requireCloisterBinary ensures the cloister binary is built and sets CLOISTER_EXECUTABLE.
 // Skips the test if the binary doesn't exist.
@@ -54,11 +45,8 @@ func requireCloisterBinary(t *testing.T) {
 // production guardians or other concurrent tests.
 func requireCleanGuardianState(t *testing.T) {
 	t.Helper()
-	requireDocker(t)
-	// Isolate XDG dirs to avoid writing to real ~/.config/cloister.
-	// Can't use testutil.IsolateXDGDirs due to import cycle.
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	testutil.RequireDocker(t)
+	testutil.IsolateXDGDirs(t)
 	// Generate unique instance ID for test isolation
 	t.Setenv(InstanceIDEnvVar, GenerateInstanceID())
 	// Capture container name now while instance ID is set

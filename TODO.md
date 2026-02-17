@@ -129,12 +129,12 @@ the rest of the package, suggesting the file belongs elsewhere.
 > | M2 | `AuthMethod` type, `AuthMethodAPIKey`, `AuthMethodToken` | `cmd` + `claude` + `codex` | `config` | Three packages define auth method concepts; unify (Pass C + E) |
 > | M3 | `CredentialEnvVars`, `CredentialEnvVarsUsed` | `token` | `cloister` (or inline) | Only consumer is `cloister.go`; deprecated passthrough (Pass B + E) |
 > | M4 | `DefaultTokenAPIPort` / `DefaultAPIPort` | `guardian` (both) | `guardian` (one name) | Same-package redundancy, consolidate to `DefaultAPIPort` (Pass C) |
-> | ~~M5~~ | ~~`DefaultRequestPort`~~ | ~~`guardian`~~ | ~~remove; use `guardian/request`~~ | **Cancelled**: test-time import cycle discovered (`guardian` → `request` → `testutil` → `guardian`) |
+> | M5 | `DefaultRequestPort` + `testutil`→`guardian` cycle | `guardian` + `testutil` | remove dup; break cycle | Broke cycle by moving guardian-specific helpers out of testutil; also eliminated `guardianImage()` duplication |
 >
 > **Leave as-is (justified):**
 > - `InstanceIDEnvVar` in `guardian`/`executor` — real import cycle, consistency test exists
 > - `DefaultApprovalPort` in `guardian`/`guardian/approval` — real import cycle
-> - `DefaultRequestPort` in `guardian`/`guardian/request` — real test-time import cycle (discovered during M5 attempt)
+> - ~~`DefaultRequestPort` in `guardian`/`guardian/request`~~ — resolved: cycle broken, duplicate removed
 > - `token/token.go` (Generate/TokenBytes) — core token concepts, no mismatch
 > - `agent.ContainerUID`/`ContainerGID` — mild mismatch but pragmatic; only used in agent setup
 > - `testutil/http.go` (NoProxyClient) — testutil is a reasonable shared location
@@ -180,9 +180,11 @@ Execute moves sequentially. Each move is one atomic commit.
 
 ### 3.5 Move M5: Remove duplicate `DefaultRequestPort` from `guardian`
 
-- [x] ~~Remove `DefaultRequestPort` from `guardian/instance.go`~~ — **Cancelled**: test-time import cycle (`guardian` → `guardian/request` → `testutil` → `guardian`) prevents this. Duplication is justified, same pattern as `DefaultApprovalPort` and `InstanceIDEnvVar`.
-- [x] ~~Update references to use `request.DefaultRequestPort`~~ — N/A (see above)
-- [x] Verify: `go build ./...`, `make test`, `make lint` — confirmed cycle exists
+- [x] Break `testutil` → `guardian` import cycle: moved guardian-specific test helpers to their callers, inlined `NoProxyClient`, deleted `testutil/guardian.go`, `testutil/http.go`, `testutil/instance_id_test.go`
+- [x] Remove `DefaultRequestPort` from `guardian/instance.go`; use `request.DefaultRequestPort`
+- [x] Replace `guardianImage()` duplication with `container.DefaultImage()` (cycle no longer exists)
+- [x] Fix `guardian/container_integration_test.go` to use `testutil.RequireDocker`/`IsolateXDGDirs`
+- [x] Verify: `go build ./...`, `make test`, `make lint`
 
 ### 3.6 Final verification
 

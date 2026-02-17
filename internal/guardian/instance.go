@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/xdg/cloister/internal/clog"
+	"github.com/xdg/cloister/internal/guardian/request"
 )
 
 // InstanceIDEnvVar is the environment variable used to set a unique instance ID
@@ -85,7 +86,7 @@ func ProxyEnvVars(tok, guardianHost string) []string {
 	return []string{
 		"CLOISTER_TOKEN=" + tok,
 		"CLOISTER_GUARDIAN_HOST=" + guardianHost,
-		"CLOISTER_REQUEST_PORT=" + fmt.Sprintf("%d", DefaultRequestPort),
+		"CLOISTER_REQUEST_PORT=" + fmt.Sprintf("%d", request.DefaultRequestPort),
 		"HTTP_PROXY=" + proxyURL,
 		"HTTPS_PROXY=" + proxyURL,
 		"http_proxy=" + proxyURL,
@@ -119,9 +120,6 @@ func FindFreePort() (int, error) {
 	}
 	return addr.Port, nil
 }
-
-// DefaultRequestPort is the default port for the hostexec request server.
-const DefaultRequestPort = 9998
 
 // DefaultApprovalPort is the default port for the guardian approval web UI.
 const DefaultApprovalPort = 9999

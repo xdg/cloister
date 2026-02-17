@@ -3,6 +3,8 @@ package guardian
 import (
 	"strings"
 	"testing"
+
+	"github.com/xdg/cloister/internal/executor"
 )
 
 func TestInstanceID_WhenUnset(t *testing.T) {
@@ -221,5 +223,15 @@ func TestProxyEnvVars_RequestPortValue(t *testing.T) {
 
 	if requestPort != "9998" {
 		t.Errorf("CLOISTER_REQUEST_PORT = %q, want %q", requestPort, "9998")
+	}
+}
+
+// TestInstanceIDEnvVarConsistency verifies that the duplicated InstanceIDEnvVar
+// constant in the executor package matches the authoritative value in guardian.
+// This test exists because we duplicate the constant to avoid import cycles.
+func TestInstanceIDEnvVarConsistency(t *testing.T) {
+	if executor.InstanceIDEnvVar != InstanceIDEnvVar {
+		t.Errorf("executor.InstanceIDEnvVar = %q, want %q (guardian.InstanceIDEnvVar)",
+			executor.InstanceIDEnvVar, InstanceIDEnvVar)
 	}
 }

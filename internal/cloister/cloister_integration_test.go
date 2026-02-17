@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -22,7 +23,7 @@ import (
 // TestCloisterLifecycle combines integration tests that require the guardian.
 // Using subtests allows sharing a single guardian instance across all tests.
 func TestCloisterLifecycle(t *testing.T) {
-	testutil.RequireGuardian(t)
+	requireGuardian(t)
 
 	t.Run("Start_Stop", func(t *testing.T) {
 		projectName := testutil.TestProjectName()
@@ -620,4 +621,57 @@ func TestInjectUserSettings_IntegrationWithContainer(t *testing.T) {
 			t.Errorf("Cloister user cannot read %s: %v", expectedPath, err)
 		}
 	}
+}
+
+// requireCloisterBinary ensures the cloister binary is built and sets CLOISTER_EXECUTABLE.
+// Skips the test if the binary doesn't exist.
+func requireCloisterBinary(t *testing.T) {
+	t.Helper()
+
+	// Find repo root (go up from this file's directory)
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Skip("Could not determine test file location")
+	}
+	repoRoot := filepath.Join(filepath.Dir(thisFile), "..", "..")
+	binaryPath := filepath.Join(repoRoot, "cloister")
+
+	if _, err := os.Stat(binaryPath); err != nil {
+		t.Skipf("cloister binary not found at %s (run 'make build' first)", binaryPath)
+	}
+
+	// Set env var for StartExecutor to use
+	t.Setenv(guardian.ExecutableEnvVar, binaryPath)
+}
+
+// requireGuardian ensures the guardian is running and registers cleanup.
+// This is for integration tests that manage their own guardian lifecycle.
+// Generates a unique instance ID so tests don't conflict with production or other tests.
+// Sets XDG dirs to temp dirs so tests don't touch ~/.config/cloister.
+// Skips the test if the guardian cannot be started.
+func requireGuardian(t *testing.T) {
+	t.Helper()
+	testutil.RequireDocker(t)
+	requireCloisterBinary(t)
+	testutil.IsolateXDGDirs(t)
+
+	// Generate unique instance ID for test isolation
+	t.Setenv(guardian.InstanceIDEnvVar, guardian.GenerateInstanceID())
+	// Capture container name now while instance ID is set
+	containerName := guardian.ContainerName()
+
+	if err := guardian.EnsureRunning(); err != nil {
+		t.Skipf("Guardian not available: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := guardian.StopExecutor(); err != nil {
+			t.Logf("cleanup: failed to stop executor: %v", err)
+		}
+		if _, err := docker.Run("stop", containerName); err != nil {
+			t.Logf("cleanup: failed to stop container %s: %v", containerName, err)
+		}
+		if _, err := docker.Run("rm", containerName); err != nil {
+			t.Logf("cleanup: failed to remove container %s: %v", containerName, err)
+		}
+	})
 }
