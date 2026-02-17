@@ -258,19 +258,15 @@ func (a *APIServer) writeError(w http.ResponseWriter, status int, message string
 	a.writeJSON(w, status, errorResponse{Error: message})
 }
 
-// LegacyTokenRevoker adapts a SessionAllowlist to the TokenRevoker interface
-// by calling Clear on token revocation. This bridges old wiring in guardian.go
-// until Phase 5 replaces it with a real PolicyEngine.
-type LegacyTokenRevoker struct {
-	SessionAllowlist SessionAllowlist
+// TokenLookupResult holds the result of a token lookup.
+type TokenLookupResult struct {
+	ProjectName  string
+	CloisterName string
 }
 
-// RevokeToken clears session-approved domains for the given token.
-func (l *LegacyTokenRevoker) RevokeToken(tok string) {
-	if l.SessionAllowlist != nil {
-		l.SessionAllowlist.Clear(tok)
-	}
-}
+// TokenLookupFunc looks up token info and returns project and cloister names.
+// It returns the result and true if the token is valid, zero value and false otherwise.
+type TokenLookupFunc func(token string) (TokenLookupResult, bool)
 
 // TokenLookupFromRegistry returns a TokenLookupFunc that resolves tokens
 // via the given registry.

@@ -212,27 +212,27 @@ Remove all replaced types, files, and their tests.
 
 ### 6.1 Delete replaced files
 
-- [ ] Delete `internal/guardian/allowlist_cache.go` + `allowlist_cache_test.go`
-- [ ] Delete `internal/guardian/cache_reloader.go` + `cache_reloader_test.go`
-- [ ] Delete `internal/guardian/session_allowlist.go` + `session_allowlist_test.go`
-- [ ] Delete `internal/guardian/config_persister.go` + `config_persister_test.go` + `config_persister_validation_test.go`
+- [x] Delete `internal/guardian/allowlist_cache.go` + `allowlist_cache_test.go`
+- [x] Delete `internal/guardian/cache_reloader.go` + `cache_reloader_test.go`
+- [x] Delete `internal/guardian/session_allowlist.go` + `session_allowlist_test.go`
+- [x] Delete `internal/guardian/config_persister.go` + `config_persister_test.go` + `config_persister_validation_test.go`
 
 ### 6.2 Clean up allowlist.go
 
-- [ ] If `Allowlist` is now just an alias for `DomainSet`, decide: keep alias for external compatibility or rename all usages
-- [ ] Remove `Allowlist` type entirely if nothing outside guardian uses it
-- [ ] Move `DefaultAllowedDomains` to `policy_engine.go` or `defaults.go`
-- [ ] Delete `allowlist.go` if fully absorbed into `domain_set.go`
-- [ ] Update `allowlist_test.go` / `allowlist_pattern_test.go` → rename or merge into `domain_set_test.go`
+- [x] If `Allowlist` is now just an alias for `DomainSet`, decide: keep alias for external compatibility or rename all usages
+- [x] Remove `Allowlist` type entirely if nothing outside guardian uses it
+- [x] Move `DefaultAllowedDomains` to `policy_engine.go` or `defaults.go`
+- [x] Delete `allowlist.go` if fully absorbed into `domain_set.go`
+- [x] Update `allowlist_test.go` / `allowlist_pattern_test.go` → rename or merge into `domain_set_test.go`
 
 ### 6.3 Clean up proxy.go interfaces
 
-- [ ] Remove `SessionAllowlist` interface from proxy.go
-- [ ] Remove `SessionDenylist` interface from proxy.go
-- [ ] Remove `ProjectAllowlistLoader`, `ProjectDenylistLoader`, `TokenLookupFunc` from `allowlist_cache.go` (already deleted)
-- [ ] Remove `ConfigReloader` type and `SetConfigReloader` from proxy.go
-- [ ] Remove `ConfigError` type if no longer needed (or keep if proxy still returns 502 for config errors)
-- [ ] **Test**: `make test` passes, `make lint` clean, no unused imports
+- [x] Remove `SessionAllowlist` interface from proxy.go
+- [x] Remove `SessionDenylist` interface from proxy.go
+- [x] Remove `ProjectAllowlistLoader`, `ProjectDenylistLoader`, `TokenLookupFunc` from `allowlist_cache.go` (already deleted)
+- [x] Remove `ConfigReloader` type and `SetConfigReloader` from proxy.go
+- [x] Remove `ConfigError` type if no longer needed (or keep if proxy still returns 502 for config errors)
+- [x] **Test**: `make test` passes, `make lint` clean, no unused imports
 
 ---
 

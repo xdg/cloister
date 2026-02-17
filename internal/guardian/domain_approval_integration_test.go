@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/guardian/approval"
 )
 
@@ -65,30 +66,35 @@ func (m *mockConfigPersister) AddPatternToGlobal(pattern string) error {
 	return m.addPatternToGlobalErr
 }
 
+// newEmptyPolicyEngine creates a minimal PolicyEngine with no allowed domains
+// (all domains require approval). Suitable for domain approval integration tests.
+func newEmptyPolicyEngine(t *testing.T) *PolicyEngine {
+	t.Helper()
+	pe, err := NewPolicyEngine(&config.GlobalConfig{}, &config.Decisions{}, nil)
+	if err != nil {
+		t.Fatalf("failed to create PolicyEngine: %v", err)
+	}
+	return pe
+}
+
 // TestDomainApprovalIntegration_FullFlow tests the complete domain approval workflow
 // without Docker, using httptest for HTTP interactions.
 //
-// This test verifies Phase 6.7.1 acceptance criteria:
-// 1. Create all components (DomainQueue, SessionAllowlist, ConfigPersister, DomainApprover, ProxyServer, ApprovalServer)
+// This test verifies:
+// 1. Create all components (DomainQueue, PolicyEngine, DomainApprover, ApprovalServer)
 // 2. Submit domain request through proxy mock
 // 3. Approve via server endpoint
-// 4. Verify domain is allowed on next request
+// 4. Verify domain is allowed on next request via PolicyEngine.Check
 func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	// 1. Create all components
 	domainQueue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	globalAllowlist := NewAllowlist([]string{}) // Empty - all domains require approval
-	cache := NewAllowlistCache(globalAllowlist)
-	cache.SetProject("test-project", NewAllowlist([]string{}))
+	pe := newEmptyPolicyEngine(t)
 
 	// Create mock config persister to track persistence calls
 	mockPersister := &mockConfigPersister{}
 
-	// Create domain approver
-	domainApprover := NewDomainApprover(domainQueue, &LegacyDecisionRecorder{
-		SessionAllowlist: sessionAllowlist,
-		AllowlistCache:   cache,
-	}, nil)
+	// Create domain approver using PolicyEngine as DecisionRecorder
+	domainApprover := NewDomainApprover(domainQueue, pe, nil)
 
 	// Create approval server
 	cmdQueue := approval.NewQueue()
@@ -111,6 +117,7 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	const wantDomain = "example.com"
 	const testProject = "test-project"
 	const testCloister = "test-cloister"
+	const testToken = "test-token"
 
 	// Start approval request in background (this will block until approved)
 	done := make(chan struct{})
@@ -118,7 +125,7 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 	var approvalErr error
 
 	go func() {
-		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain, "test-token")
+		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain, testToken)
 		close(done)
 	}()
 
@@ -201,23 +208,10 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 		t.Errorf("expected approval result scope 'session', got %s", approvalResult.Scope)
 	}
 
-	// 4. Verify domain is allowed on next request
-
-	// Check session allowlist
-	if !sessionAllowlist.IsAllowed("test-token", testDomain) {
-		t.Error("domain should be in session allowlist after approval")
-	}
-
-	// Check cached allowlist (domain should be added without port)
-	projectAllowlist, getErr := cache.GetProject(testProject)
-	if getErr != nil {
-		t.Fatalf("GetProject error: %v", getErr)
-	}
-	if projectAllowlist == nil {
-		t.Fatal("project allowlist should exist")
-	}
-	if !projectAllowlist.IsAllowed(testDomain) {
-		t.Error("domain should be in cached allowlist after session approval")
+	// 4. Verify domain is allowed on next request via PolicyEngine.Check
+	decision := pe.Check(testToken, testProject, wantDomain)
+	if decision != Allow {
+		t.Errorf("PolicyEngine.Check should return Allow for session-approved domain, got %v", decision)
 	}
 
 	// Verify no persistence calls were made for session scope
@@ -228,10 +222,10 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 		t.Error("session scope should not trigger AddDomainToGlobal")
 	}
 
-	// Verify second request for same domain doesn't require approval
-	// (would be caught by session allowlist or cached allowlist)
-	if !sessionAllowlist.IsAllowed("test-token", testDomain) {
-		t.Error("second check should still find domain in session allowlist")
+	// Verify second check for same domain still returns Allow
+	decision2 := pe.Check(testToken, testProject, wantDomain)
+	if decision2 != Allow {
+		t.Errorf("second PolicyEngine.Check should still return Allow, got %v", decision2)
 	}
 }
 
@@ -239,16 +233,10 @@ func TestDomainApprovalIntegration_FullFlow(t *testing.T) {
 func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	// Create components
 	domainQueue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	globalAllowlist := NewAllowlist([]string{})
-	cache := NewAllowlistCache(globalAllowlist)
-	cache.SetProject("test-project", NewAllowlist([]string{}))
+	pe := newEmptyPolicyEngine(t)
 
 	mockPersister := &mockConfigPersister{}
-	domainApprover := NewDomainApprover(domainQueue, &LegacyDecisionRecorder{
-		SessionAllowlist: sessionAllowlist,
-		AllowlistCache:   cache,
-	}, nil)
+	domainApprover := NewDomainApprover(domainQueue, pe, nil)
 
 	cmdQueue := approval.NewQueue()
 	approvalServer := approval.NewServer(cmdQueue, nil)
@@ -267,6 +255,7 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	const wantDomain = "trusted.com"
 	const testProject = "test-project"
 	const testCloister = "test-cloister"
+	const testToken = "test-token"
 
 	// Submit approval request
 	done := make(chan struct{})
@@ -274,7 +263,7 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 	var approvalErr error
 
 	go func() {
-		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain, "test-token")
+		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain, testToken)
 		close(done)
 	}()
 
@@ -343,9 +332,12 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 		t.Errorf("expected domain %s, got %s", wantDomain, call.domain)
 	}
 
-	// Verify domain is NOT in session allowlist for project scope
-	if sessionAllowlist.IsAllowed("test-token", wantDomain) {
-		t.Error("project scope should not add domain to session allowlist")
+	// Verify domain is NOT in session policy for project scope
+	// (project scope is handled by ConfigPersister on the approval server side,
+	// not by the DomainApprover's session recording)
+	decision := pe.Check(testToken, testProject, wantDomain)
+	if decision != AskHuman {
+		t.Errorf("project scope should not add domain to session policy, got %v (expected AskHuman)", decision)
 	}
 }
 
@@ -353,15 +345,9 @@ func TestDomainApprovalIntegration_ProjectScope(t *testing.T) {
 func TestDomainApprovalIntegration_Denial(t *testing.T) {
 	// Create components
 	domainQueue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	globalAllowlist := NewAllowlist([]string{})
-	cache := NewAllowlistCache(globalAllowlist)
-	cache.SetProject("test-project", NewAllowlist([]string{}))
+	pe := newEmptyPolicyEngine(t)
 
-	domainApprover := NewDomainApprover(domainQueue, &LegacyDecisionRecorder{
-		SessionAllowlist: sessionAllowlist,
-		AllowlistCache:   cache,
-	}, nil)
+	domainApprover := NewDomainApprover(domainQueue, pe, nil)
 
 	cmdQueue := approval.NewQueue()
 	approvalServer := approval.NewServer(cmdQueue, nil)
@@ -376,8 +362,10 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 	baseURL := "http://" + approvalServer.ListenAddr()
 
 	const testDomain = "malicious.com:443"
+	const wantDomain = "malicious.com"
 	const testProject = "test-project"
 	const testCloister = "test-cloister"
+	const testToken = "test-token"
 
 	// Submit approval request
 	done := make(chan struct{})
@@ -385,7 +373,7 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 	var approvalErr error
 
 	go func() {
-		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain, "test-token")
+		approvalResult, approvalErr = domainApprover.RequestApproval(testProject, testCloister, testDomain, testToken)
 		close(done)
 	}()
 
@@ -438,17 +426,11 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 		t.Error("expected approval result to be denied")
 	}
 
-	// Verify domain is NOT in allowlists
-	if sessionAllowlist.IsAllowed("test-token", testDomain) {
-		t.Error("denied domain should not be in session allowlist")
-	}
-
-	projectAllowlist, getErr := cache.GetProject(testProject)
-	if getErr != nil {
-		t.Fatalf("GetProject error: %v", getErr)
-	}
-	if projectAllowlist != nil && projectAllowlist.IsAllowed(testDomain) {
-		t.Error("denied domain should not be in cached allowlist")
+	// Verify domain is NOT allowed via PolicyEngine.Check
+	// (deny-once does not persist, so it should be AskHuman again)
+	decision := pe.Check(testToken, testProject, wantDomain)
+	if decision == Allow {
+		t.Error("denied domain should not be allowed by PolicyEngine.Check")
 	}
 }
 
@@ -456,21 +438,18 @@ func TestDomainApprovalIntegration_Denial(t *testing.T) {
 func TestDomainApprovalIntegration_Timeout(t *testing.T) {
 	// Create components with very short timeout
 	domainQueue := approval.NewDomainQueueWithTimeout(50 * time.Millisecond)
-	sessionAllowlist := NewSessionAllowlist()
-	globalAllowlist := NewAllowlist([]string{})
-	cache := NewAllowlistCache(globalAllowlist)
+	pe := newEmptyPolicyEngine(t)
 
-	domainApprover := NewDomainApprover(domainQueue, &LegacyDecisionRecorder{
-		SessionAllowlist: sessionAllowlist,
-		AllowlistCache:   cache,
-	}, nil)
+	domainApprover := NewDomainApprover(domainQueue, pe, nil)
 
 	const testDomain = "slow-response.com:443"
+	const wantDomain = "slow-response.com"
 	const testProject = "test-project"
 	const testCloister = "test-cloister"
+	const testToken = "test-token"
 
 	// Submit approval request (will timeout before approval)
-	approvalResult, err := domainApprover.RequestApproval(testProject, testCloister, testDomain, "test-token")
+	approvalResult, err := domainApprover.RequestApproval(testProject, testCloister, testDomain, testToken)
 
 	// Verify timeout result
 	if err != nil {
@@ -480,9 +459,10 @@ func TestDomainApprovalIntegration_Timeout(t *testing.T) {
 		t.Error("expected timeout to result in denial")
 	}
 
-	// Verify domain is NOT in allowlists
-	if sessionAllowlist.IsAllowed("test-token", testDomain) {
-		t.Error("timed-out domain should not be in session allowlist")
+	// Verify domain is NOT allowed via PolicyEngine.Check
+	decision := pe.Check(testToken, testProject, wantDomain)
+	if decision == Allow {
+		t.Error("timed-out domain should not be allowed by PolicyEngine.Check")
 	}
 }
 
@@ -490,14 +470,9 @@ func TestDomainApprovalIntegration_Timeout(t *testing.T) {
 func TestDomainApprovalIntegration_GetPendingDomains(t *testing.T) {
 	// Create components
 	domainQueue := approval.NewDomainQueueWithTimeout(5 * time.Second)
-	sessionAllowlist := NewSessionAllowlist()
-	globalAllowlist := NewAllowlist([]string{})
-	cache := NewAllowlistCache(globalAllowlist)
+	pe := newEmptyPolicyEngine(t)
 
-	domainApprover := NewDomainApprover(domainQueue, &LegacyDecisionRecorder{
-		SessionAllowlist: sessionAllowlist,
-		AllowlistCache:   cache,
-	}, nil)
+	domainApprover := NewDomainApprover(domainQueue, pe, nil)
 
 	cmdQueue := approval.NewQueue()
 	approvalServer := approval.NewServer(cmdQueue, nil)

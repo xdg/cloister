@@ -57,7 +57,7 @@ func (m *mockTunnelHandler) getCalls() []string {
 type proxyTestHarness struct {
 	Proxy          *ProxyServer
 	ApprovalServer *approval.Server
-	Reloader       *CacheReloader
+	PolicyEngine   *PolicyEngine
 	ConfigDir      string // t.TempDir() used as XDG_CONFIG_HOME
 	Token          string
 	ProjectName    string
@@ -96,62 +96,37 @@ func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTest
 	// Load production default config for static allow/deny entries.
 	cfg := config.DefaultGlobalConfig()
 	staticAllow := cfg.Proxy.Allow
-	staticDeny := cfg.Proxy.Deny
 
-	// Build global allowlist from static config (matches setupAllowlistCache in production).
-	globalAllowlist := NewAllowlistFromConfig(staticAllow)
-	allowlistCache := NewAllowlistCache(globalAllowlist)
-
-	// Wire global denylist if static deny entries exist.
-	globalDeny := config.MergeDenylists(staticDeny, nil)
-	if len(globalDeny) > 0 {
-		allowlistCache.SetGlobalDeny(NewAllowlistFromConfig(globalDeny))
+	// Build PolicyEngine from config (matches production guardian.go wiring).
+	pe, err := NewPolicyEngine(cfg, &config.Decisions{}, registry)
+	if err != nil {
+		t.Fatalf("failed to create PolicyEngine: %v", err)
 	}
-
-	// CacheReloader with production-matching static config.
-	reloader := NewCacheReloader(allowlistCache, registry, staticAllow, staticDeny, &config.Decisions{})
-	allowlistCache.SetProjectLoader(reloader.LoadProjectAllowlist)
-	allowlistCache.SetDenylistLoader(reloader.LoadProjectDenylist)
 
 	// Create approval server components
 	queue := approval.NewQueue()
 	domainQueue := approval.NewDomainQueueWithTimeout(10 * time.Second)
 
-	persister := &ConfigPersisterImpl{}
+	persister := &PolicyConfigPersister{Recorder: pe}
 
 	approvalSrv := approval.NewServer(queue, nil) // nil audit logger
 	approvalSrv.SetDomainQueue(domainQueue)
 	approvalSrv.ConfigPersister = persister
 	approvalSrv.Addr = "127.0.0.1:0"
 
-	// Create session lists
-	sessionAllowlist := NewSessionAllowlist()
-	sessionDenylist := NewSessionDenylist()
-
-	// Create domain approver with a legacy bridge recorder that updates the
-	// session allowlist/denylist and allowlist cache for the legacy proxy path.
-	recorder := &LegacyDecisionRecorder{
-		SessionAllowlist: sessionAllowlist,
-		SessionDenylist:  sessionDenylist,
-		AllowlistCache:   allowlistCache,
-	}
-	domainApprover := NewDomainApprover(domainQueue, recorder, nil)
+	// Create domain approver using PolicyEngine as the DecisionRecorder.
+	domainApprover := NewDomainApprover(domainQueue, pe, nil)
 
 	// Create tunnel handler mock (can't do real upstream connections in unit tests).
 	tunnelHandler := &mockTunnelHandler{}
 
-	// Create proxy server with production-faithful global allowlist.
-	proxy := NewProxyServerWithConfig(":0", globalAllowlist)
+	// Create proxy server with PolicyEngine.
+	proxy := NewProxyServer(":0")
+	proxy.PolicyEngine = pe
 	proxy.TokenValidator = registry
-	proxy.AllowlistCache = allowlistCache
 	proxy.TokenLookup = TokenLookupFromRegistry(registry)
 	proxy.DomainApprover = domainApprover
-	proxy.SessionAllowlist = sessionAllowlist
-	proxy.SessionDenylist = sessionDenylist
 	proxy.TunnelHandler = tunnelHandler
-
-	// Set up ConfigPersister reload notifier using CacheReloader.
-	persister.ReloadNotifier = reloader.Reload
 
 	// Start servers
 	if err := approvalSrv.Start(); err != nil {
@@ -173,7 +148,7 @@ func newProxyTestHarnessWithConfigDir(t *testing.T, configDir string) *proxyTest
 	return &proxyTestHarness{
 		Proxy:          proxy,
 		ApprovalServer: approvalSrv,
-		Reloader:       reloader,
+		PolicyEngine:   pe,
 		ConfigDir:      configDir,
 		Token:          tok,
 		ProjectName:    projectName,
@@ -488,6 +463,12 @@ func TestProxyApproval_AllowSession(t *testing.T) {
 	if _, err := os.Stat(decisionPath); !os.IsNotExist(err) {
 		t.Errorf("expected no project decisions file at %s, but it exists (or stat error: %v)", decisionPath, err)
 	}
+
+	// Verify via PolicyEngine.Check that the session decision is visible.
+	decision := h.PolicyEngine.Check(h.Token, h.ProjectName, domain)
+	if decision != Allow {
+		t.Errorf("PolicyEngine.Check should return Allow for session-approved domain, got %v", decision)
+	}
 }
 
 // TestProxyApproval_AllowProject verifies that scope=project persists the
@@ -617,7 +598,7 @@ func TestProxyApproval_AllowGlobal(t *testing.T) {
 	}
 
 	// Second CONNECT to the same domain should be allowed immediately
-	// (the ReloadNotifier updates the cache after persistence).
+	// (PolicyEngine reloaded after persistence).
 	done2 := make(chan struct{})
 	var statusCode2 int
 	var connectErr2 error
@@ -932,6 +913,12 @@ func TestProxyApproval_DenySession(t *testing.T) {
 	if _, err := os.Stat(decisionPath); !os.IsNotExist(err) {
 		t.Errorf("expected no project decisions file at %s, but it exists (or stat error: %v)", decisionPath, err)
 	}
+
+	// Verify via PolicyEngine.Check that the session denial is visible.
+	decision := h.PolicyEngine.Check(h.Token, h.ProjectName, domain)
+	if decision != Deny {
+		t.Errorf("PolicyEngine.Check should return Deny for session-denied domain, got %v", decision)
+	}
 }
 
 // TestProxyApproval_DenyProject verifies that scope=project persists the
@@ -1157,9 +1144,6 @@ func TestProxyApproval_PreExistingProjectAllow(t *testing.T) {
 	h := newProxyTestHarness(t)
 
 	// Write project decisions file with a pre-allowed domain.
-	// The harness already set XDG_CONFIG_HOME to a temp dir, and the
-	// AllowlistCache project loader is lazy, so writing the file before
-	// the first CONNECT is sufficient.
 	err := config.WriteProjectDecisions(h.ProjectName, &config.Decisions{
 		Proxy: config.DecisionsProxy{
 			Allow: []config.AllowEntry{{Domain: "pre-allowed.example.com"}},
@@ -1167,6 +1151,11 @@ func TestProxyApproval_PreExistingProjectAllow(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("WriteProjectDecisions() error: %v", err)
+	}
+
+	// Reload PolicyEngine to pick up the new decisions file.
+	if err := h.PolicyEngine.ReloadProject(h.ProjectName); err != nil {
+		t.Fatalf("ReloadProject() error: %v", err)
 	}
 
 	// Send CONNECT — should return 200 immediately (no approval prompt).
@@ -1209,8 +1198,10 @@ func TestProxyApproval_PreExistingGlobalDeny(t *testing.T) {
 		t.Fatalf("WriteGlobalDecisions() error: %v", err)
 	}
 
-	// Reload the cache to pick up the global decisions file (exercises the production path).
-	h.Reloader.Reload()
+	// Reload PolicyEngine to pick up the global decisions file.
+	if err := h.PolicyEngine.ReloadGlobal(); err != nil {
+		t.Fatalf("ReloadGlobal() error: %v", err)
+	}
 
 	// Send CONNECT — should return 403 immediately (no approval prompt).
 	var statusCode int
@@ -1258,6 +1249,11 @@ func TestProxyApproval_PreExistingDenyPattern(t *testing.T) {
 		t.Fatalf("WriteProjectDecisions() error: %v", err)
 	}
 
+	// Reload PolicyEngine to pick up the project decisions file.
+	if err := h.PolicyEngine.ReloadProject(h.ProjectName); err != nil {
+		t.Fatalf("ReloadProject() error: %v", err)
+	}
+
 	// Send CONNECT to a subdomain that matches the pattern — should return 403 immediately.
 	var statusCode int
 	var connectErr error
@@ -1297,6 +1293,11 @@ func TestProxyApproval_DenyOverridesAllow(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("WriteProjectDecisions() error: %v", err)
+	}
+
+	// Reload PolicyEngine to pick up the project decisions file.
+	if err := h.PolicyEngine.ReloadProject(h.ProjectName); err != nil {
+		t.Fatalf("ReloadProject() error: %v", err)
 	}
 
 	// Send CONNECT — deny should win, returning 403 immediately.
@@ -1747,10 +1748,10 @@ func TestProxyApproval_AllowProjectWithStaticConfig(t *testing.T) {
 
 // TestProxyApproval_AllowProjectSurvivesRestart verifies that project-persisted
 // domain approvals survive a full guardian restart. This simulates:
-//  1. Approve domain with scope=project → decisions file written
+//  1. Approve domain with scope=project -> decisions file written
 //  2. Shut down guardian (stop proxy + approval server)
 //  3. Start new guardian (new proxy + approval server, same config dir)
-//  4. CONNECT to same domain → should be allowed without re-prompting
+//  4. CONNECT to same domain -> should be allowed without re-prompting
 func TestProxyApproval_AllowProjectSurvivesRestart(t *testing.T) {
 	// Phase 1: Create harness, approve domain at project scope.
 	h1 := newProxyTestHarness(t)

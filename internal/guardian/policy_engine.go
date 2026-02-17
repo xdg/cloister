@@ -2,10 +2,45 @@ package guardian
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/xdg/cloister/internal/config"
+	tokenpkg "github.com/xdg/cloister/internal/token"
 )
+
+// ProjectLister provides the list of active projects for cache reloading.
+// Satisfied by TokenRegistry and by test mocks.
+type ProjectLister interface {
+	List() map[string]tokenpkg.Info
+}
+
+// normalizeDomain strips the port from a domain if present and lowercases it.
+// CONNECT requests include port (e.g., "example.com:443") but allowlist
+// entries should store bare hostnames for consistent matching.
+func normalizeDomain(domain string) string {
+	return strings.ToLower(stripPort(domain))
+}
+
+// DefaultAllowedDomains contains the initial hardcoded allowlist for Phase 1.
+// This is used as a fallback when no configuration is provided.
+var DefaultAllowedDomains = []string{
+	// AI provider APIs
+	"api.anthropic.com",
+	"api.openai.com",
+	"generativelanguage.googleapis.com",
+
+	// Go module proxy and toolchain downloads
+	"proxy.golang.org",
+	"sum.golang.org",
+	"storage.googleapis.com",
+
+	// Ubuntu package repositories
+	"archive.ubuntu.com",
+	"ports.ubuntu.com",
+	"security.ubuntu.com",
+	"deb.nodesource.com",
+}
 
 // Scope represents the persistence scope for a domain access decision.
 type Scope string

@@ -51,24 +51,6 @@ type DomainApprover interface {
 	RequestApproval(project, cloister, domain, token string) (DomainApprovalResult, error)
 }
 
-// SessionAllowlist tracks ephemeral session-approved domains per token.
-// Token-based isolation ensures each cloister session has an independent
-// domain cache, even when multiple cloisters belong to the same project.
-type SessionAllowlist interface {
-	IsAllowed(token, domain string) bool
-	Add(token, domain string) error
-	Clear(token string) // Called when token is revoked to clean up session domains
-}
-
-// SessionDenylist tracks ephemeral session-denied domains per token.
-// Token-based isolation ensures each cloister session has an independent
-// deny cache, even when multiple cloisters belong to the same project.
-type SessionDenylist interface {
-	IsBlocked(token, domain string) bool
-	Add(token, domain string) error
-	Clear(token string) // Called when token is revoked to clean up session domains
-}
-
 // TunnelHandler handles the upstream connection after the proxy decides
 // to allow a CONNECT request. The proxy calls ServeTunnel only when the
 // domain passes all deny/allow/approval checks.
@@ -82,25 +64,14 @@ type ProxyServer struct {
 	// Addr is the address to listen on (e.g., ":3128").
 	Addr string
 
-	// PolicyEngine handles all domain access control when set. If non-nil,
-	// it replaces AllowlistCache, SessionAllowlist, SessionDenylist, and the
-	// global Allowlist for domain checks. The proxy delegates to
-	// PolicyEngine.Check() and maps the Decision to allow/deny/requestApproval.
+	// PolicyEngine handles all domain access control. It evaluates domain access
+	// using a deny-first, then allow, then fallback-to-AskHuman strategy.
 	PolicyEngine PolicyChecker
-
-	// Allowlist controls which domains are permitted. If nil, all domains are blocked.
-	// Legacy: superseded by PolicyEngine when set. Will be removed in Phase 6.
-	Allowlist *Allowlist
 
 	// TokenValidator validates authentication tokens. If nil, all requests are allowed
 	// (useful for testing). When set, requests must include a valid Proxy-Authorization
 	// header with Basic auth where the password is the token.
 	TokenValidator TokenValidator
-
-	// AllowlistCache provides per-project allowlist lookups. If nil, the global
-	// Allowlist is used for all requests.
-	// Legacy: superseded by PolicyEngine when set. Will be removed in Phase 6.
-	AllowlistCache *AllowlistCache
 
 	// TokenLookup provides token-to-project mapping for per-project allowlists.
 	// If nil, the global Allowlist is used for all requests.
@@ -109,16 +80,6 @@ type ProxyServer struct {
 	// DomainApprover requests human approval for unlisted domains. If nil, unlisted
 	// domains are immediately rejected with 403 (preserving current behavior).
 	DomainApprover DomainApprover
-
-	// SessionAllowlist tracks domains approved with "session" scope (ephemeral).
-	// If nil, session allowlist checks are skipped.
-	// Legacy: superseded by PolicyEngine when set. Will be removed in Phase 6.
-	SessionAllowlist SessionAllowlist
-
-	// SessionDenylist tracks domains denied with "session" scope (ephemeral).
-	// If nil, session denylist checks are skipped.
-	// Legacy: superseded by PolicyEngine when set. Will be removed in Phase 6.
-	SessionDenylist SessionDenylist
 
 	// TunnelHandler optionally handles tunnel establishment after domain approval.
 	// If nil, the proxy uses its built-in dialAndTunnel method.
@@ -139,38 +100,13 @@ type ProxyServer struct {
 
 // NewProxyServer creates a new proxy server listening on the specified address.
 // If addr is empty, it defaults to ":3128".
-// The server is created with the default allowlist.
 func NewProxyServer(addr string) *ProxyServer {
 	if addr == "" {
 		addr = fmt.Sprintf(":%d", DefaultProxyPort)
 	}
 	return &ProxyServer{
-		Addr:      addr,
-		Allowlist: NewDefaultAllowlist(),
+		Addr: addr,
 	}
-}
-
-// NewProxyServerWithConfig creates a new proxy server with the specified allowlist.
-// If addr is empty, it defaults to ":3128".
-// If allowlist is nil, the default allowlist is used.
-func NewProxyServerWithConfig(addr string, allowlist *Allowlist) *ProxyServer {
-	if addr == "" {
-		addr = fmt.Sprintf(":%d", DefaultProxyPort)
-	}
-	if allowlist == nil {
-		allowlist = NewDefaultAllowlist()
-	}
-	return &ProxyServer{
-		Addr:      addr,
-		Allowlist: allowlist,
-	}
-}
-
-// SetAllowlist replaces the proxy's allowlist.
-func (p *ProxyServer) SetAllowlist(a *Allowlist) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.Allowlist = a
 }
 
 // Start begins accepting connections on the proxy server.
@@ -391,39 +327,23 @@ func isTimeoutError(err error) bool {
 // handleConnect processes CONNECT requests by evaluating the domain against
 // deny/allow rules in strict precedence order, then tunneling if permitted.
 //
-// Evaluation order (first match wins):
-//  1. Static denylist (denied_domains/denied_patterns from decisions files)
-//  2. Session denylist (ephemeral per-token denials from current session)
-//  3. Static allowlist (config allow entries + approved domains/patterns from decisions files)
-//  4. Session allowlist (ephemeral per-token approvals from current session)
-//  5. Human approval via web UI (or immediate 403 if no DomainApprover configured)
+// Evaluation order (via PolicyEngine.Check):
+//  1. Deny pass: global -> project -> token (session)
+//  2. Allow pass: global -> project -> token (session)
+//  3. Fallback to AskHuman (human approval via web UI)
 //
 // Returns 403 Forbidden for denied/non-allowed domains, 502 Bad Gateway for
 // upstream connection failures, 504 Gateway Timeout for upstream dial timeouts.
 func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	targetHostPort := r.Host
 	domain := strings.ToLower(stripPort(targetHostPort))
-	resolved, err := p.resolveRequest(r)
-	if err != nil {
-		var cfgErr *ConfigError
-		if errors.As(err, &cfgErr) {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-		} else {
-			http.Error(w, err.Error(), http.StatusForbidden)
-		}
-		return
-	}
+	resolved := p.resolveRequest(r)
 
 	clog.Debug("handleConnect: host=%s, domain=%s, project=%s, policyEngine=%v",
 		targetHostPort, domain, resolved.ProjectName, p.PolicyEngine != nil)
 
 	if err := p.checkDomainAccess(domain, resolved); err != nil {
-		var cfgErr *ConfigError
-		if errors.As(err, &cfgErr) {
-			http.Error(w, err.Error(), http.StatusBadGateway)
-		} else {
-			http.Error(w, err.Error(), http.StatusForbidden)
-		}
+		http.Error(w, err.Error(), http.StatusForbidden)
 		return
 	}
 
@@ -434,11 +354,9 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// checkDomainAccess evaluates deny/allow rules in strict precedence order.
+// checkDomainAccess evaluates deny/allow rules via PolicyEngine.
 // Returns nil if the domain is allowed, or an error message if denied.
-// Returns a ConfigError-wrapped error if the project config is malformed.
 func (p *ProxyServer) checkDomainAccess(domain string, resolved resolvedRequest) error {
-	// New path: delegate to PolicyEngine when available.
 	if p.PolicyEngine != nil {
 		decision := p.PolicyEngine.Check(resolved.Token, resolved.ProjectName, domain)
 		switch decision {
@@ -453,41 +371,7 @@ func (p *ProxyServer) checkDomainAccess(domain string, resolved resolvedRequest)
 		}
 	}
 
-	// Legacy path: used when PolicyEngine is not configured.
-	return p.checkDomainAccessLegacy(domain, resolved)
-}
-
-// checkDomainAccessLegacy evaluates domain access using the old AllowlistCache,
-// SessionAllowlist, and SessionDenylist fields. This is retained for backward
-// compatibility during the PolicyEngine migration.
-func (p *ProxyServer) checkDomainAccessLegacy(domain string, resolved resolvedRequest) error {
-	// 1. Static denylist
-	if p.AllowlistCache != nil {
-		blocked, err := p.AllowlistCache.IsBlocked(resolved.ProjectName, domain)
-		if err != nil {
-			return err // already wrapped as ConfigError by IsBlocked
-		}
-		if blocked {
-			return fmt.Errorf("forbidden - domain denied")
-		}
-	}
-
-	// 2. Session denylist
-	if p.SessionDenylist != nil && resolved.Token != "" && p.SessionDenylist.IsBlocked(resolved.Token, domain) {
-		return fmt.Errorf("forbidden - domain denied")
-	}
-
-	// 3. Static allowlist
-	if resolved.Allowlist != nil && resolved.Allowlist.IsAllowed(domain) {
-		return nil
-	}
-
-	// 4. Session allowlist
-	if p.SessionAllowlist != nil && resolved.Token != "" && p.SessionAllowlist.IsAllowed(resolved.Token, domain) {
-		return nil
-	}
-
-	// 5. Human approval
+	// No PolicyEngine configured: reject everything not approved.
 	return p.requestDomainApproval(domain, resolved)
 }
 
@@ -624,19 +508,14 @@ func copyWithIdleTimeout(dst, src net.Conn, idleTimeout time.Duration) {
 
 // resolvedRequest holds the result of resolving a proxy request's identity.
 type resolvedRequest struct {
-	// Allowlist is the effective allowlist for the legacy (non-PolicyEngine) path.
-	// When PolicyEngine is set, this field is nil and unused.
-	Allowlist    *Allowlist
 	ProjectName  string
 	CloisterName string
 	Token        string
 }
 
-// resolveRequest determines the project name, cloister name, and token for a request.
-// When PolicyEngine is set, it only needs the token→project mapping (no allowlist lookup).
-// When PolicyEngine is nil, it falls back to the legacy AllowlistCache path.
-// Returns a ConfigError-wrapped error if the project config is malformed (legacy path only).
-func (p *ProxyServer) resolveRequest(r *http.Request) (resolvedRequest, error) {
+// resolveRequest determines the project name, cloister name, and token for a request
+// using the TokenLookup function.
+func (p *ProxyServer) resolveRequest(r *http.Request) resolvedRequest {
 	var token string
 
 	// Extract token from request header.
@@ -647,51 +526,16 @@ func (p *ProxyServer) resolveRequest(r *http.Request) (resolvedRequest, error) {
 		}
 	}
 
-	// PolicyEngine path: only need token→project mapping.
-	if p.PolicyEngine != nil {
-		if p.TokenLookup == nil || token == "" {
-			return resolvedRequest{Token: token}, nil
-		}
-		result, valid := p.TokenLookup(token)
-		if !valid || result.ProjectName == "" {
-			return resolvedRequest{Token: token}, nil
-		}
-		return resolvedRequest{
-			ProjectName:  result.ProjectName,
-			CloisterName: result.CloisterName,
-			Token:        token,
-		}, nil
+	if p.TokenLookup == nil || token == "" {
+		return resolvedRequest{Token: token}
 	}
-
-	// Legacy path: resolve allowlist via AllowlistCache.
-	clog.Debug("resolveRequest: AllowlistCache=%v, TokenLookup=%v", p.AllowlistCache != nil, p.TokenLookup != nil)
-
-	// If no per-project support is configured, use global allowlist
-	if p.AllowlistCache == nil || p.TokenLookup == nil {
-		clog.Debug("resolveRequest: returning p.Allowlist (global)")
-		return resolvedRequest{Allowlist: p.Allowlist, Token: token}, nil
-	}
-
-	if token == "" {
-		return resolvedRequest{Allowlist: p.Allowlist}, nil
-	}
-
-	// Single token lookup for project and cloister
 	result, valid := p.TokenLookup(token)
 	if !valid || result.ProjectName == "" {
-		return resolvedRequest{Allowlist: p.Allowlist, Token: token}, nil
+		return resolvedRequest{Token: token}
 	}
-
-	// Get project-specific allowlist
-	allowlist, err := p.AllowlistCache.GetProject(result.ProjectName)
-	if err != nil {
-		return resolvedRequest{}, fmt.Errorf("project %q config error: %w", result.ProjectName, &ConfigError{Err: err})
-	}
-
 	return resolvedRequest{
-		Allowlist:    allowlist,
 		ProjectName:  result.ProjectName,
 		CloisterName: result.CloisterName,
 		Token:        token,
-	}, nil
+	}
 }

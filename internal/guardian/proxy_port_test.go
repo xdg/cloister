@@ -6,15 +6,15 @@ import (
 	"testing"
 )
 
-// TestProxyPortHandling_StaticAllowlist verifies that domains in the static
-// allowlist match CONNECT requests regardless of the port specified.
-// This tests the current behavior where IsAllowed strips ports internally.
+// TestProxyPortHandling_StaticAllowlist verifies that domains in the
+// PolicyEngine's global allow list match CONNECT requests regardless of the
+// port specified. DomainSet.Contains strips ports internally.
 func TestProxyPortHandling_StaticAllowlist(t *testing.T) {
-	// Create allowlist with domain (no port)
-	allowlist := NewAllowlist([]string{"api.example.com"})
+	// Create PolicyEngine with one allowed domain (no port).
+	pe := newTestProxyPolicyEngine([]string{"api.example.com"}, nil)
 
 	proxy := &ProxyServer{
-		Allowlist: allowlist,
+		PolicyEngine: pe,
 	}
 
 	// Test cases for different ports
@@ -47,16 +47,11 @@ func TestProxyPortHandling_StaticAllowlist(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a CONNECT request with the host:port
-			req := httptest.NewRequest(http.MethodConnect, "https://example.com", http.NoBody)
-			req.Host = tt.connectHost
-
-			// Check if allowlist matches (simulating proxy.handleConnect logic)
-			_, _ = proxy.resolveRequest(req)
-			matched := proxy.Allowlist.IsAllowed(tt.connectHost)
-
+			domain := stripPort(tt.connectHost)
+			decision := proxy.PolicyEngine.Check("", "", domain)
+			matched := decision == Allow
 			if matched != tt.shouldMatch {
-				t.Errorf("IsAllowed(%q) = %v, want %v", tt.connectHost, matched, tt.shouldMatch)
+				t.Errorf("PolicyEngine.Check(%q) = %v, want shouldMatch=%v", tt.connectHost, decision, tt.shouldMatch)
 			}
 		})
 	}
@@ -78,9 +73,10 @@ func TestProxyPortHandling_ApprovalQueueDomain(t *testing.T) {
 		},
 	}
 
-	// Create proxy with empty allowlist and mock approver
+	// Create proxy with empty PolicyEngine (all domains go to AskHuman) and mock approver
+	pe := newTestProxyPolicyEngine(nil, nil)
 	proxy := &ProxyServer{
-		Allowlist:      NewAllowlist([]string{}),
+		PolicyEngine:   pe,
 		DomainApprover: approver,
 	}
 

@@ -993,61 +993,6 @@ func TestProxyServer_AuthWithTunnelData(t *testing.T) {
 	}
 }
 
-func TestNewProxyServerWithConfig(t *testing.T) {
-	t.Run("with custom allowlist", func(t *testing.T) {
-		customAllowlist := NewAllowlist([]string{"custom.example.com"})
-		p := NewProxyServerWithConfig(":0", customAllowlist)
-
-		if p.Addr != ":0" {
-			t.Errorf("expected address :0, got %s", p.Addr)
-		}
-		if p.Allowlist != customAllowlist {
-			t.Error("expected custom allowlist to be set")
-		}
-	})
-
-	t.Run("with nil allowlist uses default", func(t *testing.T) {
-		p := NewProxyServerWithConfig(":0", nil)
-
-		if p.Allowlist == nil {
-			t.Error("expected default allowlist when nil is provided")
-		}
-		// Should have default domains
-		if !p.Allowlist.IsAllowed("api.anthropic.com") {
-			t.Error("default allowlist should allow api.anthropic.com")
-		}
-	})
-
-	t.Run("with empty address uses default port", func(t *testing.T) {
-		p := NewProxyServerWithConfig("", NewAllowlist(nil))
-
-		if p.Addr != ":3128" {
-			t.Errorf("expected default address :3128, got %s", p.Addr)
-		}
-	})
-}
-
-func TestProxyServer_SetAllowlist(t *testing.T) {
-	p := NewProxyServer(":0")
-
-	// Verify initial default allowlist
-	if !p.Allowlist.IsAllowed("api.anthropic.com") {
-		t.Error("initial allowlist should allow api.anthropic.com")
-	}
-
-	// Set new allowlist
-	newAllowlist := NewAllowlist([]string{"new.example.com"})
-	p.SetAllowlist(newAllowlist)
-
-	// Verify new allowlist is in effect
-	if p.Allowlist.IsAllowed("api.anthropic.com") {
-		t.Error("new allowlist should not allow api.anthropic.com")
-	}
-	if !p.Allowlist.IsAllowed("new.example.com") {
-		t.Error("new allowlist should allow new.example.com")
-	}
-}
-
 func TestProxyServer_PolicyEngineDerivedAllowlist(t *testing.T) {
 	// Start a mock upstream
 	echoHandler := func(conn net.Conn) {
@@ -1105,18 +1050,11 @@ func TestProxyServer_PolicyEngineDerivedAllowlist(t *testing.T) {
 	}
 }
 
-func TestProxyServer_HandleSighupNoopWithoutPolicyEngine(t *testing.T) {
+func TestProxyServer_HandleSighupNoopWithoutPolicyEngine(_ *testing.T) {
 	// handleSighup with nil PolicyEngine does nothing.
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{"example.com"})
-
-	// No PolicyEngine set — handleSighup should be a no-op.
+	// No PolicyEngine set — handleSighup should be a no-op (no panic).
 	p.handleSighup()
-
-	// Should still be valid
-	if !p.Allowlist.IsAllowed("example.com") {
-		t.Error("allowlist should be unchanged when no PolicyEngine is set")
-	}
 }
 
 func TestProxyServer_PolicyEngineSighup(t *testing.T) {
