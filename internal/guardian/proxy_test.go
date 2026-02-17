@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/xdg/cloister/internal/clog"
+	"github.com/xdg/cloister/internal/config"
 )
 
 // mockTokenValidator is a simple TokenValidator for testing.
@@ -32,6 +33,20 @@ func newMockTokenValidator(tokens ...string) *mockTokenValidator {
 
 func (v *mockTokenValidator) Validate(token string) bool {
 	return v.validTokens[token]
+}
+
+// newTestProxyPolicyEngine creates a PolicyEngine for proxy tests with
+// the given global allow domains. No project lister or file loaders are
+// configured (session/project/global reload not needed for basic proxy tests).
+func newTestProxyPolicyEngine(allowDomains, denyDomains []string) *PolicyEngine { //nolint:unparam // denyDomains used by callers constructing deny-specific scenarios
+	return &PolicyEngine{
+		global: ProxyPolicy{
+			Allow: NewDomainSet(allowDomains, nil),
+			Deny:  NewDomainSet(denyDomains, nil),
+		},
+		projects: make(map[string]*ProxyPolicy),
+		tokens:   make(map[string]*ProxyPolicy),
+	}
 }
 
 func TestNewProxyServer(t *testing.T) {
@@ -101,7 +116,7 @@ func TestProxyServer_ConnectMethod(t *testing.T) {
 	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
 
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{upstreamHost})
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
@@ -234,9 +249,9 @@ func TestProxyServer_TunnelEstablishment(t *testing.T) {
 	// Extract host from upstream address for allowlist
 	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
 
-	// Start proxy with a custom allowlist that includes our mock upstream
+	// Start proxy with a PolicyEngine that includes our mock upstream
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{upstreamHost})
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
 	}
@@ -347,7 +362,8 @@ func TestProxyServer_TunnelEstablishment(t *testing.T) {
 
 func TestProxyServer_TunnelBlockedDomain(t *testing.T) {
 	p := NewProxyServer(":0")
-	// Default allowlist does not include localhost
+	// PolicyEngine with no domains allowed — all requests should be denied or AskHuman.
+	p.PolicyEngine = newTestProxyPolicyEngine(nil, nil)
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
 	}
@@ -387,7 +403,7 @@ func TestProxyServer_TunnelBlockedDomain(t *testing.T) {
 func TestProxyServer_TunnelUpstreamConnectionFailure(t *testing.T) {
 	p := NewProxyServer(":0")
 	// Allow localhost but try to connect to a port that's not listening
-	p.Allowlist = NewAllowlist([]string{"127.0.0.1"})
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{"127.0.0.1"}, nil)
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
 	}
@@ -458,7 +474,7 @@ func TestProxyServer_TunnelConnectionTimeout(t *testing.T) {
 	}()
 
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{slowHost})
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{slowHost}, nil)
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
@@ -605,7 +621,7 @@ func TestProxyServer_TunnelCleanShutdown(t *testing.T) {
 	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
 
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{upstreamHost})
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
 	}
@@ -740,7 +756,7 @@ func TestProxyServer_Authentication(t *testing.T) {
 
 			// Create proxy with token validator
 			p := NewProxyServer(":0")
-			p.Allowlist = NewAllowlist([]string{upstreamHost})
+			p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
 			p.TokenValidator = newMockTokenValidator(tc.validTokens...)
 
 			if err := p.Start(); err != nil {
@@ -844,7 +860,7 @@ func TestProxyServer_NoTokenValidatorAllowsAll(t *testing.T) {
 	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
 
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{upstreamHost})
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
 	// Explicitly no TokenValidator set
 
 	if err := p.Start(); err != nil {
@@ -900,7 +916,7 @@ func TestProxyServer_AuthWithTunnelData(t *testing.T) {
 	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
 
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{upstreamHost})
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
 	p.TokenValidator = newMockTokenValidator("my-secret-token")
 
 	if err := p.Start(); err != nil {
@@ -1022,7 +1038,7 @@ func TestProxyServer_SetAllowlist(t *testing.T) {
 	}
 }
 
-func TestProxyServer_ConfigDerivedAllowlist(t *testing.T) {
+func TestProxyServer_PolicyEngineDerivedAllowlist(t *testing.T) {
 	// Start a mock upstream
 	echoHandler := func(conn net.Conn) {
 		buf := make([]byte, 1024)
@@ -1039,9 +1055,9 @@ func TestProxyServer_ConfigDerivedAllowlist(t *testing.T) {
 
 	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
 
-	// Create proxy with config-derived allowlist
-	customAllowlist := NewAllowlist([]string{upstreamHost})
-	p := NewProxyServerWithConfig(":0", customAllowlist)
+	// Create proxy with PolicyEngine
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
@@ -1054,7 +1070,7 @@ func TestProxyServer_ConfigDerivedAllowlist(t *testing.T) {
 
 	proxyAddr := p.ListenAddr()
 
-	// Test that config-derived allowlist works
+	// Test that PolicyEngine-derived domain check works
 	conn, err := (&net.Dialer{}).DialContext(context.Background(), "tcp", proxyAddr)
 	if err != nil {
 		t.Fatalf("failed to connect to proxy: %v", err)
@@ -1080,9 +1096,9 @@ func TestProxyServer_ConfigDerivedAllowlist(t *testing.T) {
 }
 
 func TestProxyServer_ConfigReloader(t *testing.T) {
-	// Test that SetConfigReloader and handleSighup work correctly
+	// Test legacy SetConfigReloader and handleSighup.
 
-	t.Run("handleSighup updates allowlist", func(t *testing.T) {
+	t.Run("legacy handleSighup updates allowlist", func(t *testing.T) {
 		p := NewProxyServer(":0")
 
 		// Initial allowlist
@@ -1112,7 +1128,7 @@ func TestProxyServer_ConfigReloader(t *testing.T) {
 		}
 	})
 
-	t.Run("handleSighup ignores error", func(t *testing.T) {
+	t.Run("legacy handleSighup ignores error", func(t *testing.T) {
 		// Capture clog output
 		var logBuf bytes.Buffer
 		testLogger := clog.TestLogger(&logBuf)
@@ -1141,16 +1157,78 @@ func TestProxyServer_ConfigReloader(t *testing.T) {
 		}
 	})
 
-	t.Run("handleSighup with nil reloader does nothing", func(t *testing.T) {
+	t.Run("handleSighup with nil reloader and nil PolicyEngine does nothing", func(t *testing.T) {
 		p := NewProxyServer(":0")
 		p.Allowlist = NewAllowlist([]string{"example.com"})
 
-		// No config reloader set
+		// No config reloader or PolicyEngine set
 		p.handleSighup()
 
 		// Should still be valid
 		if !p.Allowlist.IsAllowed("example.com") {
 			t.Error("allowlist should be unchanged when no reloader is set")
+		}
+	})
+}
+
+func TestProxyServer_PolicyEngineSighup(t *testing.T) {
+	// Test that handleSighup calls PolicyEngine.ReloadAll when set.
+
+	t.Run("handleSighup calls PolicyEngine.ReloadAll", func(t *testing.T) {
+		configDir := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", configDir)
+		t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+		pe := newTestProxyPolicyEngine([]string{"initial.example.com"}, nil)
+		// Override loaders to return updated config on reload.
+		pe.configLoader = func() (*config.GlobalConfig, error) {
+			return &config.GlobalConfig{}, nil
+		}
+		pe.decisionLoader = func() (*config.Decisions, error) {
+			return &config.Decisions{
+				Proxy: config.DecisionsProxy{
+					Allow: []config.AllowEntry{{Domain: "reloaded.example.com"}},
+				},
+			}, nil
+		}
+
+		p := NewProxyServer(":0")
+		p.PolicyEngine = pe
+
+		// Manually call handleSighup
+		p.handleSighup()
+
+		// Verify PolicyEngine was reloaded: reloaded domain should now be allowed
+		// (global policy rebuilt from mocked loaders).
+		if pe.Check("", "", "reloaded.example.com") != Allow {
+			t.Error("reloaded domain should be allowed after SIGHUP reload")
+		}
+	})
+
+	t.Run("handleSighup logs PolicyEngine reload error", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		testLogger := clog.TestLogger(&logBuf)
+		oldLogger := clog.ReplaceGlobal(testLogger)
+		defer clog.ReplaceGlobal(oldLogger)
+
+		pe := newTestProxyPolicyEngine([]string{"original.example.com"}, nil)
+		pe.configLoader = func() (*config.GlobalConfig, error) {
+			return nil, fmt.Errorf("disk error")
+		}
+
+		p := NewProxyServer(":0")
+		p.PolicyEngine = pe
+
+		p.handleSighup()
+
+		// Original policy should remain unchanged (ReloadAll failed).
+		if pe.Check("", "", "original.example.com") != Allow {
+			t.Error("original domain should still be allowed after failed reload")
+		}
+
+		// Error should be logged
+		if !strings.Contains(logBuf.String(), "PolicyEngine reload failed") {
+			t.Errorf("expected PolicyEngine reload error to be logged, got: %s", logBuf.String())
 		}
 	})
 }
@@ -1172,15 +1250,16 @@ func TestProxyServer_PerProjectAllowlist(t *testing.T) {
 	defer cleanup()
 	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
 
-	// Create allowlist cache with project-specific allowlists
-	// Use different domain names to test the logic (even though only one upstream exists)
-	globalAllowlist := NewAllowlist([]string{"global.example.com"})
-	cache := NewAllowlistCache(globalAllowlist)
-
+	// Create PolicyEngine with per-project policies.
+	pe := newTestProxyPolicyEngine([]string{"global.example.com"}, nil)
 	// Project A can access the upstream host AND project-a-domain.com
-	cache.SetProject("project-a", NewAllowlist([]string{upstreamHost, "project-a-domain.com"}))
+	pe.projects["project-a"] = &ProxyPolicy{
+		Allow: NewDomainSet([]string{upstreamHost, "project-a-domain.com"}, nil),
+	}
 	// Project B can only access project-b-domain.com (NOT the upstream host)
-	cache.SetProject("project-b", NewAllowlist([]string{"project-b-domain.com"}))
+	pe.projects["project-b"] = &ProxyPolicy{
+		Allow: NewDomainSet([]string{"project-b-domain.com"}, nil),
+	}
 
 	// Token lookup function
 	tokenLookup := func(token string) (TokenLookupResult, bool) {
@@ -1194,10 +1273,9 @@ func TestProxyServer_PerProjectAllowlist(t *testing.T) {
 		}
 	}
 
-	// Create proxy with per-project support
+	// Create proxy with per-project support via PolicyEngine
 	p := NewProxyServer(":0")
-	p.Allowlist = globalAllowlist
-	p.AllowlistCache = cache
+	p.PolicyEngine = pe
 	p.TokenLookup = tokenLookup
 	p.TokenValidator = newMockTokenValidator("token-a", "token-b")
 
@@ -1266,13 +1344,16 @@ func TestProxyServer_PerProjectAllowlist(t *testing.T) {
 		t.Errorf("project-a to blocked domain: expected 403, got %d", status)
 	}
 
-	// Test: Both projects cannot access the global-only domain (because they have project-specific allowlists)
+	// Test: With PolicyEngine, global allow is checked across all tiers.
+	// Global domain IS accessible because global allow matches.
 	status, err = makeRequest("token-a", "global.example.com:443")
 	if err != nil {
 		t.Fatalf("request failed: %v", err)
 	}
-	if status != 403 {
-		t.Errorf("project-a to global domain: expected 403, got %d", status)
+	// PolicyEngine allows global domains for all projects (global allow pass).
+	// This returns 502 because there's no real upstream, but NOT 403.
+	if status == 403 {
+		t.Errorf("project-a to global domain: should not get 403 (global allow matches)")
 	}
 }
 
@@ -1300,9 +1381,9 @@ func (m *mockDomainApprover) CallCount() int {
 }
 
 func TestProxyServer_DomainApproval_NilApproverRejects(t *testing.T) {
-	// Test backward compatibility: nil DomainApprover returns 403 for unlisted domains
+	// Test that nil DomainApprover returns 403 for unlisted domains (AskHuman path)
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{"allowed.com"})
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{"allowed.com"}, nil)
 	// DomainApprover is nil by default
 
 	if err := p.Start(); err != nil {
@@ -1356,17 +1437,12 @@ func TestProxyServer_DomainApproval_ApprovalAllowsConnection(t *testing.T) {
 	defer cleanup()
 
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
+	p.PolicyEngine = newTestProxyPolicyEngine(nil, nil) // Empty — all domains go to AskHuman
 	p.DomainApprover = &mockDomainApprover{
 		approveFunc: func(_, _, _, _ string) (DomainApprovalResult, error) {
 			return DomainApprovalResult{Approved: true, Scope: "session"}, nil
 		},
 	}
-	// Configure per-project support so extractProjectName works
-	globalAllowlist := NewAllowlist([]string{})
-	cache := NewAllowlistCache(globalAllowlist)
-	cache.SetProject("test-project", NewAllowlist([]string{}))
-	p.AllowlistCache = cache
 	p.TokenLookup = func(token string) (TokenLookupResult, bool) {
 		if token == "test-token" {
 			return TokenLookupResult{ProjectName: "test-project"}, true
@@ -1415,17 +1491,12 @@ func TestProxyServer_DomainApproval_ApprovalAllowsConnection(t *testing.T) {
 func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
 	// Test that when DomainApprover denies, returns 403
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
+	p.PolicyEngine = newTestProxyPolicyEngine(nil, nil) // Empty — all domains go to AskHuman
 	p.DomainApprover = &mockDomainApprover{
 		approveFunc: func(_, _, _, _ string) (DomainApprovalResult, error) {
 			return DomainApprovalResult{Approved: false}, nil
 		},
 	}
-	// Configure per-project support
-	globalAllowlist := NewAllowlist([]string{})
-	cache := NewAllowlistCache(globalAllowlist)
-	cache.SetProject("test-project", NewAllowlist([]string{}))
-	p.AllowlistCache = cache
 	p.TokenLookup = func(token string) (TokenLookupResult, bool) {
 		if token == "test-token" {
 			return TokenLookupResult{ProjectName: "test-project"}, true
@@ -1471,10 +1542,10 @@ func TestProxyServer_DomainApproval_DenialReturns403(t *testing.T) {
 }
 
 func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
-	// Test that session allowlist hit bypasses DomainApprover entirely
+	// Test that token-level allow in PolicyEngine bypasses DomainApprover entirely
 	approver := &mockDomainApprover{
 		approveFunc: func(_, _, _, _ string) (DomainApprovalResult, error) {
-			t.Error("DomainApprover should not be called when session allowlist matches")
+			t.Error("DomainApprover should not be called when token allow matches")
 			return DomainApprovalResult{Approved: false}, nil
 		},
 	}
@@ -1491,19 +1562,17 @@ func TestProxyServer_DomainApproval_SessionAllowlistBypass(t *testing.T) {
 	}
 	upstreamAddr, cleanup := startMockUpstream(t, echoHandler)
 	defer cleanup()
+	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
+
+	// Create PolicyEngine with empty global allow, but add token-level allow for the upstream.
+	pe := newTestProxyPolicyEngine(nil, nil)
+	pe.tokens["test-token"] = &ProxyPolicy{
+		Allow: NewDomainSet([]string{upstreamHost}, nil),
+	}
 
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
+	p.PolicyEngine = pe
 	p.DomainApprover = approver
-	p.SessionAllowlist = NewSessionAllowlist()
-	// Add the upstream to session allowlist (using token, not project)
-	_ = p.SessionAllowlist.Add("test-token", upstreamAddr)
-
-	// Configure per-project support
-	globalAllowlist := NewAllowlist([]string{})
-	cache := NewAllowlistCache(globalAllowlist)
-	cache.SetProject("test-project", NewAllowlist([]string{}))
-	p.AllowlistCache = cache
 	p.TokenLookup = func(token string) (TokenLookupResult, bool) {
 		if token == "test-token" {
 			return TokenLookupResult{ProjectName: "test-project"}, true
@@ -1560,7 +1629,7 @@ func TestProxyServer_DomainApproval_SingleTokenLookup(t *testing.T) {
 	var mu sync.Mutex
 
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{}) // Empty persistent allowlist
+	p.PolicyEngine = newTestProxyPolicyEngine(nil, nil) // Empty — all domains go to AskHuman
 	p.DomainApprover = &mockDomainApprover{
 		approveFunc: func(project, _, _, _ string) (DomainApprovalResult, error) {
 			// Verify project name was extracted correctly
@@ -1572,10 +1641,6 @@ func TestProxyServer_DomainApproval_SingleTokenLookup(t *testing.T) {
 	}
 
 	// Configure per-project support with counting TokenLookup
-	globalAllowlist := NewAllowlist([]string{})
-	cache := NewAllowlistCache(globalAllowlist)
-	cache.SetProject("test-project", NewAllowlist([]string{}))
-	p.AllowlistCache = cache
 	p.TokenLookup = func(token string) (TokenLookupResult, bool) {
 		mu.Lock()
 		lookupCount++
@@ -1632,7 +1697,7 @@ func TestProxyServer_DomainApproval_SingleTokenLookup(t *testing.T) {
 func TestProxyServer_DomainApproval_EmptyHostRejected(t *testing.T) {
 	// Test that empty host is rejected early
 	p := NewProxyServer(":0")
-	p.Allowlist = NewAllowlist([]string{})
+	p.PolicyEngine = newTestProxyPolicyEngine(nil, nil)
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
@@ -1670,7 +1735,7 @@ func TestProxyServer_DomainApproval_EmptyHostRejected(t *testing.T) {
 }
 
 func TestProxyServer_DenylistPrecedence_StaticDenyOverridesAllowlist(t *testing.T) {
-	// Denied domain in global config blocks request even if in project allowlist.
+	// Denied domain in global deny blocks request even if in project allow.
 
 	// Start a mock upstream for the non-denied domain test case.
 	echoHandler := func(conn net.Conn) {
@@ -1687,16 +1752,19 @@ func TestProxyServer_DenylistPrecedence_StaticDenyOverridesAllowlist(t *testing.
 	defer cleanup()
 	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
 
-	// Create AllowlistCache with global allowlist containing both the denied domain
-	// and the upstream host (for the positive test case).
-	globalAllowlist := NewAllowlist([]string{"denied-but-allowed.example.com", upstreamHost})
-	cache := NewAllowlistCache(globalAllowlist)
-
-	// Set global denylist containing the denied domain.
-	cache.SetGlobalDeny(NewAllowlist([]string{"denied-but-allowed.example.com"}))
-
-	// Project allowlist also includes the denied domain.
-	cache.SetProject("test-project", NewAllowlist([]string{"denied-but-allowed.example.com", upstreamHost}))
+	// Create PolicyEngine with global allow and deny.
+	pe := &PolicyEngine{
+		global: ProxyPolicy{
+			Allow: NewDomainSet([]string{"denied-but-allowed.example.com", upstreamHost}, nil),
+			Deny:  NewDomainSet([]string{"denied-but-allowed.example.com"}, nil),
+		},
+		projects: map[string]*ProxyPolicy{
+			"test-project": {
+				Allow: NewDomainSet([]string{"denied-but-allowed.example.com", upstreamHost}, nil),
+			},
+		},
+		tokens: make(map[string]*ProxyPolicy),
+	}
 
 	tokenLookup := func(token string) (TokenLookupResult, bool) {
 		if token == "test-token" {
@@ -1706,8 +1774,7 @@ func TestProxyServer_DenylistPrecedence_StaticDenyOverridesAllowlist(t *testing.
 	}
 
 	p := NewProxyServer(":0")
-	p.Allowlist = globalAllowlist
-	p.AllowlistCache = cache
+	p.PolicyEngine = pe
 	p.TokenLookup = tokenLookup
 	p.TokenValidator = newMockTokenValidator("test-token")
 
@@ -1772,31 +1839,22 @@ func TestProxyServer_DenylistPrecedence_StaticDenyOverridesAllowlist(t *testing.
 }
 
 func TestProxyServer_DenylistPrecedence_SessionDenyBlocks(t *testing.T) {
-	// Session denied domain blocks request even when session allowlist has
-	// the same domain allowed for the same token.
+	// Token-level deny blocks request even when token-level allow has
+	// the same domain for the same token.
 
 	approver := &mockDomainApprover{
 		approveFunc: func(_, _, _, _ string) (DomainApprovalResult, error) {
-			t.Error("DomainApprover should not be called when session denylist blocks")
+			t.Error("DomainApprover should not be called when token deny blocks")
 			return DomainApprovalResult{Approved: true, Scope: "session"}, nil
 		},
 	}
 
-	// Create session denylist and allowlist with the same domain for the same token.
-	sessionDeny := NewSessionDenylist()
-	if err := sessionDeny.Add("test-token", "denied-session.example.com"); err != nil {
-		t.Fatalf("failed to add to session denylist: %v", err)
+	// Create PolicyEngine with token-level deny AND allow for the same domain.
+	pe := newTestProxyPolicyEngine(nil, nil)
+	pe.tokens["test-token"] = &ProxyPolicy{
+		Allow: NewDomainSet([]string{"denied-session.example.com"}, nil),
+		Deny:  NewDomainSet([]string{"denied-session.example.com"}, nil),
 	}
-
-	sessionAllow := NewSessionAllowlist()
-	if err := sessionAllow.Add("test-token", "denied-session.example.com"); err != nil {
-		t.Fatalf("failed to add to session allowlist: %v", err)
-	}
-
-	// Empty static allowlist so we rely on session lists.
-	globalAllowlist := NewAllowlist([]string{})
-	cache := NewAllowlistCache(globalAllowlist)
-	cache.SetProject("test-project", NewAllowlist([]string{}))
 
 	tokenLookup := func(token string) (TokenLookupResult, bool) {
 		if token == "test-token" {
@@ -1806,13 +1864,10 @@ func TestProxyServer_DenylistPrecedence_SessionDenyBlocks(t *testing.T) {
 	}
 
 	p := NewProxyServer(":0")
-	p.Allowlist = globalAllowlist
-	p.AllowlistCache = cache
+	p.PolicyEngine = pe
 	p.TokenLookup = tokenLookup
 	p.TokenValidator = newMockTokenValidator("test-token")
 	p.DomainApprover = approver
-	p.SessionDenylist = sessionDeny
-	p.SessionAllowlist = sessionAllow
 
 	if err := p.Start(); err != nil {
 		t.Fatalf("failed to start proxy server: %v", err)
@@ -1873,15 +1928,20 @@ func TestProxyServer_DenylistPrecedence_DenyPatternBlocksSubdomain(t *testing.T)
 	defer cleanup()
 	upstreamHost, _, _ := net.SplitHostPort(upstreamAddr)
 
-	// Global allowlist includes the denied subdomain and the upstream host.
-	globalAllowlist := NewAllowlist([]string{"api.evil.com", upstreamHost})
-	cache := NewAllowlistCache(globalAllowlist)
-
-	// Global denylist uses a wildcard pattern to block all *.evil.com.
-	cache.SetGlobalDeny(NewAllowlistWithPatterns(nil, []string{"*.evil.com"}))
-
-	// Project allowlist also includes both.
-	cache.SetProject("test-project", NewAllowlist([]string{"api.evil.com", upstreamHost}))
+	// Create PolicyEngine with global allow (including denied subdomain) and
+	// global deny pattern for *.evil.com.
+	pe := &PolicyEngine{
+		global: ProxyPolicy{
+			Allow: NewDomainSet([]string{"api.evil.com", upstreamHost}, nil),
+			Deny:  NewDomainSet(nil, []string{"*.evil.com"}),
+		},
+		projects: map[string]*ProxyPolicy{
+			"test-project": {
+				Allow: NewDomainSet([]string{"api.evil.com", upstreamHost}, nil),
+			},
+		},
+		tokens: make(map[string]*ProxyPolicy),
+	}
 
 	tokenLookup := func(token string) (TokenLookupResult, bool) {
 		if token == "test-token" {
@@ -1891,8 +1951,7 @@ func TestProxyServer_DenylistPrecedence_DenyPatternBlocksSubdomain(t *testing.T)
 	}
 
 	p := NewProxyServer(":0")
-	p.Allowlist = globalAllowlist
-	p.AllowlistCache = cache
+	p.PolicyEngine = pe
 	p.TokenLookup = tokenLookup
 	p.TokenValidator = newMockTokenValidator("test-token")
 

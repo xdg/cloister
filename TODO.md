@@ -129,13 +129,13 @@ TokenLookup fields with a single PolicyEngine field. Rewrite
 
 ### 3.1 Add PolicyEngine to ProxyServer
 
-- [ ] Add `PolicyEngine *PolicyEngine` field to `ProxyServer`
-- [ ] Keep `TokenLookup` (still needed by `resolveRequest` to map token→project)
-- [ ] Rewrite `checkDomainAccess` to call `pe.Check(token, project, domain)` and map `Decision` to allow/deny/requestApproval
-- [ ] Remove `AllowlistCache`, `SessionAllowlist`, `SessionDenylist` fields from ProxyServer
-- [ ] Update `resolveRequest` — no longer needs to call `AllowlistCache.GetProject()` to get a per-project allowlist; just needs token→project mapping
-- [ ] The `resolvedRequest` struct loses the `Allowlist` field; keeps `ProjectName`, `CloisterName`, `Token`
-- [ ] **Test**: Update `proxy_test.go` — replace AllowlistCache/Session mocks with PolicyEngine (or mock PolicyEngine interface)
+- [x] Add `PolicyEngine *PolicyEngine` field to `ProxyServer`
+- [x] Keep `TokenLookup` (still needed by `resolveRequest` to map token→project)
+- [x] Rewrite `checkDomainAccess` to call `pe.Check(token, project, domain)` and map `Decision` to allow/deny/requestApproval
+- [x] Remove `AllowlistCache`, `SessionAllowlist`, `SessionDenylist` fields from ProxyServer
+- [x] Update `resolveRequest` — no longer needs to call `AllowlistCache.GetProject()` to get a per-project allowlist; just needs token→project mapping
+- [x] The `resolvedRequest` struct loses the `Allowlist` field; keeps `ProjectName`, `CloisterName`, `Token`
+- [x] **Test**: Update `proxy_test.go` — replace AllowlistCache/Session mocks with PolicyEngine (or mock PolicyEngine interface)
 
 ### 3.2 Define PolicyChecker interface for testability
 

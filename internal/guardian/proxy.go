@@ -85,7 +85,14 @@ type ProxyServer struct {
 	// Addr is the address to listen on (e.g., ":3128").
 	Addr string
 
+	// PolicyEngine handles all domain access control when set. If non-nil,
+	// it replaces AllowlistCache, SessionAllowlist, SessionDenylist, and the
+	// global Allowlist for domain checks. The proxy delegates to
+	// PolicyEngine.Check() and maps the Decision to allow/deny/requestApproval.
+	PolicyEngine *PolicyEngine
+
 	// Allowlist controls which domains are permitted. If nil, all domains are blocked.
+	// Legacy: superseded by PolicyEngine when set. Will be removed in Phase 6.
 	Allowlist *Allowlist
 
 	// TokenValidator validates authentication tokens. If nil, all requests are allowed
@@ -95,6 +102,7 @@ type ProxyServer struct {
 
 	// AllowlistCache provides per-project allowlist lookups. If nil, the global
 	// Allowlist is used for all requests.
+	// Legacy: superseded by PolicyEngine when set. Will be removed in Phase 6.
 	AllowlistCache *AllowlistCache
 
 	// TokenLookup provides token-to-project mapping for per-project allowlists.
@@ -107,10 +115,12 @@ type ProxyServer struct {
 
 	// SessionAllowlist tracks domains approved with "session" scope (ephemeral).
 	// If nil, session allowlist checks are skipped.
+	// Legacy: superseded by PolicyEngine when set. Will be removed in Phase 6.
 	SessionAllowlist SessionAllowlist
 
 	// SessionDenylist tracks domains denied with "session" scope (ephemeral).
 	// If nil, session denylist checks are skipped.
+	// Legacy: superseded by PolicyEngine when set. Will be removed in Phase 6.
 	SessionDenylist SessionDenylist
 
 	// TunnelHandler optionally handles tunnel establishment after domain approval.
@@ -198,8 +208,8 @@ func (p *ProxyServer) Start() error {
 		}
 	}()
 
-	// Start SIGHUP handler if configReloader is set
-	if p.configReloader != nil {
+	// Start SIGHUP handler if PolicyEngine or configReloader is available.
+	if p.PolicyEngine != nil || p.configReloader != nil {
 		p.startSighupHandler()
 	}
 
@@ -227,6 +237,17 @@ func (p *ProxyServer) startSighupHandler() {
 
 // handleSighup is called when SIGHUP is received to reload configuration.
 func (p *ProxyServer) handleSighup() {
+	// PolicyEngine path: reload all policies from disk.
+	if p.PolicyEngine != nil {
+		if err := p.PolicyEngine.ReloadAll(); err != nil {
+			p.log("SIGHUP PolicyEngine reload failed: %v", err)
+			return
+		}
+		p.log("SIGHUP PolicyEngine reloaded successfully")
+		return
+	}
+
+	// Legacy path: use configReloader callback.
 	p.mu.Lock()
 	reloader := p.configReloader
 	p.mu.Unlock()
@@ -413,8 +434,8 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clog.Debug("handleConnect: host=%s, domain=%s, project=%s, allowlist=%v",
-		targetHostPort, domain, resolved.ProjectName, resolved.Allowlist != nil)
+	clog.Debug("handleConnect: host=%s, domain=%s, project=%s, policyEngine=%v",
+		targetHostPort, domain, resolved.ProjectName, p.PolicyEngine != nil)
 
 	if err := p.checkDomainAccess(domain, resolved); err != nil {
 		var cfgErr *ConfigError
@@ -437,6 +458,29 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 // Returns nil if the domain is allowed, or an error message if denied.
 // Returns a ConfigError-wrapped error if the project config is malformed.
 func (p *ProxyServer) checkDomainAccess(domain string, resolved resolvedRequest) error {
+	// New path: delegate to PolicyEngine when available.
+	if p.PolicyEngine != nil {
+		decision := p.PolicyEngine.Check(resolved.Token, resolved.ProjectName, domain)
+		switch decision {
+		case Allow:
+			return nil
+		case Deny:
+			return fmt.Errorf("forbidden - domain denied")
+		case AskHuman:
+			return p.requestDomainApproval(domain, resolved)
+		default:
+			return fmt.Errorf("forbidden - unknown policy decision")
+		}
+	}
+
+	// Legacy path: used when PolicyEngine is not configured.
+	return p.checkDomainAccessLegacy(domain, resolved)
+}
+
+// checkDomainAccessLegacy evaluates domain access using the old AllowlistCache,
+// SessionAllowlist, and SessionDenylist fields. This is retained for backward
+// compatibility during the PolicyEngine migration.
+func (p *ProxyServer) checkDomainAccessLegacy(domain string, resolved resolvedRequest) error {
 	// 1. Static denylist
 	if p.AllowlistCache != nil {
 		blocked, err := p.AllowlistCache.IsBlocked(resolved.ProjectName, domain)
@@ -598,30 +642,49 @@ func copyWithIdleTimeout(dst, src net.Conn, idleTimeout time.Duration) {
 	}
 }
 
-// resolvedRequest holds the result of resolving a proxy request's identity and allowlist.
+// resolvedRequest holds the result of resolving a proxy request's identity.
 type resolvedRequest struct {
+	// Allowlist is the effective allowlist for the legacy (non-PolicyEngine) path.
+	// When PolicyEngine is set, this field is nil and unused.
 	Allowlist    *Allowlist
 	ProjectName  string
 	CloisterName string
 	Token        string
 }
 
-// resolveRequest determines the allowlist, project name, cloister name, and token for a request.
-// It extracts the token from the Proxy-Authorization header and performs a single lookup.
-// Falls back to the global allowlist with empty project/cloister if lookup is unavailable.
-// Returns a ConfigError-wrapped error if the project config is malformed.
+// resolveRequest determines the project name, cloister name, and token for a request.
+// When PolicyEngine is set, it only needs the token→project mapping (no allowlist lookup).
+// When PolicyEngine is nil, it falls back to the legacy AllowlistCache path.
+// Returns a ConfigError-wrapped error if the project config is malformed (legacy path only).
 func (p *ProxyServer) resolveRequest(r *http.Request) (resolvedRequest, error) {
-	clog.Debug("resolveRequest: AllowlistCache=%v, TokenLookup=%v", p.AllowlistCache != nil, p.TokenLookup != nil)
-
 	var token string
 
-	// Extract token from request header (needed for session allowlist regardless)
+	// Extract token from request header.
 	authHeader := r.Header.Get("Proxy-Authorization")
 	if authHeader != "" {
 		if t, ok := p.parseBasicAuth(authHeader); ok {
 			token = t
 		}
 	}
+
+	// PolicyEngine path: only need token→project mapping.
+	if p.PolicyEngine != nil {
+		if p.TokenLookup == nil || token == "" {
+			return resolvedRequest{Token: token}, nil
+		}
+		result, valid := p.TokenLookup(token)
+		if !valid || result.ProjectName == "" {
+			return resolvedRequest{Token: token}, nil
+		}
+		return resolvedRequest{
+			ProjectName:  result.ProjectName,
+			CloisterName: result.CloisterName,
+			Token:        token,
+		}, nil
+	}
+
+	// Legacy path: resolve allowlist via AllowlistCache.
+	clog.Debug("resolveRequest: AllowlistCache=%v, TokenLookup=%v", p.AllowlistCache != nil, p.TokenLookup != nil)
 
 	// If no per-project support is configured, use global allowlist
 	if p.AllowlistCache == nil || p.TokenLookup == nil {
