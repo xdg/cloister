@@ -57,7 +57,7 @@ existing code still compiles during the transition.
 
 ### 1.1 Create DomainSet type
 
-- [ ] Create `internal/guardian/domain_set.go` with `DomainSet` struct:
+- [x] Create `internal/guardian/domain_set.go` with `DomainSet` struct:
   - `domains map[string]struct{}` (exact matches)
   - `patterns []string` (wildcards like `*.example.com`)
   - `Contains(domain string) bool` — strips port, checks exact then patterns
@@ -65,9 +65,9 @@ existing code still compiles during the transition.
   - `AddPattern(pattern string)` — adds wildcard pattern (validates first)
   - `NewDomainSet(domains []string, patterns []string) *DomainSet`
   - `NewDomainSetFromConfig(entries []config.AllowEntry) *DomainSet`
-- [ ] Move `stripPort`, `matchPattern`, `IsValidPattern` into `domain_set.go` (or keep shared)
-- [ ] `DomainSet` needs its own `sync.RWMutex` for thread-safe `Add`/`AddPattern` (session-tier mutations happen concurrently with reads)
-- [ ] **Test**: `domain_set_test.go` — exact match, pattern match, port stripping, Add/AddPattern, concurrent access
+- [x] Move `stripPort`, `matchPattern`, `IsValidPattern` into `domain_set.go` (or keep shared)
+- [x] `DomainSet` needs its own `sync.RWMutex` for thread-safe `Add`/`AddPattern` (session-tier mutations happen concurrently with reads)
+- [x] **Test**: `domain_set_test.go` — exact match, pattern match, port stripping, Add/AddPattern, concurrent access
 
 ### 1.2 Alias Allowlist to DomainSet
 
