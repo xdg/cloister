@@ -1105,80 +1105,18 @@ func TestProxyServer_PolicyEngineDerivedAllowlist(t *testing.T) {
 	}
 }
 
-func TestProxyServer_ConfigReloader(t *testing.T) {
-	// Test legacy SetConfigReloader and handleSighup.
+func TestProxyServer_HandleSighupNoopWithoutPolicyEngine(t *testing.T) {
+	// handleSighup with nil PolicyEngine does nothing.
+	p := NewProxyServer(":0")
+	p.Allowlist = NewAllowlist([]string{"example.com"})
 
-	t.Run("legacy handleSighup updates allowlist", func(t *testing.T) {
-		p := NewProxyServer(":0")
+	// No PolicyEngine set — handleSighup should be a no-op.
+	p.handleSighup()
 
-		// Initial allowlist
-		p.Allowlist = NewAllowlist([]string{"initial.example.com"})
-
-		reloadCount := 0
-		newDomains := []string{"reloaded.example.com", "another.example.com"}
-
-		// Set config reloader
-		p.SetConfigReloader(func() (*Allowlist, error) {
-			reloadCount++
-			return NewAllowlist(newDomains), nil
-		})
-
-		// Manually call handleSighup (simulating signal)
-		p.handleSighup()
-
-		// Verify allowlist was updated
-		if p.Allowlist.IsAllowed("initial.example.com") {
-			t.Error("initial domain should no longer be allowed after reload")
-		}
-		if !p.Allowlist.IsAllowed("reloaded.example.com") {
-			t.Error("reloaded domain should be allowed after reload")
-		}
-		if reloadCount != 1 {
-			t.Errorf("reload function called %d times, expected 1", reloadCount)
-		}
-	})
-
-	t.Run("legacy handleSighup ignores error", func(t *testing.T) {
-		// Capture clog output
-		var logBuf bytes.Buffer
-		testLogger := clog.TestLogger(&logBuf)
-		oldLogger := clog.ReplaceGlobal(testLogger)
-		defer clog.ReplaceGlobal(oldLogger)
-
-		p := NewProxyServer(":0")
-		p.Allowlist = NewAllowlist([]string{"original.example.com"})
-
-		// Set reloader that returns error
-		p.SetConfigReloader(func() (*Allowlist, error) {
-			return nil, fmt.Errorf("config load failed")
-		})
-
-		// Manually call handleSighup
-		p.handleSighup()
-
-		// Allowlist should remain unchanged
-		if !p.Allowlist.IsAllowed("original.example.com") {
-			t.Error("original domain should still be allowed after failed reload")
-		}
-
-		// Error should be logged
-		if !strings.Contains(logBuf.String(), "config reload failed") {
-			t.Errorf("expected error to be logged, got: %s", logBuf.String())
-		}
-	})
-
-	t.Run("handleSighup with nil reloader and nil PolicyEngine does nothing", func(t *testing.T) {
-		p := NewProxyServer(":0")
-		p.Allowlist = NewAllowlist([]string{"example.com"})
-
-		// No config reloader or PolicyEngine set
-		p.handleSighup()
-
-		// Should still be valid
-		if !p.Allowlist.IsAllowed("example.com") {
-			t.Error("allowlist should be unchanged when no reloader is set")
-		}
-	})
+	// Should still be valid
+	if !p.Allowlist.IsAllowed("example.com") {
+		t.Error("allowlist should be unchanged when no PolicyEngine is set")
+	}
 }
 
 func TestProxyServer_PolicyEngineSighup(t *testing.T) {
@@ -1212,6 +1150,56 @@ func TestProxyServer_PolicyEngineSighup(t *testing.T) {
 		// (global policy rebuilt from mocked loaders).
 		if pe.Check("", "", "reloaded.example.com") != Allow {
 			t.Error("reloaded domain should be allowed after SIGHUP reload")
+		}
+	})
+
+	t.Run("handleSighup calls OnReload after successful reload", func(t *testing.T) {
+		pe := newTestProxyPolicyEngine([]string{"initial.example.com"}, nil)
+		pe.configLoader = func() (*config.GlobalConfig, error) {
+			return &config.GlobalConfig{}, nil
+		}
+		pe.decisionLoader = func() (*config.Decisions, error) {
+			return &config.Decisions{}, nil
+		}
+
+		p := NewProxyServer(":0")
+		p.PolicyEngine = pe
+
+		onReloadCalled := false
+		p.OnReload = func() {
+			onReloadCalled = true
+		}
+
+		p.handleSighup()
+
+		if !onReloadCalled {
+			t.Error("OnReload callback should have been called after successful reload")
+		}
+	})
+
+	t.Run("handleSighup does not call OnReload on error", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		testLogger := clog.TestLogger(&logBuf)
+		oldLogger := clog.ReplaceGlobal(testLogger)
+		defer clog.ReplaceGlobal(oldLogger)
+
+		pe := newTestProxyPolicyEngine([]string{"original.example.com"}, nil)
+		pe.configLoader = func() (*config.GlobalConfig, error) {
+			return nil, fmt.Errorf("disk error")
+		}
+
+		p := NewProxyServer(":0")
+		p.PolicyEngine = pe
+
+		onReloadCalled := false
+		p.OnReload = func() {
+			onReloadCalled = true
+		}
+
+		p.handleSighup()
+
+		if onReloadCalled {
+			t.Error("OnReload callback should not be called when reload fails")
 		}
 	})
 

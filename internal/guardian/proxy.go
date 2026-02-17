@@ -37,9 +37,6 @@ type TokenValidator interface {
 	Validate(token string) bool
 }
 
-// ConfigReloader is a function that returns a new Allowlist based on reloaded configuration.
-type ConfigReloader func() (*Allowlist, error)
-
 // DomainApprovalResult represents the result of a domain approval request.
 type DomainApprovalResult struct {
 	Approved bool
@@ -127,13 +124,17 @@ type ProxyServer struct {
 	// If nil, the proxy uses its built-in dialAndTunnel method.
 	TunnelHandler TunnelHandler
 
-	server         *http.Server
-	listener       net.Listener
-	mu             sync.Mutex
-	running        bool
-	configReloader ConfigReloader
-	sighupChan     chan os.Signal
-	stopSighup     chan struct{}
+	// OnReload is an optional callback invoked after a successful SIGHUP-triggered
+	// PolicyEngine reload. Use this to clear caches (e.g. PatternCache) that should
+	// be invalidated when config changes. Called only when PolicyEngine is set.
+	OnReload func()
+
+	server     *http.Server
+	listener   net.Listener
+	mu         sync.Mutex
+	running    bool
+	sighupChan chan os.Signal
+	stopSighup chan struct{}
 }
 
 // NewProxyServer creates a new proxy server listening on the specified address.
@@ -172,14 +173,6 @@ func (p *ProxyServer) SetAllowlist(a *Allowlist) {
 	p.Allowlist = a
 }
 
-// SetConfigReloader sets a function that will be called on SIGHUP to reload config.
-// The reloader should return a new Allowlist based on the reloaded configuration.
-func (p *ProxyServer) SetConfigReloader(reload ConfigReloader) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.configReloader = reload
-}
-
 // Start begins accepting connections on the proxy server.
 // It returns an error if the server is already running or fails to start.
 func (p *ProxyServer) Start() error {
@@ -208,8 +201,8 @@ func (p *ProxyServer) Start() error {
 		}
 	}()
 
-	// Start SIGHUP handler if PolicyEngine or configReloader is available.
-	if p.PolicyEngine != nil || p.configReloader != nil {
+	// Start SIGHUP handler if PolicyEngine is available.
+	if p.PolicyEngine != nil {
 		p.startSighupHandler()
 	}
 
@@ -245,31 +238,14 @@ func (p *ProxyServer) handleSighup() {
 				return
 			}
 			p.log("SIGHUP PolicyEngine reloaded successfully")
+			if p.OnReload != nil {
+				p.OnReload()
+			}
 		} else {
 			p.log("SIGHUP skipped: PolicyChecker does not support reload")
 		}
 		return
 	}
-
-	// Legacy path: use configReloader callback.
-	p.mu.Lock()
-	reloader := p.configReloader
-	p.mu.Unlock()
-
-	if reloader == nil {
-		return
-	}
-
-	newAllowlist, err := reloader()
-	if err != nil {
-		p.log("SIGHUP config reload failed: %v", err)
-		return
-	}
-
-	p.mu.Lock()
-	p.Allowlist = newAllowlist
-	p.mu.Unlock()
-	p.log("SIGHUP config reloaded successfully")
 }
 
 // Stop gracefully shuts down the proxy server.

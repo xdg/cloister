@@ -231,12 +231,11 @@ func init() {
 
 // guardianState holds all shared state for the guardian proxy runtime.
 type guardianState struct {
-	registry       *token.Registry
-	cfg            *config.GlobalConfig
-	allowlistCache *guardian.AllowlistCache
-	reloader       *guardian.CacheReloader
-	patternCache   *guardian.PatternCache
-	auditLogger    *audit.Logger
+	registry     *token.Registry
+	cfg          *config.GlobalConfig
+	policyEngine *guardian.PolicyEngine
+	patternCache *guardian.PatternCache
+	auditLogger  *audit.Logger
 }
 
 // runGuardianProxy starts the proxy and API servers and blocks until interrupted.
@@ -252,15 +251,13 @@ func runGuardianProxy(_ *cobra.Command, _ []string) error {
 	gs.cfg = loadGuardianConfig()
 	globalDecisions := loadGuardianDecisions()
 
-	gs.allowlistCache, gs.reloader = setupAllowlistCache(gs.cfg, globalDecisions, gs.registry)
+	gs.policyEngine = setupPolicyEngine(gs, globalDecisions)
 
 	proxy := setupProxyServer(gs)
 	gs.patternCache = setupPatternCache(gs)
 	patternLookup := func(projectName string) request.PatternMatcher {
 		return gs.patternCache.GetProject(projectName)
 	}
-
-	setupConfigReloader(proxy, gs)
 
 	apiAddr := fmt.Sprintf(":%d", guardian.DefaultAPIPort)
 	api := guardian.NewAPIServer(apiAddr, gs.registry)
@@ -272,19 +269,15 @@ func runGuardianProxy(_ *cobra.Command, _ []string) error {
 	}
 
 	approvalQueue := approval.NewQueue()
-	dar := setupDomainApproval(gs, proxy)
+	dar := setupDomainApproval(gs)
 
-	configPersister := &guardian.ConfigPersisterImpl{
-		ReloadNotifier: func() {
-			gs.reloader.Reload()
-			gs.patternCache.Clear()
-		},
-	}
+	configPersister := &guardian.PolicyConfigPersister{Recorder: gs.policyEngine}
 
 	proxy.DomainApprover = dar.Approver
-	proxy.SessionAllowlist = dar.SessionAllowlist
-	proxy.SessionDenylist = dar.SessionDenylist
-	api.TokenRevoker = &guardian.LegacyTokenRevoker{SessionAllowlist: dar.SessionAllowlist}
+	proxy.OnReload = func() {
+		gs.patternCache.Clear()
+	}
+	api.TokenRevoker = gs.policyEngine
 
 	execClient := setupExecutorClient()
 
@@ -348,46 +341,23 @@ func loadGuardianDecisions() *config.Decisions {
 	return decisions
 }
 
-// setupAllowlistCache creates the allowlist cache with global allow/deny lists.
-func setupAllowlistCache(cfg *config.GlobalConfig, globalDecisions *config.Decisions, registry *token.Registry) (*guardian.AllowlistCache, *guardian.CacheReloader) {
-	globalAllow := cfg.Proxy.Allow
-	if len(globalDecisions.Proxy.Allow) > 0 {
-		globalAllow = append(globalAllow, globalDecisions.Proxy.Allow...)
+// setupPolicyEngine creates the PolicyEngine that owns all domain access policy state.
+func setupPolicyEngine(gs *guardianState, globalDecisions *config.Decisions) *guardian.PolicyEngine {
+	pe, err := guardian.NewPolicyEngine(gs.cfg, globalDecisions, gs.registry)
+	if err != nil {
+		clog.Warn("failed to create policy engine: %v", err)
+		// Create a minimal engine with defaults; this cannot fail with valid inputs.
+		pe, _ = guardian.NewPolicyEngine(config.DefaultGlobalConfig(), &config.Decisions{}, nil) //nolint:errcheck
 	}
-	globalAllowlist := guardian.NewAllowlistFromConfig(globalAllow)
-	clog.Info("loaded global allowlist: %d static + %d approved = %d total",
-		len(cfg.Proxy.Allow), len(globalDecisions.Proxy.Allow), len(globalAllow))
-
-	var globalDenylist *guardian.Allowlist
-	globalDeny := config.MergeDenylists(cfg.Proxy.Deny, globalDecisions.Proxy.Deny)
-	if len(globalDeny) > 0 {
-		globalDenylist = guardian.NewAllowlistFromConfig(globalDeny)
-		clog.Info("loaded global denylist: %d static + %d decisions = %d total",
-			len(cfg.Proxy.Deny), len(globalDecisions.Proxy.Deny), len(globalDeny))
-	}
-
-	cache := guardian.NewAllowlistCache(globalAllowlist)
-	cache.SetGlobalDeny(globalDenylist)
-
-	reloader := guardian.NewCacheReloader(
-		cache,
-		registry,
-		cfg.Proxy.Allow, cfg.Proxy.Deny,
-		globalDecisions,
-	)
-
-	cache.SetProjectLoader(reloader.LoadProjectAllowlist)
-	cache.SetDenylistLoader(reloader.LoadProjectDenylist)
-
-	return cache, reloader
+	return pe
 }
 
 // setupProxyServer creates and configures the proxy server.
 func setupProxyServer(gs *guardianState) *guardian.ProxyServer {
 	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)
-	proxy := guardian.NewProxyServerWithConfig(proxyAddr, gs.allowlistCache.GetGlobal())
+	proxy := guardian.NewProxyServer(proxyAddr)
+	proxy.PolicyEngine = gs.policyEngine
 	proxy.TokenValidator = gs.registry
-	proxy.AllowlistCache = gs.allowlistCache
 	proxy.TokenLookup = guardian.TokenLookupFromRegistry(gs.registry)
 	return proxy
 }
@@ -422,30 +392,6 @@ func setupPatternCache(gs *guardianState) *guardian.PatternCache {
 	return cache
 }
 
-// setupConfigReloader configures the SIGHUP-based config reload on the proxy.
-func setupConfigReloader(proxy *guardian.ProxyServer, gs *guardianState) {
-	proxy.SetConfigReloader(func() (*guardian.Allowlist, error) {
-		newCfg, err := config.LoadGlobalConfig()
-		if err != nil {
-			return nil, err
-		}
-		gs.cfg = newCfg
-
-		gs.reloader.SetStaticConfig(newCfg.Proxy.Allow, newCfg.Proxy.Deny)
-		gs.reloader.Reload()
-
-		newAutoApprove := extractPatterns(newCfg.Hostexec.AutoApprove)
-		newManualApprove := extractPatterns(newCfg.Hostexec.ManualApprove)
-		newRegexMatcher := patterns.NewRegexMatcher(newAutoApprove, newManualApprove)
-		gs.patternCache.SetGlobal(newRegexMatcher)
-		gs.patternCache.Clear()
-		clog.Info("reloaded approval patterns: %d auto-approve, %d manual-approve",
-			len(newAutoApprove), len(newManualApprove))
-
-		return gs.allowlistCache.GetGlobal(), nil
-	})
-}
-
 // setupAuditLogger creates the audit logger if configured.
 func setupAuditLogger(cfg *config.GlobalConfig) *audit.Logger {
 	if cfg.Log.File == "" {
@@ -469,14 +415,12 @@ func setupAuditLogger(cfg *config.GlobalConfig) *audit.Logger {
 
 // domainApprovalResult groups the components returned by setupDomainApproval.
 type domainApprovalResult struct {
-	Approver         guardian.DomainApprover
-	SessionAllowlist guardian.SessionAllowlist
-	SessionDenylist  guardian.SessionDenylist
-	DomainQueue      *approval.DomainQueue
+	Approver    guardian.DomainApprover
+	DomainQueue *approval.DomainQueue
 }
 
 // setupDomainApproval configures domain approval components if enabled.
-func setupDomainApproval(gs *guardianState, _ *guardian.ProxyServer) domainApprovalResult {
+func setupDomainApproval(gs *guardianState) domainApprovalResult {
 	cfg := gs.cfg
 	if cfg.Proxy.UnlistedDomainBehavior != "" &&
 		cfg.Proxy.UnlistedDomainBehavior != "reject" &&
@@ -501,21 +445,12 @@ func setupDomainApproval(gs *guardianState, _ *guardian.ProxyServer) domainAppro
 	}
 
 	domainQueue := approval.NewDomainQueueWithTimeout(approvalTimeout)
-	sessionAllowlist := guardian.NewSessionAllowlist()
-	sessionDenylist := guardian.NewSessionDenylist()
-	recorder := &guardian.LegacyDecisionRecorder{
-		SessionAllowlist: sessionAllowlist,
-		SessionDenylist:  sessionDenylist,
-		AllowlistCache:   gs.allowlistCache,
-	}
-	domainApprover := guardian.NewDomainApprover(domainQueue, recorder, gs.auditLogger)
+	domainApprover := guardian.NewDomainApprover(domainQueue, gs.policyEngine, gs.auditLogger)
 	clog.Info("domain approval enabled (timeout: %v)", approvalTimeout)
 
 	return domainApprovalResult{
-		Approver:         domainApprover,
-		SessionAllowlist: sessionAllowlist,
-		SessionDenylist:  sessionDenylist,
-		DomainQueue:      domainQueue,
+		Approver:    domainApprover,
+		DomainQueue: domainQueue,
 	}
 }
 

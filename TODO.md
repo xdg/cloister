@@ -183,26 +183,26 @@ Simplify the guardian startup wiring now that PolicyEngine owns all state.
 
 ### 5.1 Simplify guardianState
 
-- [ ] Replace `allowlistCache` and `reloader` fields with `policyEngine *guardian.PolicyEngine`
-- [ ] Remove `setupAllowlistCache` function entirely
-- [ ] Remove `setupConfigReloader` function entirely (SIGHUP calls `pe.ReloadAll()` + `patternCache.Clear()`)
-- [ ] Simplify `setupDomainApproval` — no longer creates `sessionAllowlist`/`sessionDenylist` objects
-- [ ] `ConfigPersisterImpl` instantiation gone (replaced by PolicyEngine or adapter)
-- [ ] Remove `ReloadNotifier` callback wiring
+- [x] Replace `allowlistCache` and `reloader` fields with `policyEngine *guardian.PolicyEngine`
+- [x] Remove `setupAllowlistCache` function entirely
+- [x] Remove `setupConfigReloader` function entirely (SIGHUP calls `pe.ReloadAll()` + `patternCache.Clear()`)
+- [x] Simplify `setupDomainApproval` — no longer creates `sessionAllowlist`/`sessionDenylist` objects
+- [x] `ConfigPersisterImpl` instantiation gone (replaced by PolicyEngine or adapter)
+- [x] Remove `ReloadNotifier` callback wiring
 
 ### 5.2 Rewrite SIGHUP handler
 
-- [ ] ProxyServer's SIGHUP handler calls `pe.ReloadAll()` instead of the closure chain
-- [ ] Also reload hostexec PatternCache (unrelated, keep as-is)
-- [ ] Remove `ConfigReloader` type from proxy.go
-- [ ] Remove `SetConfigReloader` method from ProxyServer
-- [ ] **Test**: Verify SIGHUP-triggered reload picks up new config/decisions (unit test with temp files)
+- [x] ProxyServer's SIGHUP handler calls `pe.ReloadAll()` instead of the closure chain
+- [x] Also reload hostexec PatternCache (unrelated, keep as-is)
+- [x] Remove `ConfigReloader` type from proxy.go
+- [x] Remove `SetConfigReloader` method from ProxyServer
+- [x] **Test**: Verify SIGHUP-triggered reload picks up new config/decisions (unit test with temp files)
 
 ### 5.3 Simplify proxy constructor
 
-- [ ] `NewProxyServerWithConfig` no longer needs an initial Allowlist parameter — it gets a PolicyEngine
-- [ ] Update or replace with simpler constructor
-- [ ] **Test**: Verify proxy starts and checks domains correctly with PolicyEngine
+- [x] `NewProxyServerWithConfig` no longer needs an initial Allowlist parameter — it gets a PolicyEngine
+- [x] Update or replace with simpler constructor
+- [x] **Test**: Verify proxy starts and checks domains correctly with PolicyEngine
 
 ---
 
