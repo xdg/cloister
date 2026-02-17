@@ -170,10 +170,10 @@ Rewire `DomainApproverImpl` and `approval.Server` to use
 
 ### 4.3 Wire token revocation
 
-- [ ] When a token is revoked (API server `handleRevoke`), call `pe.RevokeToken(token)`
-- [ ] Currently `api.SessionAllowlist.Clear(token)` is called — replace with `pe.RevokeToken(token)`
-- [ ] Remove `SessionAllowlist` field from APIServer
-- [ ] **Test**: Verify token revocation clears session policy
+- [x] When a token is revoked (API server `handleRevoke`), call `pe.RevokeToken(token)`
+- [x] Currently `api.SessionAllowlist.Clear(token)` is called — replace with `pe.RevokeToken(token)`
+- [x] Remove `SessionAllowlist` field from APIServer
+- [x] **Test**: Verify token revocation clears session policy
 
 ---
 

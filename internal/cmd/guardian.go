@@ -284,7 +284,7 @@ func runGuardianProxy(_ *cobra.Command, _ []string) error {
 	proxy.DomainApprover = dar.Approver
 	proxy.SessionAllowlist = dar.SessionAllowlist
 	proxy.SessionDenylist = dar.SessionDenylist
-	api.SessionAllowlist = dar.SessionAllowlist
+	api.TokenRevoker = &guardian.LegacyTokenRevoker{SessionAllowlist: dar.SessionAllowlist}
 
 	execClient := setupExecutorClient()
 

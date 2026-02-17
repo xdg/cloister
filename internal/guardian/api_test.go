@@ -379,31 +379,23 @@ func TestAPIServer_ContentType(t *testing.T) {
 	}
 }
 
-// mockSessionAllowlist implements SessionAllowlist for testing.
-type mockSessionAllowlist struct {
-	clearedTokens []string
+// mockTokenRevoker implements TokenRevoker for testing.
+type mockTokenRevoker struct {
+	revoked []string
 }
 
-func (m *mockSessionAllowlist) IsAllowed(_, _ string) bool {
-	return false
+func (m *mockTokenRevoker) RevokeToken(tok string) {
+	m.revoked = append(m.revoked, tok)
 }
 
-func (m *mockSessionAllowlist) Add(_, _ string) error {
-	return nil
-}
-
-func (m *mockSessionAllowlist) Clear(tok string) {
-	m.clearedTokens = append(m.clearedTokens, tok)
-}
-
-func TestAPIServer_RevokeTokenClearsSessionAllowlist(t *testing.T) {
+func TestAPIServer_RevokeTokenClearsSessionPolicy(t *testing.T) {
 	registry := newMockRegistry()
 	registry.tokens["test-token"] = token.Info{CloisterName: "test-cloister"}
 
-	sessionAllowlist := &mockSessionAllowlist{}
+	revoker := &mockTokenRevoker{}
 
 	api := NewAPIServer(":0", registry)
-	api.SessionAllowlist = sessionAllowlist
+	api.TokenRevoker = revoker
 
 	if err := api.Start(); err != nil {
 		t.Fatalf("failed to start API server: %v", err)
@@ -438,22 +430,22 @@ func TestAPIServer_RevokeTokenClearsSessionAllowlist(t *testing.T) {
 		t.Error("token was not revoked from registry")
 	}
 
-	// Verify session allowlist was cleared for this token
-	if len(sessionAllowlist.clearedTokens) != 1 {
-		t.Errorf("expected 1 cleared token, got %d", len(sessionAllowlist.clearedTokens))
+	// Verify token revoker was called for this token
+	if len(revoker.revoked) != 1 {
+		t.Errorf("expected 1 revoked token, got %d", len(revoker.revoked))
 	}
-	if len(sessionAllowlist.clearedTokens) > 0 && sessionAllowlist.clearedTokens[0] != "test-token" {
-		t.Errorf("expected cleared token 'test-token', got %q", sessionAllowlist.clearedTokens[0])
+	if len(revoker.revoked) > 0 && revoker.revoked[0] != "test-token" {
+		t.Errorf("expected revoked token 'test-token', got %q", revoker.revoked[0])
 	}
 }
 
-func TestAPIServer_RevokeTokenWithNilSessionAllowlist(t *testing.T) {
+func TestAPIServer_RevokeTokenWithNilTokenRevoker(t *testing.T) {
 	registry := newMockRegistry()
 	registry.tokens["test-token"] = token.Info{CloisterName: "test-cloister"}
 
-	// API server without session allowlist (nil)
+	// API server without token revoker (nil)
 	api := NewAPIServer(":0", registry)
-	// api.SessionAllowlist is nil by default
+	// api.TokenRevoker is nil by default
 
 	if err := api.Start(); err != nil {
 		t.Fatalf("failed to start API server: %v", err)
@@ -467,7 +459,7 @@ func TestAPIServer_RevokeTokenWithNilSessionAllowlist(t *testing.T) {
 	baseURL := "http://" + api.ListenAddr()
 	client := noProxyClient()
 
-	// Revoke the token - should not panic with nil SessionAllowlist
+	// Revoke the token - should not panic with nil TokenRevoker
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodDelete, baseURL+"/tokens/test-token", http.NoBody)
 	if err != nil {
 		t.Fatalf("failed to create request: %v", err)

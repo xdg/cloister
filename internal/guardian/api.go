@@ -42,9 +42,9 @@ type APIServer struct {
 	// Registry is the token registry to manage.
 	Registry TokenRegistry
 
-	// SessionAllowlist is used to clear session-approved domains when a token is revoked.
+	// TokenRevoker clears session-level policy state when a token is revoked.
 	// If nil, no session cleanup is performed.
-	SessionAllowlist SessionAllowlist
+	TokenRevoker TokenRevoker
 
 	server   *http.Server
 	listener net.Listener
@@ -216,9 +216,9 @@ func (a *APIServer) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Clear session-approved domains for this token to prevent memory leak
-	if a.SessionAllowlist != nil {
-		a.SessionAllowlist.Clear(tok)
+	// Clear session-level policy state for this token to prevent memory leak
+	if a.TokenRevoker != nil {
+		a.TokenRevoker.RevokeToken(tok)
 	}
 
 	a.writeJSON(w, http.StatusOK, statusResponse{Status: "revoked"})
@@ -256,6 +256,20 @@ func (a *APIServer) writeJSON(w http.ResponseWriter, status int, v interface{}) 
 // writeError writes an error response with the given status code.
 func (a *APIServer) writeError(w http.ResponseWriter, status int, message string) {
 	a.writeJSON(w, status, errorResponse{Error: message})
+}
+
+// LegacyTokenRevoker adapts a SessionAllowlist to the TokenRevoker interface
+// by calling Clear on token revocation. This bridges old wiring in guardian.go
+// until Phase 5 replaces it with a real PolicyEngine.
+type LegacyTokenRevoker struct {
+	SessionAllowlist SessionAllowlist
+}
+
+// RevokeToken clears session-approved domains for the given token.
+func (l *LegacyTokenRevoker) RevokeToken(tok string) {
+	if l.SessionAllowlist != nil {
+		l.SessionAllowlist.Clear(tok)
+	}
 }
 
 // TokenLookupFromRegistry returns a TokenLookupFunc that resolves tokens

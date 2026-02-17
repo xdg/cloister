@@ -74,6 +74,11 @@ type PolicyChecker interface {
 	Check(token, project, domain string) Decision
 }
 
+// TokenRevoker clears session-level policy state for a revoked token.
+type TokenRevoker interface {
+	RevokeToken(token string)
+}
+
 // DecisionRecorder persists a domain access decision at the appropriate scope.
 // *PolicyEngine implements this interface via its RecordDecision method.
 type DecisionRecorder interface {
