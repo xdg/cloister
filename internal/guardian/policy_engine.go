@@ -1,9 +1,21 @@
 package guardian
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/xdg/cloister/internal/config"
+)
+
+// Scope represents the persistence scope for a domain access decision.
+type Scope string
+
+// Scope constants for domain access decisions.
+const (
+	ScopeOnce    Scope = "once"
+	ScopeSession Scope = "session"
+	ScopeProject Scope = "project"
+	ScopeGlobal  Scope = "global"
 )
 
 // Decision represents a proxy access control decision.
@@ -63,6 +75,10 @@ type PolicyEngine struct {
 	global   ProxyPolicy
 	projects map[string]*ProxyPolicy
 	tokens   map[string]*ProxyPolicy
+
+	// Mutexes for file persistence (prevent concurrent writes).
+	projectMu sync.Mutex
+	globalMu  sync.Mutex
 
 	// Dependencies for reload (set via options or defaults).
 	configLoader          func() (*config.GlobalConfig, error)
@@ -269,4 +285,244 @@ func loadProjectPolicy(
 		Allow: NewDomainSet(allowDomains, allowPatterns),
 		Deny:  NewDomainSet(denyDomains, denyPatterns),
 	}, nil
+}
+
+// ReloadGlobal re-reads the global config and decisions from disk and rebuilds
+// the global ProxyPolicy. Loading happens outside the write lock; only the
+// swap is protected.
+func (pe *PolicyEngine) ReloadGlobal() error {
+	cfg, err := pe.configLoader()
+	if err != nil {
+		return fmt.Errorf("reload global config: %w", err)
+	}
+	dec, err := pe.decisionLoader()
+	if err != nil {
+		return fmt.Errorf("reload global decisions: %w", err)
+	}
+
+	global := buildGlobalPolicy(cfg, dec)
+
+	pe.mu.Lock()
+	pe.global = global
+	pe.mu.Unlock()
+
+	return nil
+}
+
+// ReloadProject re-reads a project's config and decisions from disk and
+// rebuilds its ProxyPolicy. Loading happens outside the write lock; only the
+// swap is protected.
+func (pe *PolicyEngine) ReloadProject(name string) error {
+	policy, err := loadProjectPolicy(name, pe.projectConfigLoader, pe.projectDecisionLoader)
+	if err != nil {
+		return fmt.Errorf("reload project %q: %w", name, err)
+	}
+
+	pe.mu.Lock()
+	pe.projects[name] = policy
+	pe.mu.Unlock()
+
+	return nil
+}
+
+// ReloadAll re-reads the global config/decisions and all project policies from
+// disk and replaces all in-memory state. This is intended for SIGHUP handling.
+// All loading happens outside the write lock to avoid holding it during I/O.
+func (pe *PolicyEngine) ReloadAll() error {
+	cfg, err := pe.configLoader()
+	if err != nil {
+		return fmt.Errorf("reload all global config: %w", err)
+	}
+	dec, err := pe.decisionLoader()
+	if err != nil {
+		return fmt.Errorf("reload all global decisions: %w", err)
+	}
+
+	global := buildGlobalPolicy(cfg, dec)
+
+	projects := make(map[string]*ProxyPolicy)
+	if pe.projectLister != nil {
+		seen := make(map[string]struct{})
+		for _, info := range pe.projectLister.List() {
+			name := info.ProjectName
+			if name == "" {
+				continue
+			}
+			if _, ok := seen[name]; ok {
+				continue
+			}
+			seen[name] = struct{}{}
+			p, err := loadProjectPolicy(name, pe.projectConfigLoader, pe.projectDecisionLoader)
+			if err != nil {
+				return fmt.Errorf("reload all project %q: %w", name, err)
+			}
+			projects[name] = p
+		}
+	}
+
+	pe.mu.Lock()
+	pe.global = global
+	pe.projects = projects
+	pe.mu.Unlock()
+
+	return nil
+}
+
+// RecordDecisionParams holds the parameters for RecordDecision.
+type RecordDecisionParams struct {
+	Token     string
+	Project   string
+	Domain    string
+	Scope     Scope
+	Allowed   bool
+	IsPattern bool
+}
+
+// RecordDecision records a domain access decision at the given scope.
+//   - ScopeOnce: no-op (caller already has the decision).
+//   - ScopeSession: mutates the token's in-memory ProxyPolicy.
+//   - ScopeProject: persists to the project decisions file, then reloads.
+//   - ScopeGlobal: persists to the global decisions file, then reloads.
+func (pe *PolicyEngine) RecordDecision(p RecordDecisionParams) error {
+	switch p.Scope {
+	case ScopeOnce:
+		return nil
+	case ScopeSession:
+		return pe.recordSessionDecision(p.Token, p.Domain, p.Allowed, p.IsPattern)
+	case ScopeProject:
+		if err := pe.persistDecision(p.Project, p.Domain, p.Scope, p.Allowed, p.IsPattern); err != nil {
+			return err
+		}
+		return pe.ReloadProject(p.Project)
+	case ScopeGlobal:
+		if err := pe.persistDecision(p.Project, p.Domain, p.Scope, p.Allowed, p.IsPattern); err != nil {
+			return err
+		}
+		return pe.ReloadGlobal()
+	default:
+		return fmt.Errorf("unknown scope: %q", p.Scope)
+	}
+}
+
+// recordSessionDecision adds a domain to the token's in-memory ProxyPolicy.
+// The entire mutation is held under pe.mu.Lock to prevent races with Check.
+func (pe *PolicyEngine) recordSessionDecision(token, domain string, allowed, isPattern bool) error {
+	pe.mu.Lock()
+	defer pe.mu.Unlock()
+
+	tp := pe.tokens[token]
+	if tp == nil {
+		tp = &ProxyPolicy{}
+		pe.tokens[token] = tp
+	}
+
+	if allowed {
+		if tp.Allow == nil {
+			tp.Allow = NewDomainSet(nil, nil)
+		}
+		addToDomainSet(tp.Allow, domain, isPattern)
+	} else {
+		if tp.Deny == nil {
+			tp.Deny = NewDomainSet(nil, nil)
+		}
+		addToDomainSet(tp.Deny, domain, isPattern)
+	}
+	return nil
+}
+
+// addToDomainSet adds a domain or pattern to a DomainSet.
+func addToDomainSet(ds *DomainSet, value string, isPattern bool) {
+	if isPattern {
+		ds.AddPattern(value)
+	} else {
+		ds.Add(value)
+	}
+}
+
+// persistDecision writes a domain or pattern to the appropriate decisions file.
+// It uses the load-check-dedup-append-write pattern from ConfigPersisterImpl.
+func (pe *PolicyEngine) persistDecision(project, domain string, scope Scope, allowed, isPattern bool) error {
+	entry := buildEntry(domain, isPattern)
+
+	switch scope {
+	case ScopeProject:
+		return pe.persistProjectDecision(project, entry, allowed)
+	case ScopeGlobal:
+		return pe.persistGlobalDecision(entry, allowed)
+	default:
+		return fmt.Errorf("persistDecision called with non-persistent scope: %q", scope)
+	}
+}
+
+// buildEntry creates an AllowEntry, normalizing the domain if it is not a pattern.
+func buildEntry(domain string, isPattern bool) config.AllowEntry {
+	if isPattern {
+		return config.AllowEntry{Pattern: domain}
+	}
+	return config.AllowEntry{Domain: normalizeDomain(domain)}
+}
+
+// appendEntry adds an entry to the allow or deny list if not already present.
+func appendEntry(proxy *config.DecisionsProxy, entry config.AllowEntry, allowed bool) {
+	if allowed {
+		if !containsEntry(proxy.Allow, entry) {
+			proxy.Allow = append(proxy.Allow, entry)
+		}
+	} else {
+		if !containsEntry(proxy.Deny, entry) {
+			proxy.Deny = append(proxy.Deny, entry)
+		}
+	}
+}
+
+func (pe *PolicyEngine) persistProjectDecision(project string, entry config.AllowEntry, allowed bool) error {
+	pe.projectMu.Lock()
+	defer pe.projectMu.Unlock()
+
+	decisions, err := pe.projectDecisionLoader(project)
+	if err != nil {
+		return fmt.Errorf("load project decisions: %w", err)
+	}
+
+	appendEntry(&decisions.Proxy, entry, allowed)
+
+	if err := config.WriteProjectDecisions(project, decisions); err != nil {
+		return fmt.Errorf("write project decisions: %w", err)
+	}
+	return nil
+}
+
+func (pe *PolicyEngine) persistGlobalDecision(entry config.AllowEntry, allowed bool) error {
+	pe.globalMu.Lock()
+	defer pe.globalMu.Unlock()
+
+	decisions, err := pe.decisionLoader()
+	if err != nil {
+		return fmt.Errorf("load global decisions: %w", err)
+	}
+
+	appendEntry(&decisions.Proxy, entry, allowed)
+
+	if err := config.WriteGlobalDecisions(decisions); err != nil {
+		return fmt.Errorf("write global decisions: %w", err)
+	}
+	return nil
+}
+
+// containsEntry checks if an AllowEntry already exists in the slice by
+// comparing both Domain and Pattern fields.
+func containsEntry(entries []config.AllowEntry, entry config.AllowEntry) bool {
+	for _, e := range entries {
+		if e.Domain == entry.Domain && e.Pattern == entry.Pattern {
+			return true
+		}
+	}
+	return false
+}
+
+// RevokeToken removes all session-scoped decisions for the given token.
+func (pe *PolicyEngine) RevokeToken(token string) {
+	pe.mu.Lock()
+	delete(pe.tokens, token)
+	pe.mu.Unlock()
 }

@@ -2,6 +2,7 @@ package guardian
 
 import (
 	"fmt"
+	"os"
 	"testing"
 
 	"github.com/xdg/cloister/internal/config"
@@ -340,5 +341,289 @@ func TestNewPolicyEngine(t *testing.T) {
 	// Unknown domain -> AskHuman.
 	if got := pe.Check("tok", "testproj", "random.com"); got != AskHuman {
 		t.Errorf("random.com: got %v, want AskHuman", got)
+	}
+}
+
+func TestPolicyEngine_RecordDecision_Session(t *testing.T) {
+	pe := newTestPolicyEngine(ProxyPolicy{}, nil, nil)
+
+	// Before recording, domain is unknown.
+	if got := pe.Check("tok1", "proj", "new-domain.com"); got != AskHuman {
+		t.Fatalf("before record: got %v, want AskHuman", got)
+	}
+
+	// Record an allow at session scope.
+	if err := pe.RecordDecision(RecordDecisionParams{Token: "tok1", Project: "proj", Domain: "new-domain.com", Scope: ScopeSession, Allowed: true}); err != nil {
+		t.Fatalf("RecordDecision: %v", err)
+	}
+
+	// Now Check should return Allow for that token.
+	if got := pe.Check("tok1", "proj", "new-domain.com"); got != Allow {
+		t.Errorf("after record: got %v, want Allow", got)
+	}
+
+	// Different token should still be AskHuman.
+	if got := pe.Check("tok2", "proj", "new-domain.com"); got != AskHuman {
+		t.Errorf("other token: got %v, want AskHuman", got)
+	}
+}
+
+func TestPolicyEngine_RecordDecision_Session_Deny(t *testing.T) {
+	// Start with global allow so we can verify session deny overrides it.
+	pe := newTestPolicyEngine(
+		ProxyPolicy{Allow: NewDomainSet([]string{"allowed.com"}, nil)},
+		nil, nil,
+	)
+
+	if got := pe.Check("tok1", "proj", "allowed.com"); got != Allow {
+		t.Fatalf("before deny: got %v, want Allow", got)
+	}
+
+	// Record a deny at session scope.
+	if err := pe.RecordDecision(RecordDecisionParams{Token: "tok1", Project: "proj", Domain: "allowed.com", Scope: ScopeSession}); err != nil {
+		t.Fatalf("RecordDecision: %v", err)
+	}
+
+	// Token's deny should override the global allow.
+	if got := pe.Check("tok1", "proj", "allowed.com"); got != Deny {
+		t.Errorf("after deny: got %v, want Deny", got)
+	}
+
+	// Different token still gets the global allow.
+	if got := pe.Check("tok2", "proj", "allowed.com"); got != Allow {
+		t.Errorf("other token: got %v, want Allow", got)
+	}
+}
+
+func TestPolicyEngine_RecordDecision_Once(t *testing.T) {
+	pe := newTestPolicyEngine(ProxyPolicy{}, nil, nil)
+
+	// ScopeOnce should be a no-op.
+	if err := pe.RecordDecision(RecordDecisionParams{Token: "tok1", Project: "proj", Domain: "once-domain.com", Scope: ScopeOnce, Allowed: true}); err != nil {
+		t.Fatalf("RecordDecision: %v", err)
+	}
+
+	// Check should still return AskHuman since nothing was persisted.
+	if got := pe.Check("tok1", "proj", "once-domain.com"); got != AskHuman {
+		t.Errorf("after once: got %v, want AskHuman", got)
+	}
+}
+
+// setupXDGTempDir creates a temp directory and sets XDG_CONFIG_HOME to redirect
+// config paths during tests. Returns a cleanup function.
+func setupXDGTempDir(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+}
+
+func TestPolicyEngine_RecordDecision_Project(t *testing.T) {
+	setupXDGTempDir(t)
+
+	projectCfgLoader := func(_ string) (*config.ProjectConfig, error) {
+		return &config.ProjectConfig{}, nil
+	}
+	projectDecLoader := config.LoadProjectDecisions
+
+	pe, err := NewPolicyEngine(
+		&config.GlobalConfig{}, &config.Decisions{}, nil,
+		WithProjectConfigLoader(projectCfgLoader),
+		WithProjectDecisionLoader(projectDecLoader),
+	)
+	if err != nil {
+		t.Fatalf("NewPolicyEngine: %v", err)
+	}
+
+	// Before recording, domain is unknown.
+	if got := pe.Check("tok1", "testproj", "persisted.com"); got != AskHuman {
+		t.Fatalf("before record: got %v, want AskHuman", got)
+	}
+
+	// Record an allow at project scope.
+	if err := pe.RecordDecision(RecordDecisionParams{Token: "tok1", Project: "testproj", Domain: "persisted.com", Scope: ScopeProject, Allowed: true}); err != nil {
+		t.Fatalf("RecordDecision: %v", err)
+	}
+
+	// Check should now return Allow (ReloadProject was called internally).
+	if got := pe.Check("tok1", "testproj", "persisted.com"); got != Allow {
+		t.Errorf("after record: got %v, want Allow", got)
+	}
+
+	// Verify the file was actually written.
+	path := config.ProjectDecisionPath("testproj")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read decisions file: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("decisions file is empty")
+	}
+
+	// Record a deny at project scope.
+	if err := pe.RecordDecision(RecordDecisionParams{Token: "tok1", Project: "testproj", Domain: "denied.com", Scope: ScopeProject}); err != nil {
+		t.Fatalf("RecordDecision deny: %v", err)
+	}
+
+	if got := pe.Check("tok1", "testproj", "denied.com"); got != Deny {
+		t.Errorf("after deny record: got %v, want Deny", got)
+	}
+
+	// Verify dedup: recording same domain again should not error.
+	if err := pe.RecordDecision(RecordDecisionParams{Token: "tok1", Project: "testproj", Domain: "persisted.com", Scope: ScopeProject, Allowed: true}); err != nil {
+		t.Fatalf("RecordDecision dedup: %v", err)
+	}
+}
+
+func TestPolicyEngine_RecordDecision_Global(t *testing.T) {
+	setupXDGTempDir(t)
+
+	cfgLoader := func() (*config.GlobalConfig, error) {
+		return &config.GlobalConfig{}, nil
+	}
+	decLoader := config.LoadGlobalDecisions
+
+	pe, err := NewPolicyEngine(
+		&config.GlobalConfig{}, &config.Decisions{}, nil,
+		WithConfigLoader(cfgLoader),
+		WithDecisionLoader(decLoader),
+	)
+	if err != nil {
+		t.Fatalf("NewPolicyEngine: %v", err)
+	}
+
+	// Before recording, domain is unknown (not in defaults either).
+	if got := pe.Check("tok1", "proj", "global-new.com"); got != AskHuman {
+		t.Fatalf("before record: got %v, want AskHuman", got)
+	}
+
+	// Record an allow at global scope.
+	if err := pe.RecordDecision(RecordDecisionParams{Token: "tok1", Project: "proj", Domain: "global-new.com", Scope: ScopeGlobal, Allowed: true}); err != nil {
+		t.Fatalf("RecordDecision: %v", err)
+	}
+
+	// Check should now return Allow (ReloadGlobal was called internally).
+	if got := pe.Check("tok1", "proj", "global-new.com"); got != Allow {
+		t.Errorf("after record: got %v, want Allow", got)
+	}
+
+	// Verify the file was actually written.
+	path := config.GlobalDecisionPath()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read decisions file: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("decisions file is empty")
+	}
+
+	// Record a deny at global scope.
+	if err := pe.RecordDecision(RecordDecisionParams{Token: "tok1", Project: "proj", Domain: "global-denied.com", Scope: ScopeGlobal}); err != nil {
+		t.Fatalf("RecordDecision deny: %v", err)
+	}
+
+	if got := pe.Check("tok1", "proj", "global-denied.com"); got != Deny {
+		t.Errorf("after deny record: got %v, want Deny", got)
+	}
+}
+
+func TestPolicyEngine_RevokeToken(t *testing.T) {
+	pe := newTestPolicyEngine(ProxyPolicy{}, nil, nil)
+
+	// Add a session decision.
+	if err := pe.RecordDecision(RecordDecisionParams{Token: "tok1", Project: "proj", Domain: "session-domain.com", Scope: ScopeSession, Allowed: true}); err != nil {
+		t.Fatalf("RecordDecision: %v", err)
+	}
+
+	// Verify it's visible.
+	if got := pe.Check("tok1", "proj", "session-domain.com"); got != Allow {
+		t.Fatalf("before revoke: got %v, want Allow", got)
+	}
+
+	// Revoke the token.
+	pe.RevokeToken("tok1")
+
+	// Check should no longer see the session decision.
+	if got := pe.Check("tok1", "proj", "session-domain.com"); got != AskHuman {
+		t.Errorf("after revoke: got %v, want AskHuman", got)
+	}
+}
+
+func TestPolicyEngine_ReloadAll(t *testing.T) {
+	setupXDGTempDir(t)
+
+	// Start with a config that allows "initial.com".
+	globalCfg := &config.GlobalConfig{
+		Proxy: config.ProxyConfig{
+			Allow: []config.AllowEntry{{Domain: "initial.com"}},
+		},
+	}
+
+	projectCfgLoader := func(name string) (*config.ProjectConfig, error) {
+		if name == "myproj" {
+			return &config.ProjectConfig{
+				Proxy: config.ProjectProxyConfig{
+					Allow: []config.AllowEntry{{Domain: "proj-initial.com"}},
+				},
+			}, nil
+		}
+		return &config.ProjectConfig{}, nil
+	}
+	projectDecLoader := func(_ string) (*config.Decisions, error) {
+		return &config.Decisions{}, nil
+	}
+
+	lister := &sliceProjectLister{names: []string{"myproj"}}
+
+	// Track which config is returned (mutable for reload testing).
+	currentCfg := globalCfg
+	cfgLoader := func() (*config.GlobalConfig, error) {
+		return currentCfg, nil
+	}
+	decLoader := func() (*config.Decisions, error) {
+		return &config.Decisions{}, nil
+	}
+
+	pe, err := NewPolicyEngine(
+		globalCfg, &config.Decisions{}, lister,
+		WithConfigLoader(cfgLoader),
+		WithDecisionLoader(decLoader),
+		WithProjectConfigLoader(projectCfgLoader),
+		WithProjectDecisionLoader(projectDecLoader),
+	)
+	if err != nil {
+		t.Fatalf("NewPolicyEngine: %v", err)
+	}
+
+	// Verify initial state.
+	if got := pe.Check("tok", "myproj", "initial.com"); got != Allow {
+		t.Errorf("initial.com before reload: got %v, want Allow", got)
+	}
+	if got := pe.Check("tok", "myproj", "proj-initial.com"); got != Allow {
+		t.Errorf("proj-initial.com before reload: got %v, want Allow", got)
+	}
+	if got := pe.Check("tok", "myproj", "added-later.com"); got != AskHuman {
+		t.Errorf("added-later.com before reload: got %v, want AskHuman", got)
+	}
+
+	// Change the config to include a new domain.
+	currentCfg = &config.GlobalConfig{
+		Proxy: config.ProxyConfig{
+			Allow: []config.AllowEntry{
+				{Domain: "initial.com"},
+				{Domain: "added-later.com"},
+			},
+		},
+	}
+
+	// ReloadAll should pick up the change.
+	if err := pe.ReloadAll(); err != nil {
+		t.Fatalf("ReloadAll: %v", err)
+	}
+
+	if got := pe.Check("tok", "myproj", "added-later.com"); got != Allow {
+		t.Errorf("added-later.com after reload: got %v, want Allow", got)
+	}
+	// Project policy should still work.
+	if got := pe.Check("tok", "myproj", "proj-initial.com"); got != Allow {
+		t.Errorf("proj-initial.com after reload: got %v, want Allow", got)
 	}
 }

@@ -103,21 +103,21 @@ server yet — pure policy logic with disk I/O for reload.
 
 ### 2.3 Implement targeted reload and record
 
-- [ ] `ReloadGlobal() error` — re-reads global config + global decisions, rebuilds `pe.global`
-- [ ] `ReloadProject(name string) error` — re-reads project config + project decisions, rebuilds `pe.projects[name]`
-- [ ] `RecordDecision(token, project, domain string, scope Scope, allowed bool, isPattern bool) error`
+- [x] `ReloadGlobal() error` — re-reads global config + global decisions, rebuilds `pe.global`
+- [x] `ReloadProject(name string) error` — re-reads project config + project decisions, rebuilds `pe.projects[name]`
+- [x] `RecordDecision(token, project, domain string, scope Scope, allowed bool, isPattern bool) error`
   - `scope == "session"`: mutate `pe.tokens[token]` in-memory only
   - `scope == "project"`: persist to project decisions file, then `ReloadProject(project)`
   - `scope == "global"`: persist to global decisions file, then `ReloadGlobal()`
   - `scope == "once"`: no-op (caller already has the allow/deny decision)
-- [ ] `RevokeToken(token string)` — `delete(pe.tokens, token)`
-- [ ] `ReloadAll() error` — for SIGHUP: reload global + all projects
-- [ ] Persistence logic: absorb `ConfigPersisterImpl`'s load-check-dedup-append-write pattern for allow entries; absorb `DomainApproverImpl.persistDenial` pattern for deny entries
-- [ ] **Test**: RecordDecision session scope — adds to token policy, Check reflects it immediately
-- [ ] **Test**: RecordDecision project scope — persists to temp dir, ReloadProject picks it up
-- [ ] **Test**: RecordDecision global scope — persists to temp dir, ReloadGlobal picks it up
-- [ ] **Test**: RevokeToken — Check no longer sees session decisions for that token
-- [ ] **Test**: ReloadAll — rebuilds global + all project policies
+- [x] `RevokeToken(token string)` — `delete(pe.tokens, token)`
+- [x] `ReloadAll() error` — for SIGHUP: reload global + all projects
+- [x] Persistence logic: absorb `ConfigPersisterImpl`'s load-check-dedup-append-write pattern for allow entries; absorb `DomainApproverImpl.persistDenial` pattern for deny entries
+- [x] **Test**: RecordDecision session scope — adds to token policy, Check reflects it immediately
+- [x] **Test**: RecordDecision project scope — persists to temp dir, ReloadProject picks it up
+- [x] **Test**: RecordDecision global scope — persists to temp dir, ReloadGlobal picks it up
+- [x] **Test**: RevokeToken — Check no longer sees session decisions for that token
+- [x] **Test**: ReloadAll — rebuilds global + all project policies
 
 ---
 
