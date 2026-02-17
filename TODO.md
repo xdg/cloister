@@ -71,9 +71,9 @@ existing code still compiles during the transition.
 
 ### 1.2 Alias Allowlist to DomainSet
 
-- [ ] Redefine `Allowlist` in `allowlist.go` as a thin wrapper: `type Allowlist = DomainSet` or delegate all methods
-- [ ] Verify `make test` passes with no changes to callers
-- [ ] **Test**: Existing `allowlist_test.go` and `allowlist_pattern_test.go` still pass unchanged
+- [x] Redefine `Allowlist` in `allowlist.go` as a thin wrapper: `type Allowlist = DomainSet` or delegate all methods
+- [x] Verify `make test` passes with no changes to callers
+- [x] **Test**: Existing `allowlist_test.go` and `allowlist_pattern_test.go` still pass unchanged
 
 ---
 

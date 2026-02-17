@@ -1,8 +1,6 @@
 package guardian
 
 import (
-	"sync"
-
 	"github.com/xdg/cloister/internal/config"
 )
 
@@ -30,57 +28,27 @@ var DefaultAllowedDomains = []string{
 // It supports both exact domain matching and wildcard patterns (*.example.com).
 // Wildcard patterns match any subdomain but not the base domain itself.
 // All methods are thread-safe.
+//
+// Allowlist is a thin wrapper around DomainSet, delegating all logic to it.
 type Allowlist struct {
-	mu       sync.RWMutex
-	domains  map[string]struct{}
-	patterns []string // patterns like "*.example.com"
+	*DomainSet
 }
 
 // NewAllowlist creates an Allowlist from a slice of allowed domains.
 func NewAllowlist(domains []string) *Allowlist {
-	a := &Allowlist{
-		domains:  make(map[string]struct{}, len(domains)),
-		patterns: make([]string, 0),
-	}
-	for _, d := range domains {
-		// Strip port if present for consistent matching with IsAllowed
-		a.domains[stripPort(d)] = struct{}{}
-	}
-	return a
+	return &Allowlist{DomainSet: NewDomainSet(domains, nil)}
 }
 
 // NewAllowlistWithPatterns creates an Allowlist from domains and wildcard patterns.
 // Patterns should be in the format "*.example.com".
 func NewAllowlistWithPatterns(domains, patterns []string) *Allowlist {
-	a := &Allowlist{
-		domains:  make(map[string]struct{}, len(domains)),
-		patterns: make([]string, 0, len(patterns)),
-	}
-	for _, d := range domains {
-		// Strip port if present for consistent matching with IsAllowed
-		a.domains[stripPort(d)] = struct{}{}
-	}
-	for _, p := range patterns {
-		if IsValidPattern(p) {
-			a.patterns = append(a.patterns, p)
-		}
-	}
-	return a
+	return &Allowlist{DomainSet: NewDomainSet(domains, patterns)}
 }
 
 // NewAllowlistFromConfig creates an Allowlist from config AllowEntry slice.
 // It handles both exact domains and wildcard patterns.
 func NewAllowlistFromConfig(entries []config.AllowEntry) *Allowlist {
-	domains := make([]string, 0, len(entries))
-	patterns := make([]string, 0)
-	for _, e := range entries {
-		if e.Pattern != "" {
-			patterns = append(patterns, e.Pattern)
-		} else if e.Domain != "" {
-			domains = append(domains, e.Domain)
-		}
-	}
-	return NewAllowlistWithPatterns(domains, patterns)
+	return &Allowlist{DomainSet: NewDomainSetFromConfig(entries)}
 }
 
 // NewDefaultAllowlist creates an Allowlist with the default allowed domains.
@@ -92,54 +60,21 @@ func NewDefaultAllowlist() *Allowlist {
 // The host may include a port (e.g., "api.anthropic.com:443"), which is
 // stripped before matching. Checks exact domain matches first, then patterns.
 func (a *Allowlist) IsAllowed(host string) bool {
-	// Strip port if present
-	hostname := stripPort(host)
-	a.mu.RLock()
-	defer a.mu.RUnlock()
-
-	// Check exact match first
-	if _, ok := a.domains[hostname]; ok {
-		return true
-	}
-
-	// Check patterns
-	for _, pattern := range a.patterns {
-		if matchPattern(pattern, hostname) {
-			return true
-		}
-	}
-
-	return false
+	return a.Contains(host)
 }
 
 // Add adds additional domains to the allowlist.
 func (a *Allowlist) Add(domains []string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	for _, d := range domains {
-		a.domains[stripPort(d)] = struct{}{}
+		a.DomainSet.Add(d)
 	}
 }
 
 // AddPatterns adds wildcard patterns to the allowlist.
 // Patterns should be in the format "*.example.com".
 func (a *Allowlist) AddPatterns(patterns []string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
 	for _, p := range patterns {
-		if IsValidPattern(p) {
-			// Avoid duplicates
-			found := false
-			for _, existing := range a.patterns {
-				if existing == p {
-					found = true
-					break
-				}
-			}
-			if !found {
-				a.patterns = append(a.patterns, p)
-			}
-		}
+		a.AddPattern(p)
 	}
 }
 
