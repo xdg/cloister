@@ -85,11 +85,11 @@ server yet — pure policy logic with disk I/O for reload.
 
 ### 2.1 Define ProxyPolicy and Decision types
 
-- [ ] Create `internal/guardian/policy_engine.go`
-- [ ] `type Decision int` with `Allow`, `Deny`, `AskHuman` constants
-- [ ] `type ProxyPolicy struct { Allow *DomainSet; Deny *DomainSet }` — nil-safe (nil means empty)
-- [ ] `func (p *ProxyPolicy) IsAllowed(domain string) bool`
-- [ ] `func (p *ProxyPolicy) IsDenied(domain string) bool`
+- [x] Create `internal/guardian/policy_engine.go`
+- [x] `type Decision int` with `Allow`, `Deny`, `AskHuman` constants
+- [x] `type ProxyPolicy struct { Allow *DomainSet; Deny *DomainSet }` — nil-safe (nil means empty)
+- [x] `func (p *ProxyPolicy) IsAllowed(domain string) bool`
+- [x] `func (p *ProxyPolicy) IsDenied(domain string) bool`
 
 ### 2.2 Implement PolicyEngine
 
