@@ -151,13 +151,17 @@ func (p *ProxyServer) startSighupHandler() {
 	p.stopSighup = make(chan struct{})
 	signal.Notify(p.sighupChan, syscall.SIGHUP)
 
+	// Capture channels locally to avoid racing with Stop() which nils the fields.
+	sighupChan := p.sighupChan
+	stopChan := p.stopSighup
+
 	go func() {
 		for {
 			select {
-			case <-p.sighupChan:
+			case <-sighupChan:
 				p.handleSighup()
-			case <-p.stopSighup:
-				signal.Stop(p.sighupChan)
+			case <-stopChan:
+				signal.Stop(sighupChan)
 				return
 			}
 		}
@@ -198,7 +202,6 @@ func (p *ProxyServer) Stop(ctx context.Context) error {
 	// Stop SIGHUP handler if running
 	if p.stopSighup != nil {
 		close(p.stopSighup)
-		p.stopSighup = nil
 	}
 
 	if err := p.server.Shutdown(ctx); err != nil {
