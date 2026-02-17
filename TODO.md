@@ -242,9 +242,9 @@ Validate the full flow works with the real guardian (requires Docker).
 
 ### 7.1 Integration smoke test
 
-- [ ] `make build` succeeds
-- [ ] `make test` passes (all unit tests)
-- [ ] `make lint` passes
+- [x] `make build` succeeds
+- [x] `make test` passes (all unit tests)
+- [x] `make lint` passes
 - [ ] Manual or integration test: start guardian, register token, proxy request to allowed domain → allowed
 - [ ] Manual or integration test: proxy request to denied domain → denied
 - [ ] Manual or integration test: proxy request to unlisted domain → approval prompt appears
