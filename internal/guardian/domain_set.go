@@ -54,7 +54,7 @@ func NewDomainSetFromConfig(entries []config.AllowEntry) *DomainSet {
 // The host may include a port (e.g., "api.anthropic.com:443"), which is
 // stripped before matching. Checks exact domain matches first, then patterns.
 func (ds *DomainSet) Contains(host string) bool {
-	hostname := stripPort(host)
+	hostname := strings.ToLower(stripPort(host))
 	ds.mu.RLock()
 	defer ds.mu.RUnlock()
 

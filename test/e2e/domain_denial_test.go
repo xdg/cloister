@@ -469,31 +469,33 @@ func TestDomainDenial_LoadDecisionsOnStartup(t *testing.T) {
 		t.Fatalf("Failed to send SIGHUP to guardian: %v", err)
 	}
 
-	// Wait for the reload to take effect
-	time.Sleep(1 * time.Second)
+	// Poll until the deny takes effect. A fast 403 (< 2s) means the deny came
+	// from the PolicyEngine; a slow 403 (~3s) means the request fell through to
+	// the approval queue and timed out, i.e. the reload hasn't happened yet.
+	curlCmd := "curl -v --proxy http://" + guardianHost + ":3128 --proxy-user :" + tc.Token +
+		" --max-time 8 https://" + testDomain + "/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'"
 
-	// Make a proxy request to the pre-denied domain
-	startTime := time.Now()
-	output, _ := execInContainer(t, tc.Name,
-		"sh", "-c",
-		"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+
-			" --max-time 8 https://"+testDomain+"/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
-	elapsed := time.Since(startTime)
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		startTime := time.Now()
+		output, _ := execInContainer(t, tc.Name, "sh", "-c", curlCmd)
+		elapsed := time.Since(startTime)
 
-	if strings.Contains(output, "not found") {
-		t.Skip("curl not available in container image")
-	}
+		if strings.Contains(output, "not found") {
+			t.Skip("curl not available in container image")
+		}
 
-	output = strings.TrimSpace(output)
+		output = strings.TrimSpace(output)
 
-	// Domain should be blocked immediately from the loaded decisions file
-	if output != "403" {
-		t.Errorf("Expected 403 for pre-denied domain loaded from decisions file, got: %q", output)
-	}
+		if output == "403" && elapsed < 2500*time.Millisecond {
+			// Fast 403: deny is active from the reloaded decisions file.
+			return
+		}
 
-	// A fast response confirms the denial was applied from the reloaded config
-	// rather than entering the approval queue.
-	if elapsed > 2500*time.Millisecond {
-		t.Errorf("Request took %v; expected fast 403 for pre-denied domain (approval timeout is 3s)", elapsed)
+		if time.Now().After(deadline) {
+			t.Fatalf("Deny did not take effect within deadline: last response %q in %v", output, elapsed)
+		}
+
+		time.Sleep(500 * time.Millisecond)
 	}
 }
