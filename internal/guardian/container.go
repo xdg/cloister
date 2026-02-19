@@ -309,6 +309,23 @@ func buildGuardianRunArgs(opts StartOptions, tokenAPIPort, approvalPort int, dir
 	return args
 }
 
+// Reload sends SIGHUP to the guardian container, triggering a config reload.
+// Returns an error if the guardian is not running.
+func Reload() error {
+	running, err := IsRunning()
+	if err != nil {
+		return fmt.Errorf("failed to check guardian status: %w", err)
+	}
+	if !running {
+		return fmt.Errorf("guardian is not running")
+	}
+
+	if _, err := docker.Run("kill", "-s", "HUP", ContainerName()); err != nil {
+		return fmt.Errorf("failed to send SIGHUP to guardian: %w", err)
+	}
+	return nil
+}
+
 // Stop stops the executor daemon and removes the guardian container.
 // Returns nil if nothing is running (idempotent).
 func Stop() error {

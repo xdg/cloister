@@ -200,9 +200,35 @@ var guardianStatusCmd = &cobra.Command{
 	},
 }
 
+var guardianReloadCmd = &cobra.Command{
+	Use:   "reload",
+	Short: "Reload guardian configuration",
+	Long: `Send SIGHUP to the guardian container to reload configuration from disk.
+
+This reloads the global config, domain allowlist/denylist decisions, and
+per-project decisions without restarting the guardian.`,
+	RunE: func(_ *cobra.Command, _ []string) error {
+		// Check if Docker is running
+		if err := docker.CheckDaemon(); err != nil {
+			if errors.Is(err, docker.ErrDockerNotRunning) {
+				return dockerNotRunningError()
+			}
+			return fmt.Errorf("docker is not available: %w", err)
+		}
+
+		if err := guardian.Reload(); err != nil {
+			return err
+		}
+
+		term.Println("Guardian configuration reloaded")
+		return nil
+	},
+}
+
 var guardianRunCmd = &cobra.Command{
-	Use:   "run",
-	Short: "Run the guardian proxy server (internal)",
+	Use:    "run",
+	Short:  "Run the guardian proxy server (internal)",
+	Hidden: true,
 	Long: `Run the guardian proxy and API servers.
 
 This command is intended to be run inside the guardian container and should
@@ -225,6 +251,7 @@ func init() {
 	guardianCmd.AddCommand(guardianStartCmd)
 	guardianCmd.AddCommand(guardianStopCmd)
 	guardianCmd.AddCommand(guardianStatusCmd)
+	guardianCmd.AddCommand(guardianReloadCmd)
 	guardianCmd.AddCommand(guardianRunCmd)
 	rootCmd.AddCommand(guardianCmd)
 }
