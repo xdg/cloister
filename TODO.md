@@ -245,12 +245,12 @@ Validate the full flow works with the real guardian (requires Docker).
 - [x] `make build` succeeds
 - [x] `make test` passes (all unit tests)
 - [x] `make lint` passes
-- [ ] Manual or integration test: start guardian, register token, proxy request to allowed domain → allowed
-- [ ] Manual or integration test: proxy request to denied domain → denied
-- [ ] Manual or integration test: proxy request to unlisted domain → approval prompt appears
-- [ ] Manual or integration test: approve with session scope → subsequent requests allowed for that token only
-- [ ] Manual or integration test: approve with project scope → persisted to decisions file, survives reload
-- [ ] Manual or integration test: SIGHUP → config changes take effect
+- [x] Manual or integration test: start guardian, register token, proxy request to allowed domain → allowed
+- [x] Manual or integration test: proxy request to denied domain → denied
+- [x] Manual or integration test: proxy request to unlisted domain → approval prompt appears
+- [x] Manual or integration test: approve with session scope → subsequent requests allowed for that token only
+- [x] Manual or integration test: approve with project scope → persisted to decisions file, survives reload
+- [x] Manual or integration test: SIGHUP → config changes take effect
 
 ---
 
