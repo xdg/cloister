@@ -92,14 +92,14 @@ Move the load-register-save pattern into a single library call.
 
 ### 3.1 Add AutoRegister to project/registry.go
 
-- [ ] Add `AutoRegister(name, root, remote, branch string) error` to `internal/project/registry.go`
-- [ ] Implementation: LoadRegistry, build Info, Register, SaveRegistry. Log warnings for collision errors, return nil on collision (best-effort semantics matching current behavior)
-- [ ] **Test**: `registry_test.go` — successful registration writes to temp dir; collision returns nil; load failure returns error
+- [x] Add `AutoRegister(name, root, remote, branch string) error` to `internal/project/registry.go`
+- [x] Implementation: LoadRegistry, build Info, Register, SaveRegistry. Log warnings for collision errors, return nil on collision (best-effort semantics matching current behavior)
+- [x] **Test**: `registry_test.go` — successful registration writes to temp dir; collision returns nil; load failure returns error
 
 ### 3.2 Update cmd/start.go
 
-- [ ] Replace `autoRegisterProject()` call with `project.AutoRegister()`
-- [ ] Delete the local `autoRegisterProject` function
+- [x] Replace `autoRegisterProject()` call with `project.AutoRegister()`
+- [x] Delete the local `autoRegisterProject` function
 
 ---
 

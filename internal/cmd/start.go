@@ -79,7 +79,9 @@ func runStart(_ *cobra.Command, _ []string) error {
 	remoteURL := project.GetRemoteURL(gitRoot)
 
 	// Step 4: Auto-register project in registry
-	autoRegisterProject(projectName, gitRoot, remoteURL, branch)
+	if err := project.AutoRegister(projectName, gitRoot, remoteURL, branch); err != nil {
+		clog.Warn("failed to auto-register project: %v", err)
+	}
 
 	// Compute cloister name (user-facing) and container name (Docker internal)
 	cloisterName := container.GenerateCloisterName(projectName)
@@ -165,33 +167,6 @@ func attachToExisting(containerName string) error {
 	}
 
 	return nil
-}
-
-// autoRegisterProject registers the project in the project registry (best effort).
-func autoRegisterProject(projectName, gitRoot, remoteURL, branch string) {
-	reg, err := project.LoadRegistry()
-	if err != nil {
-		clog.Warn("failed to load project registry: %v", err)
-		return
-	}
-	info := &project.Info{
-		Name:   projectName,
-		Root:   gitRoot,
-		Remote: remoteURL,
-		Branch: branch,
-	}
-	if err := reg.Register(info); err != nil {
-		var collisionErr *project.NameCollisionError
-		if errors.As(err, &collisionErr) {
-			clog.Warn("%v", err)
-		} else {
-			clog.Warn("failed to register project: %v", err)
-		}
-		return
-	}
-	if err := project.SaveRegistry(reg); err != nil {
-		clog.Warn("failed to save project registry: %v", err)
-	}
 }
 
 // handleStartError maps cloister.Start errors to user-friendly messages.

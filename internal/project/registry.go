@@ -12,6 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/pathutil"
 )
@@ -242,6 +243,38 @@ func (r *Registry) Remove(name string) error {
 		}
 	}
 	return ErrProjectNotFound
+}
+
+// AutoRegister loads the registry, registers the project, and saves the registry.
+// It returns nil on name collisions (non-fatal, logged as a warning).
+// Other errors (load failure, unexpected register error, save failure) are returned.
+func AutoRegister(name, root, remote, branch string) error {
+	reg, err := LoadRegistry()
+	if err != nil {
+		return fmt.Errorf("load project registry: %w", err)
+	}
+
+	info := &Info{
+		Name:   name,
+		Root:   root,
+		Remote: remote,
+		Branch: branch,
+	}
+
+	if err := reg.Register(info); err != nil {
+		var collisionErr *NameCollisionError
+		if errors.As(err, &collisionErr) {
+			clog.Warn("%v", err)
+			return nil
+		}
+		return fmt.Errorf("register project: %w", err)
+	}
+
+	if err := SaveRegistry(reg); err != nil {
+		return fmt.Errorf("save project registry: %w", err)
+	}
+
+	return nil
 }
 
 // Lookup loads the registry from disk and finds a project by name.

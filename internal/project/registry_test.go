@@ -1083,6 +1083,101 @@ func TestRegistry_UpdateLastUsed_WithClock(t *testing.T) {
 	}
 }
 
+func TestAutoRegister_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	err := AutoRegister("my-project", "/home/user/repos/my-project", "git@github.com:user/my-project.git", "main")
+	if err != nil {
+		t.Fatalf("AutoRegister() error = %v", err)
+	}
+
+	// Verify project was saved to disk
+	reg, err := LoadRegistry()
+	if err != nil {
+		t.Fatalf("LoadRegistry() error = %v", err)
+	}
+
+	if len(reg.Projects) != 1 {
+		t.Fatalf("expected 1 project, got %d", len(reg.Projects))
+	}
+
+	p := reg.Projects[0]
+	if p.Name != "my-project" {
+		t.Errorf("Name = %q, want %q", p.Name, "my-project")
+	}
+	if p.Root != "/home/user/repos/my-project" {
+		t.Errorf("Root = %q, want %q", p.Root, "/home/user/repos/my-project")
+	}
+	if p.Remote != "git@github.com:user/my-project.git" {
+		t.Errorf("Remote = %q, want %q", p.Remote, "git@github.com:user/my-project.git")
+	}
+}
+
+func TestAutoRegister_CollisionReturnsNil(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	// Pre-populate registry with a project
+	reg := &Registry{
+		Projects: []RegistryEntry{
+			{
+				Name:     "my-project",
+				Root:     "/home/user/repos/my-project",
+				Remote:   "git@github.com:user/my-project.git",
+				LastUsed: time.Now(),
+			},
+		},
+	}
+	if err := SaveRegistry(reg); err != nil {
+		t.Fatalf("SaveRegistry() error = %v", err)
+	}
+
+	// Register same name with different remote — should be a collision
+	err := AutoRegister("my-project", "/home/user/other/my-project", "git@github.com:other/my-project.git", "main")
+	if err != nil {
+		t.Fatalf("AutoRegister() should return nil on collision, got %v", err)
+	}
+
+	// Verify original project is unchanged (collision should not modify registry)
+	reg2, err := LoadRegistry()
+	if err != nil {
+		t.Fatalf("LoadRegistry() error = %v", err)
+	}
+	if len(reg2.Projects) != 1 {
+		t.Fatalf("expected 1 project (unchanged), got %d", len(reg2.Projects))
+	}
+	if reg2.Projects[0].Remote != "git@github.com:user/my-project.git" {
+		t.Errorf("Remote = %q, want original remote", reg2.Projects[0].Remote)
+	}
+}
+
+func TestAutoRegister_LoadFailure(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmpDir)
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	// Write invalid YAML to cause LoadRegistry to fail
+	configDir := filepath.Join(tmpDir, "cloister")
+	if err := os.MkdirAll(configDir, 0o700); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+	registryPath := filepath.Join(configDir, "projects.yaml")
+	if err := os.WriteFile(registryPath, []byte("invalid: yaml: [broken"), 0o600); err != nil {
+		t.Fatalf("failed to write invalid registry: %v", err)
+	}
+
+	err := AutoRegister("my-project", "/home/user/repos/my-project", "git@github.com:user/my-project.git", "main")
+	if err == nil {
+		t.Fatal("expected error for load failure, got nil")
+	}
+	if !strings.Contains(err.Error(), "load project registry") {
+		t.Errorf("expected load error, got: %v", err)
+	}
+}
+
 func TestLookupByPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmpDir)
