@@ -109,22 +109,22 @@ Move cloister name detection and attach-or-start logic to library packages.
 
 ### 4.1 Add DetectName to cloister package
 
-- [ ] Add `DetectName() (string, error)` to `internal/cloister/` (new file `detect.go` or add to existing)
-- [ ] Implementation: `project.DetectGitRoot(".")` → `project.Name(root)` → `container.GenerateCloisterName(name)`
-- [ ] **Test**: Unit test with injected git detection (use functional options or interface to mock project detection)
+- [x] Add `DetectName() (string, error)` to `internal/cloister/` (new file `detect.go` or add to existing)
+- [x] Implementation: `project.DetectGitRoot(".")` → `project.Name(root)` → `container.GenerateCloisterName(name)`
+- [x] **Test**: Unit test with injected git detection (use functional options or interface to mock project detection)
 
 ### 4.2 Add AttachExisting to cloister package
 
-- [ ] Add `AttachExisting(containerName string, opts ...Option) (int, error)` to `internal/cloister/`
-- [ ] Implementation: check if running via Manager, start if stopped, call Attach. Return exit code.
-- [ ] The function does NOT print output — cmd handler does that
-- [ ] **Test**: Unit test with mock ContainerManager — test stopped-then-started path, already-running path, start-fails path
+- [x] Add `AttachExisting(containerName string, opts ...Option) (int, error)` to `internal/cloister/`
+- [x] Implementation: check if running via Manager, start if stopped, call Attach. Return exit code.
+- [x] The function does NOT print output — cmd handler does that
+- [x] **Test**: Unit test with mock ContainerManager — test stopped-then-started path, already-running path, start-fails path
 
 ### 4.3 Update cmd/stop.go and cmd/start.go
 
-- [ ] Replace `detectCloisterName()` with `cloister.DetectName()`
-- [ ] Replace `attachToExisting()` business logic with `cloister.AttachExisting()`, keep output formatting in cmd
-- [ ] Delete local functions
+- [x] Replace `detectCloisterName()` with `cloister.DetectName()`
+- [x] Replace `attachToExisting()` business logic with `cloister.AttachExisting()`, keep output formatting in cmd
+- [x] Delete local functions
 
 ---
 

@@ -55,6 +55,8 @@ type mockManager struct {
 	attachContainerName   string
 	attachExitCode        int
 	attachError           error
+	isRunningResult       bool
+	isRunningError        error
 }
 
 func (m *mockManager) ContainerExists(_ string) (bool, error) {
@@ -88,6 +90,10 @@ func (m *mockManager) Attach(containerName string) (int, error) {
 	m.attachCalled = true
 	m.attachContainerName = containerName
 	return m.attachExitCode, m.attachError
+}
+
+func (m *mockManager) IsRunning(_ string) (bool, error) {
+	return m.isRunningResult, m.isRunningError
 }
 
 func TestWithManager_InjectionWorks(t *testing.T) {
@@ -871,5 +877,97 @@ func TestStart_ExistingContainer_ReturnsEarlyWithoutTokenMutation(t *testing.T) 
 	}
 	if len(tokens) != 0 {
 		t.Errorf("Token store should be empty, but has %d entries: %v", len(tokens), tokens)
+	}
+}
+
+func TestAttachExisting_AlreadyRunning(t *testing.T) {
+	mock := &mockManager{
+		isRunningResult: true,
+		attachExitCode:  0,
+	}
+
+	started, exitCode, err := AttachExisting("cloister-myproject-main", WithManager(mock))
+	if err != nil {
+		t.Fatalf("AttachExisting() returned error: %v", err)
+	}
+	if started {
+		t.Error("started should be false when container was already running")
+	}
+	if exitCode != 0 {
+		t.Errorf("exitCode = %d, want 0", exitCode)
+	}
+	// StartContainer should NOT have been called since container was already running
+	if mock.startContainerCalled {
+		t.Error("StartContainer() should not be called when container is already running")
+	}
+	if !mock.attachCalled {
+		t.Error("Attach() was not called")
+	}
+}
+
+func TestAttachExisting_StoppedThenStarted(t *testing.T) {
+	mock := &mockManager{
+		isRunningResult: false, // stopped
+		attachExitCode:  42,
+	}
+
+	started, exitCode, err := AttachExisting("cloister-myproject-main", WithManager(mock))
+	if err != nil {
+		t.Fatalf("AttachExisting() returned error: %v", err)
+	}
+	if !started {
+		t.Error("started should be true when container was stopped")
+	}
+	if exitCode != 42 {
+		t.Errorf("exitCode = %d, want 42", exitCode)
+	}
+	// StartContainer should have been called to restart the stopped container
+	if !mock.startContainerCalled {
+		t.Error("StartContainer() was not called for stopped container")
+	}
+	if mock.startContainerName != "cloister-myproject-main" {
+		t.Errorf("StartContainer name = %q, want %q", mock.startContainerName, "cloister-myproject-main")
+	}
+	if !mock.attachCalled {
+		t.Error("Attach() was not called")
+	}
+}
+
+func TestAttachExisting_StartFails(t *testing.T) {
+	mock := &mockManager{
+		isRunningResult:     false,
+		startContainerError: errors.New("docker start failed"),
+	}
+
+	_, _, err := AttachExisting("cloister-myproject-main", WithManager(mock))
+	if err == nil {
+		t.Fatal("AttachExisting() should return error when start fails")
+	}
+	if !strings.Contains(err.Error(), "start cloister") {
+		t.Errorf("error = %q, expected to contain 'start cloister'", err.Error())
+	}
+	// Attach should NOT have been called since start failed
+	if mock.attachCalled {
+		t.Error("Attach() should not be called when StartContainer fails")
+	}
+}
+
+func TestAttachExisting_IsRunningFails(t *testing.T) {
+	mock := &mockManager{
+		isRunningError: errors.New("docker inspect failed"),
+	}
+
+	_, _, err := AttachExisting("cloister-myproject-main", WithManager(mock))
+	if err == nil {
+		t.Fatal("AttachExisting() should return error when IsRunning fails")
+	}
+	if !strings.Contains(err.Error(), "check cloister status") {
+		t.Errorf("error = %q, expected to contain 'check cloister status'", err.Error())
+	}
+	if mock.startContainerCalled {
+		t.Error("StartContainer() should not be called when IsRunning fails")
+	}
+	if mock.attachCalled {
+		t.Error("Attach() should not be called when IsRunning fails")
 	}
 }

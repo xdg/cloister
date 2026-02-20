@@ -26,6 +26,7 @@ type ContainerManager interface {
 	StartContainer(containerName string) error
 	Stop(containerName string) error
 	Attach(containerName string) (int, error)
+	IsRunning(name string) (bool, error)
 }
 
 // ConfigLoader is the interface for loading configuration.
@@ -444,4 +445,32 @@ func Stop(containerName, tok string, options ...Option) error {
 func Attach(containerID string, options ...Option) (exitCode int, err error) {
 	deps := applyOptions(options...)
 	return deps.manager.Attach(containerID)
+}
+
+// AttachExisting attaches to an existing cloister container, starting it first
+// if it is stopped. Returns the shell exit code.
+//
+// This function does NOT print any output — the caller (cmd handler) is
+// responsible for user-facing messages.
+//
+// Options can be used to inject dependencies for testing:
+//
+//	AttachExisting(containerName, WithManager(mockManager))
+func AttachExisting(containerName string, options ...Option) (started bool, exitCode int, err error) {
+	deps := applyOptions(options...)
+
+	running, err := deps.manager.IsRunning(containerName)
+	if err != nil {
+		return false, 0, fmt.Errorf("check cloister status: %w", err)
+	}
+
+	if !running {
+		if err := deps.manager.StartContainer(containerName); err != nil {
+			return false, 0, fmt.Errorf("start cloister: %w", err)
+		}
+		started = true
+	}
+
+	exitCode, err = deps.manager.Attach(containerName)
+	return started, exitCode, err
 }

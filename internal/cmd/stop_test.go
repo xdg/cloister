@@ -113,8 +113,8 @@ func TestStopErrorMessages(t *testing.T) {
 	})
 }
 
-// TestStopGitDetectionErrors verifies that detectCloisterName correctly
-// handles git detection errors with appropriate hints.
+// TestStopGitDetectionErrors verifies that git detection errors are
+// handled with appropriate hints.
 func TestStopGitDetectionErrors(t *testing.T) {
 	tests := []struct {
 		name      string

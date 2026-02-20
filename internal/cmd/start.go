@@ -125,57 +125,30 @@ func runStart(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// attachToExisting attaches to an existing cloister, starting it if necessary.
-// containerName is the Docker container name (with "cloister-" prefix).
-func attachToExisting(containerName string) error {
-	mgr := container.NewManager()
-
-	// Derive user-facing cloister name from container name
-	cloisterName := container.NameToCloisterName(containerName)
-
-	// Check if the container is running
-	running, err := mgr.IsRunning(containerName)
-	if err != nil {
-		return fmt.Errorf("failed to check cloister status: %w", err)
-	}
-
-	if !running {
-		// Container exists but is stopped - start it first
-		term.Printf("Starting stopped cloister: %s\n", cloisterName)
-		if err := mgr.StartContainer(containerName); err != nil {
-			return fmt.Errorf("failed to start cloister: %w", err)
-		}
-	}
-
-	// Attach to the cloister
-	term.Printf("Entering cloister %s. Type 'exit' to leave.\n", cloisterName)
-	term.Println()
-
-	exitCode, err := cloister.Attach(containerName)
-	if err != nil {
-		return fmt.Errorf("failed to attach to cloister: %w", err)
-	}
-
-	// Print exit message
-	term.Println()
-	term.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
-	term.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
-
-	// Propagate shell exit code
-	if exitCode != 0 {
-		return NewExitCodeError(exitCode)
-	}
-
-	return nil
-}
-
 // handleStartError maps cloister.Start errors to user-friendly messages.
 func handleStartError(err error, containerName string) error {
 	if errors.Is(err, docker.ErrDockerNotRunning) {
 		return dockerNotRunningError()
 	}
 	if errors.Is(err, container.ErrContainerExists) {
-		return attachToExisting(containerName)
+		cloisterName := container.NameToCloisterName(containerName)
+
+		term.Printf("Entering cloister %s. Type 'exit' to leave.\n", cloisterName)
+		term.Println()
+
+		_, exitCode, attachErr := cloister.AttachExisting(containerName)
+		if attachErr != nil {
+			return fmt.Errorf("failed to attach to cloister: %w", attachErr)
+		}
+
+		term.Println()
+		term.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
+		term.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
+
+		if exitCode != 0 {
+			return NewExitCodeError(exitCode)
+		}
+		return nil
 	}
 	return guardianErrorHint(err)
 }

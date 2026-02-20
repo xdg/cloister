@@ -10,7 +10,6 @@ import (
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
-	"github.com/xdg/cloister/internal/project"
 	"github.com/xdg/cloister/internal/term"
 )
 
@@ -36,9 +35,12 @@ func runStop(_ *cobra.Command, args []string) error {
 		cloisterName = args[0]
 	} else {
 		// Default to current project
-		name, err := detectCloisterName()
+		name, err := cloister.DetectName()
 		if err != nil {
-			return err
+			if gitErr := gitDetectionErrorWithHint(err, "specify cloister name or run from within a git project"); gitErr != nil {
+				return gitErr
+			}
+			return fmt.Errorf("failed to detect cloister name: %w", err)
 		}
 		cloisterName = name
 	}
@@ -68,24 +70,4 @@ func runStop(_ *cobra.Command, args []string) error {
 	}
 
 	return nil
-}
-
-// detectCloisterName determines the cloister name based on the current project.
-func detectCloisterName() (string, error) {
-	// Detect git root from current directory
-	gitRoot, err := project.DetectGitRoot(".")
-	if err != nil {
-		if gitErr := gitDetectionErrorWithHint(err, "specify cloister name or run from within a git project"); gitErr != nil {
-			return "", gitErr
-		}
-		return "", fmt.Errorf("failed to detect git repository: %w", err)
-	}
-
-	// Get project name
-	projectName, err := project.Name(gitRoot)
-	if err != nil {
-		return "", fmt.Errorf("failed to determine project name: %w", err)
-	}
-
-	return container.GenerateCloisterName(projectName), nil
 }
