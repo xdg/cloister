@@ -168,35 +168,35 @@ The largest extraction: move `runGuardianProxy` and its ~10 setup helpers from
 
 ### 7.1 Define Server type
 
-- [ ] Create `internal/guardian/server.go` with `Server` struct
-- [ ] Fields: registry, config, policyEngine, patternCache, auditLogger, and the 4 stoppable servers
-- [ ] Constructor: `NewServer(registry *token.Registry, cfg *config.GlobalConfig, decisions *config.Decisions) (*Server, error)`
-- [ ] Move `setupPolicyEngine`, `setupProxyServer`, `setupPatternCache`, `setupAuditLogger`, `setupDomainApproval`, `setupExecutorClient` into `Server` methods or constructor
+- [x] Create `internal/guardian/server.go` with `Server` struct
+- [x] Fields: registry, config, policyEngine, patternCache, auditLogger, and the 4 stoppable servers
+- [x] Constructor: `NewServer(registry *token.Registry, cfg *config.GlobalConfig, decisions *config.Decisions) (*Server, error)`
+- [x] Move `setupPolicyEngine`, `setupProxyServer`, `setupPatternCache`, `setupAuditLogger`, `setupDomainApproval`, `setupExecutorClient` into `Server` methods or constructor
 
 ### 7.2 Add Run and Shutdown methods
 
-- [ ] `func (s *Server) Run() error` — starts all servers, blocks on signal, shuts down
-- [ ] Move `startAllServers`, `awaitShutdownSignal`, `shutdownAllServers` as Server methods
-- [ ] Move `stoppable` interface into `server.go`
-- [ ] Move `domainApprovalResult` type and `extractPatterns` helper
+- [x] `func (s *Server) Run() error` — starts all servers, blocks on signal, shuts down
+- [x] Move `startAllServers`, `awaitShutdownSignal`, `shutdownAllServers` as Server methods
+- [x] Move `stoppable` interface into `server.go`
+- [x] Move `domainApprovalResult` type and `extractPatterns` helper
 
 ### 7.3 Move supporting functions
 
-- [ ] Move `loadPersistedTokens` → Server method or standalone in guardian package
-- [ ] Move `loadGuardianConfig`, `loadGuardianDecisions` → standalone funcs in guardian package (they just wrap config.Load with fallback)
-- [ ] Move `formatDuration`, `getGuardianUptime` — `formatDuration` is a utility (could go in a `util` or stay in guardian); `getGuardianUptime` uses `docker.Run` so it stays in guardian or cmd
+- [x] Move `loadPersistedTokens` → Server method or standalone in guardian package
+- [x] Move `loadGuardianConfig`, `loadGuardianDecisions` → standalone funcs in guardian package (they just wrap config.Load with fallback)
+- [x] Move `formatDuration`, `getGuardianUptime` — `formatDuration` is a utility (could go in a `util` or stay in guardian); `getGuardianUptime` uses `docker.Run` so it stays in guardian or cmd
 
 ### 7.4 Update cmd/guardian.go
 
-- [ ] `runGuardianProxy` becomes: load config, create Server, call `server.Run()`
-- [ ] Delete all moved helper functions and types (`guardianState`, `domainApprovalResult`, `stoppable`, `setup*`, etc.)
-- [ ] Keep `getGuardianUptime` and `formatDuration` in cmd if they're only used for `guardian status` output
+- [x] `runGuardianProxy` becomes: load config, create Server, call `server.Run()`
+- [x] Delete all moved helper functions and types (`guardianState`, `domainApprovalResult`, `stoppable`, `setup*`, etc.)
+- [x] Keep `getGuardianUptime` and `formatDuration` in cmd if they're only used for `guardian status` output
 
 ### 7.5 Test Server construction
 
-- [ ] **Test**: `server_test.go` — `NewServer` with default config creates valid server (no panic, components initialized)
-- [ ] **Test**: Verify PolicyEngine is wired correctly (check a default-allowed domain)
-- [ ] **Test**: `extractPatterns` (if moved) — simple mapping test
+- [x] **Test**: `server_test.go` — `NewServer` with default config creates valid server (no panic, components initialized)
+- [x] **Test**: Verify PolicyEngine is wired correctly (check a default-allowed domain)
+- [x] **Test**: `extractPatterns` (if moved) — simple mapping test
 
 ---
 

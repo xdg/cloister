@@ -1,31 +1,19 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"os/signal"
-	"path/filepath"
-	"strconv"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/xdg/cloister/internal/audit"
 	"github.com/xdg/cloister/internal/clog"
-	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/executor"
 	"github.com/xdg/cloister/internal/guardian"
-	"github.com/xdg/cloister/internal/guardian/approval"
-	guardianexec "github.com/xdg/cloister/internal/guardian/executor"
-	"github.com/xdg/cloister/internal/guardian/patterns"
-	"github.com/xdg/cloister/internal/guardian/request"
 	"github.com/xdg/cloister/internal/term"
 	"github.com/xdg/cloister/internal/token"
 )
@@ -256,322 +244,22 @@ func init() {
 	rootCmd.AddCommand(guardianCmd)
 }
 
-// guardianState holds all shared state for the guardian proxy runtime.
-type guardianState struct {
-	registry     *token.Registry
-	cfg          *config.GlobalConfig
-	policyEngine *guardian.PolicyEngine
-	patternCache *guardian.PatternCache
-	auditLogger  *audit.Logger
-}
-
 // runGuardianProxy starts the proxy and API servers and blocks until interrupted.
 func runGuardianProxy(_ *cobra.Command, _ []string) error {
-	// Switch to daemon mode: logs go to file only, not stderr
 	clog.SetDaemonMode(true)
 
-	gs := &guardianState{}
-	gs.registry = token.NewRegistry()
+	registry := token.NewRegistry()
+	guardian.LoadPersistedTokens(registry)
 
-	loadPersistedTokens(gs.registry)
+	cfg := guardian.LoadGuardianConfig()
+	decisions := guardian.LoadGuardianDecisions()
 
-	gs.cfg = loadGuardianConfig()
-	globalDecisions := loadGuardianDecisions()
-
-	gs.policyEngine = setupPolicyEngine(gs, globalDecisions)
-
-	proxy := setupProxyServer(gs)
-	gs.patternCache = setupPatternCache(gs)
-	patternLookup := func(projectName string) request.PatternMatcher {
-		return gs.patternCache.GetProject(projectName)
-	}
-
-	apiAddr := fmt.Sprintf(":%d", guardian.DefaultAPIPort)
-	api := guardian.NewAPIServer(apiAddr, gs.registry)
-
-	gs.auditLogger = setupAuditLogger(gs.cfg)
-
-	requestTokenLookup := func(tok string) (token.Info, bool) {
-		return gs.registry.Lookup(tok)
-	}
-
-	approvalQueue := approval.NewQueue()
-	dar := setupDomainApproval(gs)
-
-	configPersister := &guardian.PolicyConfigPersister{Recorder: gs.policyEngine}
-
-	proxy.DomainApprover = dar.Approver
-	proxy.OnReload = func() {
-		gs.patternCache.Clear()
-	}
-	api.TokenRevoker = gs.policyEngine
-
-	execClient := setupExecutorClient()
-
-	reqServer := request.NewServer(requestTokenLookup, patternLookup, execClient, gs.auditLogger)
-	reqServer.Queue = approvalQueue
-
-	approvalServer := approval.NewServer(approvalQueue, gs.auditLogger)
-	approvalServer.SetDomainQueue(dar.DomainQueue)
-	approvalServer.ConfigPersister = configPersister
-
-	if dar.DomainQueue != nil && gs.auditLogger != nil {
-		dar.DomainQueue.SetAuditLogger(gs.auditLogger)
-	}
-
-	if err := startAllServers(proxy, api, reqServer, approvalServer); err != nil {
+	srv, err := guardian.NewServer(registry, cfg, decisions)
+	if err != nil {
 		return err
 	}
 
-	awaitShutdownSignal()
-
-	return shutdownAllServers(proxy, api, reqServer, approvalServer)
-}
-
-// loadPersistedTokens loads tokens from disk into the registry.
-func loadPersistedTokens(registry *token.Registry) {
-	store, err := token.NewStore(guardian.ContainerTokenDir)
-	if err != nil {
-		clog.Warn("failed to open token store: %v", err)
-		return
-	}
-	tokens, err := store.Load()
-	if err != nil {
-		clog.Warn("failed to load tokens: %v", err)
-		return
-	}
-	for tok, info := range tokens {
-		registry.RegisterFull(tok, info.CloisterName, info.ProjectName, info.WorktreePath)
-	}
-	if len(tokens) > 0 {
-		clog.Info("recovered %d tokens from disk", len(tokens))
-	}
-}
-
-// loadGuardianConfig loads the global config, falling back to defaults.
-func loadGuardianConfig() *config.GlobalConfig {
-	cfg, err := config.LoadGlobalConfig()
-	if err != nil {
-		clog.Warn("failed to load config, using defaults: %v", err)
-		return config.DefaultGlobalConfig()
-	}
-	return cfg
-}
-
-// loadGuardianDecisions loads global decisions, falling back to empty.
-func loadGuardianDecisions() *config.Decisions {
-	decisions, err := config.LoadGlobalDecisions()
-	if err != nil {
-		clog.Warn("failed to load global decisions: %v", err)
-		return &config.Decisions{}
-	}
-	return decisions
-}
-
-// setupPolicyEngine creates the PolicyEngine that owns all domain access policy state.
-func setupPolicyEngine(gs *guardianState, globalDecisions *config.Decisions) *guardian.PolicyEngine {
-	pe, err := guardian.NewPolicyEngine(gs.cfg, globalDecisions, gs.registry)
-	if err != nil {
-		clog.Warn("failed to create policy engine: %v", err)
-		// Create a minimal engine with defaults; this cannot fail with valid inputs.
-		pe, _ = guardian.NewPolicyEngine(config.DefaultGlobalConfig(), &config.Decisions{}, nil) //nolint:errcheck
-	}
-	return pe
-}
-
-// setupProxyServer creates and configures the proxy server.
-func setupProxyServer(gs *guardianState) *guardian.ProxyServer {
-	proxyAddr := fmt.Sprintf(":%d", guardian.DefaultProxyPort)
-	proxy := guardian.NewProxyServer(proxyAddr)
-	proxy.PolicyEngine = gs.policyEngine
-	proxy.TokenValidator = gs.registry
-	proxy.TokenLookup = guardian.TokenLookupFromRegistry(gs.registry)
-	return proxy
-}
-
-// setupPatternCache creates the pattern cache for command approval.
-func setupPatternCache(gs *guardianState) *guardian.PatternCache {
-	autoApprovePatterns := extractPatterns(gs.cfg.Hostexec.AutoApprove)
-	manualApprovePatterns := extractPatterns(gs.cfg.Hostexec.ManualApprove)
-	regexMatcher := patterns.NewRegexMatcher(autoApprovePatterns, manualApprovePatterns)
-	clog.Info("loaded approval patterns: %d auto-approve, %d manual-approve",
-		len(autoApprovePatterns), len(manualApprovePatterns))
-
-	cache := guardian.NewPatternCache(regexMatcher)
-	cfg := gs.cfg
-	cache.SetProjectLoader(func(projectName string) patterns.Matcher {
-		projectCfg, err := config.LoadProjectConfig(projectName)
-		if err != nil {
-			clog.Warn("failed to load project config for patterns %s: %v", projectName, err)
-			return nil
-		}
-		if len(projectCfg.Hostexec.AutoApprove) == 0 && len(projectCfg.Hostexec.ManualApprove) == 0 {
-			return nil
-		}
-		mergedAuto := config.MergeCommandPatterns(cfg.Hostexec.AutoApprove, projectCfg.Hostexec.AutoApprove)
-		mergedManual := config.MergeCommandPatterns(cfg.Hostexec.ManualApprove, projectCfg.Hostexec.ManualApprove)
-		matcher := patterns.NewRegexMatcher(extractPatterns(mergedAuto), extractPatterns(mergedManual))
-		clog.Info("loaded command patterns for project %s (%d auto-approve, %d manual-approve)",
-			projectName, len(mergedAuto), len(mergedManual))
-		return matcher
-	})
-
-	return cache
-}
-
-// setupAuditLogger creates the audit logger if configured.
-func setupAuditLogger(cfg *config.GlobalConfig) *audit.Logger {
-	if cfg.Log.File == "" {
-		return nil
-	}
-	auditLogPath := cfg.Log.File
-	if strings.HasPrefix(auditLogPath, "~/") {
-		home, err := os.UserHomeDir()
-		if err == nil {
-			auditLogPath = filepath.Join(home, auditLogPath[2:])
-		}
-	}
-	auditFile, err := clog.OpenLogFile(auditLogPath)
-	if err != nil {
-		clog.Warn("failed to open audit log file %s: %v", auditLogPath, err)
-		return nil
-	}
-	clog.Info("audit logging enabled: %s", auditLogPath)
-	return audit.NewLogger(auditFile)
-}
-
-// domainApprovalResult groups the components returned by setupDomainApproval.
-type domainApprovalResult struct {
-	Approver    guardian.DomainApprover
-	DomainQueue *approval.DomainQueue
-}
-
-// setupDomainApproval configures domain approval components if enabled.
-func setupDomainApproval(gs *guardianState) domainApprovalResult {
-	cfg := gs.cfg
-	if cfg.Proxy.UnlistedDomainBehavior != "" &&
-		cfg.Proxy.UnlistedDomainBehavior != "reject" &&
-		cfg.Proxy.UnlistedDomainBehavior != "request_approval" {
-		clog.Warn("invalid unlisted_domain_behavior %q, using default 'request_approval'", cfg.Proxy.UnlistedDomainBehavior)
-		cfg.Proxy.UnlistedDomainBehavior = "request_approval"
-	}
-
-	if cfg.Proxy.UnlistedDomainBehavior != "request_approval" {
-		clog.Info("domain approval disabled (unlisted domains will be rejected)")
-		return domainApprovalResult{}
-	}
-
-	approvalTimeout := 60 * time.Second
-	if cfg.Proxy.ApprovalTimeout != "" {
-		parsed, err := time.ParseDuration(cfg.Proxy.ApprovalTimeout)
-		if err != nil {
-			clog.Warn("invalid approval_timeout %q, using default 60s: %v", cfg.Proxy.ApprovalTimeout, err)
-		} else {
-			approvalTimeout = parsed
-		}
-	}
-
-	domainQueue := approval.NewDomainQueueWithTimeout(approvalTimeout)
-	domainApprover := guardian.NewDomainApprover(domainQueue, gs.policyEngine, gs.auditLogger)
-	clog.Info("domain approval enabled (timeout: %v)", approvalTimeout)
-
-	return domainApprovalResult{
-		Approver:    domainApprover,
-		DomainQueue: domainQueue,
-	}
-}
-
-// setupExecutorClient creates the executor client if environment is configured.
-func setupExecutorClient() request.CommandExecutor {
-	sharedSecret := os.Getenv(guardian.SharedSecretEnvVar)
-	executorPortStr := os.Getenv(guardian.ExecutorPortEnvVar)
-	if sharedSecret == "" || executorPortStr == "" {
-		if sharedSecret == "" {
-			clog.Warn("%s not set, command execution disabled", guardian.SharedSecretEnvVar)
-		}
-		if executorPortStr == "" {
-			clog.Warn("%s not set, command execution disabled", guardian.ExecutorPortEnvVar)
-		}
-		return nil
-	}
-	port, err := strconv.Atoi(executorPortStr)
-	if err != nil {
-		clog.Warn("invalid executor port %q: %v", executorPortStr, err)
-		return nil
-	}
-	clog.Info("executor client configured (host.docker.internal:%d)", port)
-	return guardianexec.NewTCPClient(port, sharedSecret)
-}
-
-// stoppable is a server that can be started and stopped.
-type stoppable interface {
-	Start() error
-	Stop(ctx context.Context) error
-	ListenAddr() string
-}
-
-// startAllServers starts all guardian servers, cleaning up on failure.
-func startAllServers(proxy, api, reqServer, approvalServer stoppable) error {
-	servers := []struct {
-		server stoppable
-		name   string
-	}{
-		{proxy, "proxy"},
-		{api, "API"},
-		{reqServer, "request"},
-		{approvalServer, "approval"},
-	}
-
-	var started []stoppable
-	for _, s := range servers {
-		if err := s.server.Start(); err != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			for _, running := range started {
-				if stopErr := running.Stop(ctx); stopErr != nil {
-					clog.Warn("failed to stop server on cleanup: %v", stopErr)
-				}
-			}
-			cancel()
-			return fmt.Errorf("failed to start %s server: %w", s.name, err)
-		}
-		clog.Info("guardian %s server listening on %s", s.name, s.server.ListenAddr())
-		started = append(started, s.server)
-	}
-
-	return nil
-}
-
-// awaitShutdownSignal blocks until SIGINT or SIGTERM is received.
-func awaitShutdownSignal() {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-	clog.Debug("shutting down guardian servers...")
-}
-
-// shutdownAllServers gracefully shuts down all guardian servers.
-func shutdownAllServers(proxy, api, reqServer, approvalServer stoppable) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	errs := []struct {
-		err  error
-		name string
-	}{
-		{proxy.Stop(ctx), "proxy"},
-		{api.Stop(ctx), "API"},
-		{reqServer.Stop(ctx), "request server"},
-		{approvalServer.Stop(ctx), "approval server"},
-	}
-
-	for _, e := range errs {
-		if e.err != nil {
-			return fmt.Errorf("error during %s shutdown: %w", e.name, e.err)
-		}
-	}
-
-	clog.Debug("guardian servers stopped")
-	return nil
+	return srv.Run()
 }
 
 // getGuardianUptime returns the human-readable uptime of the guardian container.
@@ -648,13 +336,4 @@ func formatDuration(d time.Duration) string {
 		return fmt.Sprintf("%d days, %d hours", days, hours)
 	}
 	return fmt.Sprintf("%d days", days)
-}
-
-// extractPatterns extracts pattern strings from a slice of CommandPattern.
-func extractPatterns(cmds []config.CommandPattern) []string {
-	result := make([]string, len(cmds))
-	for i, p := range cmds {
-		result[i] = p.Pattern
-	}
-	return result
 }
