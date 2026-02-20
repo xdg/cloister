@@ -166,3 +166,106 @@ func TestManager_WithMockRunner_List(t *testing.T) {
 		t.Errorf("First container name = %q, want %q", containers[0].Name, "cloister-project-main")
 	}
 }
+
+func TestManager_HasRunningCloister(t *testing.T) {
+	tests := []struct {
+		name        string
+		containers  []Info
+		projectName string
+		want        string
+	}{
+		{
+			name: "matches running container with branch suffix",
+			containers: []Info{
+				{Name: "/cloister-myproj-main", State: "running"},
+			},
+			projectName: "myproj",
+			want:        "myproj-main",
+		},
+		{
+			name: "matches exact project name",
+			containers: []Info{
+				{Name: "/cloister-myproj", State: "running"},
+			},
+			projectName: "myproj",
+			want:        "myproj",
+		},
+		{
+			name: "skips guardian",
+			containers: []Info{
+				{Name: "/cloister-guardian", State: "running"},
+			},
+			projectName: "guardian",
+			want:        "",
+		},
+		{
+			name: "skips non-running containers",
+			containers: []Info{
+				{Name: "/cloister-myproj-main", State: "exited"},
+			},
+			projectName: "myproj",
+			want:        "",
+		},
+		{
+			name: "no match for different project",
+			containers: []Info{
+				{Name: "/cloister-other-main", State: "running"},
+			},
+			projectName: "myproj",
+			want:        "",
+		},
+		{
+			name:        "no containers at all",
+			containers:  []Info{},
+			projectName: "myproj",
+			want:        "",
+		},
+		{
+			name: "does not match partial project name",
+			containers: []Info{
+				{Name: "/cloister-myproject-main", State: "running"},
+			},
+			projectName: "myproj",
+			want:        "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := &mockDockerRunner{
+				runJSONLinesFunc: func(result any, _ bool, _ ...string) error {
+					containers, ok := result.(*[]Info)
+					if !ok {
+						t.Fatal("Expected *[]Info")
+					}
+					*containers = tc.containers
+					return nil
+				},
+			}
+			mgr := NewManagerWithRunner(mock)
+			got, err := mgr.HasRunningCloister(tc.projectName)
+			if err != nil {
+				t.Fatalf("HasRunningCloister() error = %v", err)
+			}
+			if got != tc.want {
+				t.Errorf("HasRunningCloister(%q) = %q, want %q", tc.projectName, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestManager_HasRunningCloister_ListError(t *testing.T) {
+	mock := &mockDockerRunner{
+		runJSONLinesFunc: func(_ any, _ bool, _ ...string) error {
+			return errors.New("docker not available")
+		},
+	}
+	mgr := NewManagerWithRunner(mock)
+	got, err := mgr.HasRunningCloister("myproj")
+	if err != nil {
+		t.Fatalf("HasRunningCloister() error = %v, want nil", err)
+	}
+	if got != "" {
+		t.Errorf("HasRunningCloister() = %q, want empty string on List error", got)
+	}
+}

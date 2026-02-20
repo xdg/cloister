@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -226,8 +225,11 @@ func runProjectRemove(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("project %q not found in registry\n\nHint: Use 'cloister project list' to see registered projects", name)
 	}
 
-	if err := checkNoRunningCloisters(name); err != nil {
-		return err
+	// Error ignored: HasRunningCloister returns ("", nil) when Docker is unavailable,
+	// so failure means "no running cloisters" — safe to proceed with removal.
+	if running, _ := container.NewManager().HasRunningCloister(name); running != "" {
+		return fmt.Errorf("cannot remove project %q: cloister %q is running; stop it first with 'cloister stop %s'",
+			name, running, running)
 	}
 
 	if err := reg.Remove(name); err != nil {
@@ -247,27 +249,6 @@ func runProjectRemove(_ *cobra.Command, args []string) error {
 		removeProjectConfigFile(name)
 	}
 
-	return nil
-}
-
-// checkNoRunningCloisters ensures no running cloisters belong to the named project.
-func checkNoRunningCloisters(name string) error {
-	mgr := container.NewManager()
-	containers, err := mgr.List()
-	if err != nil {
-		clog.Warn("could not check for running cloisters (Docker may not be running): %v", err)
-		return nil //nolint:nilerr // Docker unavailable means no cloisters can be running; allow removal
-	}
-	for _, c := range containers {
-		if c.Name == "cloister-guardian" || c.State != "running" {
-			continue
-		}
-		cloisterName := container.NameToCloisterName(c.Name)
-		if strings.HasPrefix(cloisterName, name+"-") || cloisterName == name {
-			return fmt.Errorf("cannot remove project %q: cloister %q is running; stop it first with 'cloister stop %s'",
-				name, cloisterName, cloisterName)
-		}
-	}
 	return nil
 }
 

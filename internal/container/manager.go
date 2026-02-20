@@ -266,6 +266,27 @@ func (m *Manager) Attach(containerName string) (int, error) {
 	return 0, nil
 }
 
+// HasRunningCloister checks if any running cloister container belongs to the given project.
+// Returns the cloister name of the first running match, or "" if none found.
+// Skips the guardian container and non-running containers.
+// On List() error, returns "" and nil (best-effort: Docker unavailable means no cloisters running).
+func (m *Manager) HasRunningCloister(projectName string) (string, error) {
+	containers, err := m.List()
+	if err != nil {
+		return "", nil //nolint:nilerr // Docker unavailable means no cloisters can be running
+	}
+	for _, c := range containers {
+		if c.Name == "cloister-guardian" || c.State != "running" {
+			continue
+		}
+		cloisterName := NameToCloisterName(c.Name)
+		if cloisterName == projectName || strings.HasPrefix(cloisterName, projectName+"-") {
+			return cloisterName, nil
+		}
+	}
+	return "", nil
+}
+
 // ContainerStatus checks if a container with the given name exists and whether it's running.
 // Returns (exists, running, error). If exists is false, running is always false.
 // This performs a single Docker call to retrieve both pieces of information.

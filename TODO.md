@@ -134,16 +134,16 @@ Move the "are there running cloisters for project X?" check.
 
 ### 5.1 Add HasRunningCloister to container.Manager
 
-- [ ] Add `HasRunningCloister(projectName string) (string, error)` to `container.Manager`
-- [ ] Returns the name of a running cloister matching the project, or "" if none
-- [ ] Skips guardian container and non-running containers
-- [ ] **Test**: Unit test with mock DockerRunner — returns running container matching prefix, returns "" when none match
+- [x] Add `HasRunningCloister(projectName string) (string, error)` to `container.Manager`
+- [x] Returns the name of a running cloister matching the project, or "" if none
+- [x] Skips guardian container and non-running containers
+- [x] **Test**: Unit test with mock DockerRunner — returns running container matching prefix, returns "" when none match
 
 ### 5.2 Update cmd/project.go
 
-- [ ] Replace `checkNoRunningCloisters()` with `container.NewManager().HasRunningCloister(name)`
-- [ ] Keep the error message formatting in cmd
-- [ ] Delete local `checkNoRunningCloisters` function
+- [x] Replace `checkNoRunningCloisters()` with `container.NewManager().HasRunningCloister(name)`
+- [x] Keep the error message formatting in cmd
+- [x] Delete local `checkNoRunningCloisters` function
 
 ---
 
