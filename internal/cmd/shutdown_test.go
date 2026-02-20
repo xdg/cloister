@@ -13,20 +13,3 @@ func TestShutdownCmd(t *testing.T) {
 		t.Error("expected RunE to be set")
 	}
 }
-
-func TestTokenForContainer(t *testing.T) {
-	tokens := map[string]string{
-		"tok-abc": "cloister-foo",
-		"tok-def": "cloister-bar",
-	}
-
-	if got := tokenForContainer(tokens, "cloister-foo"); got != "tok-abc" {
-		t.Errorf("expected tok-abc, got %q", got)
-	}
-	if got := tokenForContainer(tokens, "cloister-baz"); got != "" {
-		t.Errorf("expected empty, got %q", got)
-	}
-	if got := tokenForContainer(nil, "cloister-foo"); got != "" {
-		t.Errorf("expected empty for nil map, got %q", got)
-	}
-}

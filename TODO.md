@@ -73,16 +73,16 @@ Deduplicate `findTokenForCloister` (stop.go) and `tokenForContainer` (shutdown.g
 
 ### 2.1 Add FindTokenForContainer to guardian
 
-- [ ] Add `FindTokenForContainer(containerName string) string` to `internal/guardian/` (e.g. `client.go` or new `helpers.go`)
-- [ ] Implementation: call `ListTokens()`, iterate map, return matching token or ""
-- [ ] Returns "" on any error (best-effort, matches current behavior)
-- [ ] **Test**: Unit test with mock HTTP server returning a token map, verify correct container matched
+- [x] Add `FindTokenForContainer(containerName string) string` to `internal/guardian/` (e.g. `client.go` or new `helpers.go`)
+- [x] Implementation: call `ListTokens()`, iterate map, return matching token or ""
+- [x] Returns "" on any error (best-effort, matches current behavior)
+- [x] **Test**: Unit test with mock HTTP server returning a token map, verify correct container matched
 
 ### 2.2 Update cmd/stop.go and cmd/shutdown.go
 
-- [ ] Replace `findTokenForCloister()` with `guardian.FindTokenForContainer()`
-- [ ] Replace `tokenForContainer()` usage in shutdown.go: call `guardian.FindTokenForContainer()` per container (simpler API; guardian is local so N+1 cost is negligible)
-- [ ] Delete both `findTokenForCloister` and `tokenForContainer` local functions
+- [x] Replace `findTokenForCloister()` with `guardian.FindTokenForContainer()`
+- [x] Replace `tokenForContainer()` usage in shutdown.go: call `guardian.FindTokenForContainer()` per container (simpler API; guardian is local so N+1 cost is negligible)
+- [x] Delete both `findTokenForCloister` and `tokenForContainer` local functions
 
 ---
 

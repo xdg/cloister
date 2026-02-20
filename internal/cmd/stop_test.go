@@ -205,28 +205,6 @@ func TestDockerErrorDetectionInStop(t *testing.T) {
 	}
 }
 
-// TestFindTokenForCloisterBehavior documents the expected behavior of
-// findTokenForCloister for various scenarios.
-func TestFindTokenForCloisterBehavior(t *testing.T) {
-	// findTokenForCloister has these expected behaviors:
-	// 1. Returns matching token when found in guardian's registry
-	// 2. Returns empty string when guardian is not running (graceful degradation)
-	// 3. Returns empty string when no matching token exists
-
-	// This is a documentation test - actual functionality requires guardian.
-	t.Run("behavior documentation", func(t *testing.T) {
-		// The function signature takes a container name and returns a token string
-		// The container name is the Docker container name (e.g., "cloister-myproject")
-		// The token is used to revoke access from the guardian
-
-		// When no token is found, stop can still proceed (container stops, no revocation)
-		emptyToken := ""
-		if emptyToken != "" {
-			t.Error("documentation test failed")
-		}
-	})
-}
-
 // TestStopOutputMessages verifies the expected output format for successful stops.
 func TestStopOutputMessages(t *testing.T) {
 	tests := []struct {

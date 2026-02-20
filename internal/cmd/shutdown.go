@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/cloister"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
@@ -46,12 +45,6 @@ func runShutdown(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to list containers: %w", err)
 	}
 
-	// Build token map (graceful if guardian is already down)
-	tokens, tokErr := guardian.ListTokens()
-	if tokErr != nil {
-		clog.Warn("failed to list tokens: %v", tokErr)
-	}
-
 	// Stop each cloister container (excluding guardian)
 	guardianPrefix := guardian.ContainerName()
 	stopped := 0
@@ -63,8 +56,8 @@ func runShutdown(_ *cobra.Command, _ []string) error {
 		cloisterName := container.NameToCloisterName(c.Name)
 		term.Printf("Stopping cloister: %s ...\n", cloisterName)
 
-		// Find token for this container
-		token := tokenForContainer(tokens, c.Name)
+		// Find token for this container (best-effort; guardian may be down)
+		token := guardian.FindTokenForContainer(c.Name)
 
 		if err := cloister.Stop(c.Name, token); err != nil {
 			term.Warn("failed to stop %s: %v", cloisterName, err)
@@ -92,14 +85,4 @@ func runShutdown(_ *cobra.Command, _ []string) error {
 	}
 
 	return nil
-}
-
-// tokenForContainer finds the token associated with a container name.
-func tokenForContainer(tokens map[string]string, containerName string) string {
-	for token, name := range tokens {
-		if name == containerName {
-			return token
-		}
-	}
-	return ""
 }

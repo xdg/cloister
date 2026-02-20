@@ -521,11 +521,19 @@ func APIPort() int {
 	return state.TokenAPIPort
 }
 
+// overrideAPIAddr is a test hook for overriding the guardian API address.
+// When non-empty, APIAddr() returns this value instead of the computed address.
+// Not safe for concurrent use; tests using this must not call t.Parallel().
+var overrideAPIAddr string
+
 // APIAddr returns the address where the guardian token API is exposed.
 // For production, returns "127.0.0.1:9997".
 // For test instances, returns the dynamic port from executor state.
 // Uses explicit IPv4 since Docker ports are bound to 127.0.0.1.
 func APIAddr() string {
+	if overrideAPIAddr != "" {
+		return overrideAPIAddr
+	}
 	return fmt.Sprintf("127.0.0.1:%d", APIPort())
 }
 

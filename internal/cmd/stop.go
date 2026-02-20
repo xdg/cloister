@@ -47,7 +47,7 @@ func runStop(_ *cobra.Command, args []string) error {
 	containerName := container.CloisterNameToContainerName(cloisterName)
 
 	// Look up the token for this cloister from the guardian
-	token := findTokenForCloister(containerName)
+	token := guardian.FindTokenForContainer(containerName)
 
 	// Stop the container (this also revokes the token)
 	err := cloister.Stop(containerName, token)
@@ -88,27 +88,4 @@ func detectCloisterName() (string, error) {
 	}
 
 	return container.GenerateCloisterName(projectName), nil
-}
-
-// findTokenForCloister looks up the token associated with a cloister (by container name).
-// Returns empty string if no token is found (cloister may have been started externally
-// or guardian is not running).
-func findTokenForCloister(containerName string) string {
-	// Get all registered tokens from guardian
-	tokens, err := guardian.ListTokens()
-	if err != nil {
-		// If we can't reach guardian, continue with empty token
-		// The container stop will still work
-		return ""
-	}
-
-	// Find the token for this cloister (tokens are keyed by container name)
-	for token, name := range tokens {
-		if name == containerName {
-			return token
-		}
-	}
-
-	// No token found for this cloister
-	return ""
 }
