@@ -154,10 +154,10 @@ This phase is a sweep to ensure each handler is a thin shim.
 
 ### 6.1 Audit and simplify cmd handlers
 
-- [ ] Review each `run*` function in cmd/ to confirm it's now delegation + output + error wrapping
-- [ ] Remove any remaining helper functions that were made redundant by phases 1-5
-- [ ] Verify no unused imports remain
-- [ ] **Test**: `make test` passes, `make lint` clean
+- [x] Review each `run*` function in cmd/ to confirm it's now delegation + output + error wrapping
+- [x] Remove any remaining helper functions that were made redundant by phases 1-5
+- [x] Verify no unused imports remain
+- [x] **Test**: `make test` passes, `make lint` clean
 
 ---
 
