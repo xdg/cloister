@@ -56,14 +56,14 @@ Move name-parsing logic to where the other name functions live.
 
 ### 1.1 Add ParseCloisterName to container/names.go
 
-- [ ] Add `ParseCloisterName(name string) (project, branch string)` to `internal/container/names.go`
-- [ ] Logic: split on last hyphen (same as current `cmd/list.go:parseCloisterName`)
-- [ ] **Test**: `names_test.go` — "foo-main" → ("foo","main"), "foo-bar-feature" → ("foo-bar","feature"), "foo" → ("foo","")
+- [x] Add `ParseCloisterName(name string) (project, branch string)` to `internal/container/names.go`
+- [x] Logic: split on last hyphen (same as current `cmd/list.go:parseCloisterName`)
+- [x] **Test**: `names_test.go` — "foo-main" → ("foo","main"), "foo-bar-feature" → ("foo-bar","feature"), "foo" → ("foo","")
 
 ### 1.2 Update cmd/list.go
 
-- [ ] Replace `parseCloisterName()` call with `container.ParseCloisterName()`
-- [ ] Delete the local `parseCloisterName` function
+- [x] Replace `parseCloisterName()` call with `container.ParseCloisterName()`
+- [x] Delete the local `parseCloisterName` function
 
 ---
 

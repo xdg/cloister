@@ -3,7 +3,6 @@ package cmd
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -67,7 +66,7 @@ func runList(_ *cobra.Command, _ []string) error {
 	// Print each cloister
 	for _, c := range cloisters {
 		cloisterName := container.NameToCloisterName(c.Name)
-		project, branch := parseCloisterName(cloisterName)
+		project, branch := container.ParseCloisterName(cloisterName)
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			cloisterName,
 			project,
@@ -81,20 +80,4 @@ func runList(_ *cobra.Command, _ []string) error {
 		clog.Warn("failed to flush output: %v", err)
 	}
 	return nil
-}
-
-// parseCloisterName extracts project and branch from a cloister name.
-// Cloister names follow the pattern: <project>-<branch>
-// Returns project and branch, or the full name and empty string if unparseable.
-func parseCloisterName(cloisterName string) (project, branch string) {
-	// Find the last hyphen to split project and branch
-	// Branch names can contain hyphens, so we use the last hyphen as the delimiter
-	// This assumes project names don't contain hyphens (or we use last hyphen)
-	lastHyphen := strings.LastIndex(cloisterName, "-")
-	if lastHyphen == -1 {
-		// No hyphen found, entire string is project
-		return cloisterName, ""
-	}
-
-	return cloisterName[:lastHyphen], cloisterName[lastHyphen+1:]
 }

@@ -315,6 +315,64 @@ func TestNameToCloisterName(t *testing.T) {
 	}
 }
 
+func TestParseCloisterName(t *testing.T) {
+	tests := []struct {
+		name            string
+		input           string
+		expectedProject string
+		expectedBranch  string
+	}{
+		{
+			name:            "project and branch",
+			input:           "foo-main",
+			expectedProject: "foo",
+			expectedBranch:  "main",
+		},
+		{
+			name:            "multi-hyphen splits on last",
+			input:           "foo-bar-feature",
+			expectedProject: "foo-bar",
+			expectedBranch:  "feature",
+		},
+		{
+			name:            "no hyphen returns project only",
+			input:           "foo",
+			expectedProject: "foo",
+			expectedBranch:  "",
+		},
+		{
+			name:            "empty string",
+			input:           "",
+			expectedProject: "",
+			expectedBranch:  "",
+		},
+		{
+			name:            "trailing hyphen",
+			input:           "foo-",
+			expectedProject: "foo",
+			expectedBranch:  "",
+		},
+		{
+			name:            "leading hyphen",
+			input:           "-main",
+			expectedProject: "",
+			expectedBranch:  "main",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			project, branch := ParseCloisterName(tc.input)
+			if project != tc.expectedProject {
+				t.Errorf("ParseCloisterName(%q) project = %q, want %q", tc.input, project, tc.expectedProject)
+			}
+			if branch != tc.expectedBranch {
+				t.Errorf("ParseCloisterName(%q) branch = %q, want %q", tc.input, branch, tc.expectedBranch)
+			}
+		})
+	}
+}
+
 func TestCloisterContainerNameRoundTrip(t *testing.T) {
 	// Test that converting cloister name to container name and back gives the original
 	cloisterNames := []string{

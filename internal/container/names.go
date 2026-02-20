@@ -95,6 +95,22 @@ func NameToCloisterName(containerName string) string {
 	return strings.TrimPrefix(containerName, "cloister-")
 }
 
+// ParseCloisterName extracts project and branch from a cloister name.
+// Cloister names follow the pattern: <project>-<branch>
+// It splits on the last hyphen, so "foo-bar-feature" returns ("foo-bar", "feature").
+// If there is no hyphen, the entire name is returned as project with an empty branch.
+//
+// Note: This function cannot distinguish a main-checkout cloister whose project
+// name contains hyphens (e.g. "my-app") from a worktree cloister ("my" + branch "app").
+// Callers that need accurate project/branch resolution should use the project registry.
+func ParseCloisterName(name string) (project, branch string) {
+	lastHyphen := strings.LastIndex(name, "-")
+	if lastHyphen == -1 {
+		return name, ""
+	}
+	return name[:lastHyphen], name[lastHyphen+1:]
+}
+
 // GenerateContainerName is a convenience function that creates a container
 // name from a project string without needing a full Config.
 // Note: In Phase 1 (no worktree support), we only use the project name.
