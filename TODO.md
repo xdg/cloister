@@ -1,18 +1,16 @@
-# PolicyEngine Refactor: Unified Proxy Domain Access Control
+# Extract Business Logic from internal/cmd
 
-Replace the multi-layer callback-heavy proxy approval/denial architecture
-(AllowlistCache, CacheReloader, MemorySessionAllowlist, MemorySessionDenylist,
-ConfigPersisterImpl, closure-based reloading) with a single PolicyEngine that
-owns all domain access policy state.
+Move business logic out of CLI command handlers into library packages so
+commands become thin shims. This improves testability and reuse.
 
 ## Testing Philosophy
 
-- **Unit tests for all policy logic**: DomainSet membership, ProxyPolicy evaluation, PolicyEngine.Check precedence
-- **Table-driven tests**: Precedence edge cases (deny overrides allow, session vs static, etc.)
-- **In-process tests only**: No Docker, no real guardian. Use `t.TempDir()` for config/decision files
-- **Go tests**: Use `testing` with `httptest` for proxy handler tests
-- **Preserve existing proxy_test.go patterns**: The proxy tests use mock interfaces; PolicyEngine becomes one more mock-able interface
-- **Test what changed, not what didn't**: PatternCache, hostexec, approval queue are untouched — skip their tests
+- **Unit tests for all extracted functions**: Each moved function gets tests in its destination package
+- **Table-driven tests**: Use table-driven style for functions with multiple input cases (name parsing, token lookup)
+- **In-process tests only**: No Docker, no real guardian. Use `t.TempDir()`, mock interfaces, `httptest`
+- **Go tests**: Use `testing` package; mock `container.Manager` via interfaces where needed
+- **Test what moved, not what stayed**: Cmd handlers that become one-line delegations don't need new tests
+- **Preserve existing test coverage**: Existing tests in destination packages must keep passing
 
 ## Verification Checklist
 
@@ -30,238 +28,207 @@ relevant newly-created and modified files.
 ## Dependencies Between Phases
 
 ```
-Phase 1 (DomainSet) ─► Phase 2 (ProxyPolicy + PolicyEngine)
-                                    │
-                                    ├─► Phase 3 (Proxy integration)
-                                    │         │
-                                    │         ▼
-                                    │   Phase 4 (Approval integration)
-                                    │         │
-                                    │         ▼
-                                    │   Phase 5 (SIGHUP + guardian.go wiring)
-                                    │         │
-                                    │         ▼
-                                    │   Phase 6 (Delete dead code + cleanup)
-                                    │
-                                    └─► Phase 7 (Smoke test full flow)
+Phase 1 (container names) ─────────────────────────┐
+Phase 2 (token lookup) ────────────────────────────┐│
+Phase 3 (project auto-register) ──────────────────┐││
+Phase 4 (cloister detect + attach) ──────────────┐│││
+Phase 5 (container running check) ──────────────┐││││
+                                                 │││││
+                                                 ▼▼▼▼▼
+                                          Phase 6 (cmd shims)
+                                                 │
+                                                 ▼
+                                          Phase 7 (guardian server)
+                                                 │
+                                                 ▼
+                                          Phase 8 (validation)
 ```
 
----
-
-## Phase 1: Extract DomainSet from Allowlist
-
-Rename/refactor the core domain matching logic into a `DomainSet` type that
-has clear semantics (set membership, not "allow" or "deny" — just "contains").
-Keep the `Allowlist` type temporarily as a thin wrapper or type alias so
-existing code still compiles during the transition.
-
-### 1.1 Create DomainSet type
-
-- [x] Create `internal/guardian/domain_set.go` with `DomainSet` struct:
-  - `domains map[string]struct{}` (exact matches)
-  - `patterns []string` (wildcards like `*.example.com`)
-  - `Contains(domain string) bool` — strips port, checks exact then patterns
-  - `Add(domain string)` — adds exact domain
-  - `AddPattern(pattern string)` — adds wildcard pattern (validates first)
-  - `NewDomainSet(domains []string, patterns []string) *DomainSet`
-  - `NewDomainSetFromConfig(entries []config.AllowEntry) *DomainSet`
-- [x] Move `stripPort`, `matchPattern`, `IsValidPattern` into `domain_set.go` (or keep shared)
-- [x] `DomainSet` needs its own `sync.RWMutex` for thread-safe `Add`/`AddPattern` (session-tier mutations happen concurrently with reads)
-- [x] **Test**: `domain_set_test.go` — exact match, pattern match, port stripping, Add/AddPattern, concurrent access
-
-### 1.2 Alias Allowlist to DomainSet
-
-- [x] Redefine `Allowlist` in `allowlist.go` as a thin wrapper: `type Allowlist = DomainSet` or delegate all methods
-- [x] Verify `make test` passes with no changes to callers
-- [x] **Test**: Existing `allowlist_test.go` and `allowlist_pattern_test.go` still pass unchanged
+Phases 1-5 are independent and can be done in any order. Phase 6 updates all
+cmd files to use the new functions. Phase 7 is the largest extraction (guardian
+server startup). Phase 8 validates everything end-to-end.
 
 ---
 
-## Phase 2: PolicyEngine Core
+## Phase 1: Extract ParseCloisterName to container package
 
-Implement the PolicyEngine with `Check`, `RecordDecision`, `ReloadGlobal`,
-`ReloadProject`, and `RevokeToken`. No integration with proxy or approval
-server yet — pure policy logic with disk I/O for reload.
+Move name-parsing logic to where the other name functions live.
 
-### 2.1 Define ProxyPolicy and Decision types
+### 1.1 Add ParseCloisterName to container/names.go
 
-- [x] Create `internal/guardian/policy_engine.go`
-- [x] `type Decision int` with `Allow`, `Deny`, `AskHuman` constants
-- [x] `type ProxyPolicy struct { Allow *DomainSet; Deny *DomainSet }` — nil-safe (nil means empty)
-- [x] `func (p *ProxyPolicy) IsAllowed(domain string) bool`
-- [x] `func (p *ProxyPolicy) IsDenied(domain string) bool`
+- [ ] Add `ParseCloisterName(name string) (project, branch string)` to `internal/container/names.go`
+- [ ] Logic: split on last hyphen (same as current `cmd/list.go:parseCloisterName`)
+- [ ] **Test**: `names_test.go` — "foo-main" → ("foo","main"), "foo-bar-feature" → ("foo-bar","feature"), "foo" → ("foo","")
 
-### 2.2 Implement PolicyEngine
+### 1.2 Update cmd/list.go
 
-- [x] `type PolicyEngine struct` with `global ProxyPolicy`, `projects map[string]*ProxyPolicy`, `tokens map[string]*ProxyPolicy`, `sync.RWMutex`
-- [x] `Check(token, project, domain string) Decision` — deny pass (global→project→token), allow pass (global→project→token), fallback AskHuman
-- [x] `Check` must handle missing project/token gracefully (skip that tier)
-- [x] Constructor: `NewPolicyEngine(cfg *config.GlobalConfig, globalDecisions *config.Decisions, projectLister ProjectLister) (*PolicyEngine, error)`
-  - Builds global ProxyPolicy from config + decisions
-  - Eagerly loads all projects from `projectLister.List()` via `loadProjectPolicy(name)`
-- [x] **Test**: `policy_engine_test.go` — Check precedence: deny beats allow, global deny beats project allow, token deny beats everything, AskHuman when nothing matches
-
-### 2.3 Implement targeted reload and record
-
-- [x] `ReloadGlobal() error` — re-reads global config + global decisions, rebuilds `pe.global`
-- [x] `ReloadProject(name string) error` — re-reads project config + project decisions, rebuilds `pe.projects[name]`
-- [x] `RecordDecision(token, project, domain string, scope Scope, allowed bool, isPattern bool) error`
-  - `scope == "session"`: mutate `pe.tokens[token]` in-memory only
-  - `scope == "project"`: persist to project decisions file, then `ReloadProject(project)`
-  - `scope == "global"`: persist to global decisions file, then `ReloadGlobal()`
-  - `scope == "once"`: no-op (caller already has the allow/deny decision)
-- [x] `RevokeToken(token string)` — `delete(pe.tokens, token)`
-- [x] `ReloadAll() error` — for SIGHUP: reload global + all projects
-- [x] Persistence logic: absorb `ConfigPersisterImpl`'s load-check-dedup-append-write pattern for allow entries; absorb `DomainApproverImpl.persistDenial` pattern for deny entries
-- [x] **Test**: RecordDecision session scope — adds to token policy, Check reflects it immediately
-- [x] **Test**: RecordDecision project scope — persists to temp dir, ReloadProject picks it up
-- [x] **Test**: RecordDecision global scope — persists to temp dir, ReloadGlobal picks it up
-- [x] **Test**: RevokeToken — Check no longer sees session decisions for that token
-- [x] **Test**: ReloadAll — rebuilds global + all project policies
+- [ ] Replace `parseCloisterName()` call with `container.ParseCloisterName()`
+- [ ] Delete the local `parseCloisterName` function
 
 ---
 
-## Phase 3: Proxy Integration
+## Phase 2: Extract token reverse lookup to guardian package
 
-Replace ProxyServer's AllowlistCache, SessionAllowlist, SessionDenylist, and
-TokenLookup fields with a single PolicyEngine field. Rewrite
-`checkDomainAccess` to delegate to `PolicyEngine.Check`.
+Deduplicate `findTokenForCloister` (stop.go) and `tokenForContainer` (shutdown.go).
 
-### 3.1 Add PolicyEngine to ProxyServer
+### 2.1 Add FindTokenForContainer to guardian
 
-- [x] Add `PolicyEngine *PolicyEngine` field to `ProxyServer`
-- [x] Keep `TokenLookup` (still needed by `resolveRequest` to map token→project)
-- [x] Rewrite `checkDomainAccess` to call `pe.Check(token, project, domain)` and map `Decision` to allow/deny/requestApproval
-- [x] Remove `AllowlistCache`, `SessionAllowlist`, `SessionDenylist` fields from ProxyServer
-- [x] Update `resolveRequest` — no longer needs to call `AllowlistCache.GetProject()` to get a per-project allowlist; just needs token→project mapping
-- [x] The `resolvedRequest` struct loses the `Allowlist` field; keeps `ProjectName`, `CloisterName`, `Token`
-- [x] **Test**: Update `proxy_test.go` — replace AllowlistCache/Session mocks with PolicyEngine (or mock PolicyEngine interface)
+- [ ] Add `FindTokenForContainer(containerName string) string` to `internal/guardian/` (e.g. `client.go` or new `helpers.go`)
+- [ ] Implementation: call `ListTokens()`, iterate map, return matching token or ""
+- [ ] Returns "" on any error (best-effort, matches current behavior)
+- [ ] **Test**: Unit test with mock HTTP server returning a token map, verify correct container matched
 
-### 3.2 Define PolicyChecker interface for testability
+### 2.2 Update cmd/stop.go and cmd/shutdown.go
 
-- [x] Extract `PolicyChecker` interface: `Check(token, project, domain string) Decision`
-- [x] ProxyServer takes `PolicyChecker` (interface), PolicyEngine implements it
-- [x] This lets proxy tests use a simple mock without building a full PolicyEngine
-- [x] **Test**: Verify proxy tests still pass with mock PolicyChecker
+- [ ] Replace `findTokenForCloister()` with `guardian.FindTokenForContainer()`
+- [ ] Replace `tokenForContainer()` usage in shutdown.go: call `guardian.FindTokenForContainer()` per container (simpler API; guardian is local so N+1 cost is negligible)
+- [ ] Delete both `findTokenForCloister` and `tokenForContainer` local functions
 
 ---
 
-## Phase 4: Approval Integration
+## Phase 3: Extract auto-register to project package
 
-Rewire `DomainApproverImpl` and `approval.Server` to use
-`PolicyEngine.RecordDecision` instead of separate session/persist/cache paths.
+Move the load-register-save pattern into a single library call.
 
-### 4.1 Simplify DomainApproverImpl
+### 3.1 Add AutoRegister to project/registry.go
 
-- [x] Replace `sessionAllowlist`, `sessionDenylist`, `allowlistCache` fields with `PolicyEngine` (or `PolicyChecker` + `DecisionRecorder` interface)
-- [x] `handleApproval` → call `pe.RecordDecision(token, project, domain, scope, true, false)`
-- [x] `handleDenial` → call `pe.RecordDecision(token, project, domain, scope, false, isPattern)`
-- [x] Delete `persistDenial`, `updateDenylistCache`, `containsDenyEntry` methods
-- [x] Update `NewDomainApprover` signature
-- [x] **Test**: Update `domain_approver_test.go` — mock PolicyEngine instead of mocking SessionAllowlist/Denylist/AllowlistCache
+- [ ] Add `AutoRegister(name, root, remote, branch string) error` to `internal/project/registry.go`
+- [ ] Implementation: LoadRegistry, build Info, Register, SaveRegistry. Log warnings for collision errors, return nil on collision (best-effort semantics matching current behavior)
+- [ ] **Test**: `registry_test.go` — successful registration writes to temp dir; collision returns nil; load failure returns error
 
-### 4.2 Replace ConfigPersister on approval.Server
+### 3.2 Update cmd/start.go
 
-- [x] The `approval.Server.ConfigPersister` interface is used for project/global scope approvals
-- [x] Option A: PolicyEngine implements `approval.ConfigPersister` interface directly (4 methods map to RecordDecision calls) — skipped in favor of Option B
-- [x] Option B: Thin adapter that wraps PolicyEngine and implements ConfigPersister — implemented as `PolicyConfigPersister` in `policy_config_persister.go`
-- [x] Either way, `ConfigPersisterImpl` type is eliminated — deferred to Phase 6; `ConfigPersisterImpl` still used by legacy code in `cmd/guardian.go`
-- [x] **Test**: Update `approval/server_test.go` mock to match new interface (or keep existing interface if using adapter) — interface unchanged; `approval/server_test.go` unaffected; adapter tested in `policy_config_persister_test.go`
-
-### 4.3 Wire token revocation
-
-- [x] When a token is revoked (API server `handleRevoke`), call `pe.RevokeToken(token)`
-- [x] Currently `api.SessionAllowlist.Clear(token)` is called — replace with `pe.RevokeToken(token)`
-- [x] Remove `SessionAllowlist` field from APIServer
-- [x] **Test**: Verify token revocation clears session policy
+- [ ] Replace `autoRegisterProject()` call with `project.AutoRegister()`
+- [ ] Delete the local `autoRegisterProject` function
 
 ---
 
-## Phase 5: SIGHUP and guardian.go Wiring
+## Phase 4: Extract cloister detection and attach-existing
 
-Simplify the guardian startup wiring now that PolicyEngine owns all state.
+Move cloister name detection and attach-or-start logic to library packages.
 
-### 5.1 Simplify guardianState
+### 4.1 Add DetectName to cloister package
 
-- [x] Replace `allowlistCache` and `reloader` fields with `policyEngine *guardian.PolicyEngine`
-- [x] Remove `setupAllowlistCache` function entirely
-- [x] Remove `setupConfigReloader` function entirely (SIGHUP calls `pe.ReloadAll()` + `patternCache.Clear()`)
-- [x] Simplify `setupDomainApproval` — no longer creates `sessionAllowlist`/`sessionDenylist` objects
-- [x] `ConfigPersisterImpl` instantiation gone (replaced by PolicyEngine or adapter)
-- [x] Remove `ReloadNotifier` callback wiring
+- [ ] Add `DetectName() (string, error)` to `internal/cloister/` (new file `detect.go` or add to existing)
+- [ ] Implementation: `project.DetectGitRoot(".")` → `project.Name(root)` → `container.GenerateCloisterName(name)`
+- [ ] **Test**: Unit test with injected git detection (use functional options or interface to mock project detection)
 
-### 5.2 Rewrite SIGHUP handler
+### 4.2 Add AttachExisting to cloister package
 
-- [x] ProxyServer's SIGHUP handler calls `pe.ReloadAll()` instead of the closure chain
-- [x] Also reload hostexec PatternCache (unrelated, keep as-is)
-- [x] Remove `ConfigReloader` type from proxy.go
-- [x] Remove `SetConfigReloader` method from ProxyServer
-- [x] **Test**: Verify SIGHUP-triggered reload picks up new config/decisions (unit test with temp files)
+- [ ] Add `AttachExisting(containerName string, opts ...Option) (int, error)` to `internal/cloister/`
+- [ ] Implementation: check if running via Manager, start if stopped, call Attach. Return exit code.
+- [ ] The function does NOT print output — cmd handler does that
+- [ ] **Test**: Unit test with mock ContainerManager — test stopped-then-started path, already-running path, start-fails path
 
-### 5.3 Simplify proxy constructor
+### 4.3 Update cmd/stop.go and cmd/start.go
 
-- [x] `NewProxyServerWithConfig` no longer needs an initial Allowlist parameter — it gets a PolicyEngine
-- [x] Update or replace with simpler constructor
-- [x] **Test**: Verify proxy starts and checks domains correctly with PolicyEngine
+- [ ] Replace `detectCloisterName()` with `cloister.DetectName()`
+- [ ] Replace `attachToExisting()` business logic with `cloister.AttachExisting()`, keep output formatting in cmd
+- [ ] Delete local functions
 
 ---
 
-## Phase 6: Delete Dead Code and Cleanup
+## Phase 5: Extract running-cloister check to container package
 
-Remove all replaced types, files, and their tests.
+Move the "are there running cloisters for project X?" check.
 
-### 6.1 Delete replaced files
+### 5.1 Add HasRunningCloister to container.Manager
 
-- [x] Delete `internal/guardian/allowlist_cache.go` + `allowlist_cache_test.go`
-- [x] Delete `internal/guardian/cache_reloader.go` + `cache_reloader_test.go`
-- [x] Delete `internal/guardian/session_allowlist.go` + `session_allowlist_test.go`
-- [x] Delete `internal/guardian/config_persister.go` + `config_persister_test.go` + `config_persister_validation_test.go`
+- [ ] Add `HasRunningCloister(projectName string) (string, error)` to `container.Manager`
+- [ ] Returns the name of a running cloister matching the project, or "" if none
+- [ ] Skips guardian container and non-running containers
+- [ ] **Test**: Unit test with mock DockerRunner — returns running container matching prefix, returns "" when none match
 
-### 6.2 Clean up allowlist.go
+### 5.2 Update cmd/project.go
 
-- [x] If `Allowlist` is now just an alias for `DomainSet`, decide: keep alias for external compatibility or rename all usages
-- [x] Remove `Allowlist` type entirely if nothing outside guardian uses it
-- [x] Move `DefaultAllowedDomains` to `policy_engine.go` or `defaults.go`
-- [x] Delete `allowlist.go` if fully absorbed into `domain_set.go`
-- [x] Update `allowlist_test.go` / `allowlist_pattern_test.go` → rename or merge into `domain_set_test.go`
-
-### 6.3 Clean up proxy.go interfaces
-
-- [x] Remove `SessionAllowlist` interface from proxy.go
-- [x] Remove `SessionDenylist` interface from proxy.go
-- [x] Remove `ProjectAllowlistLoader`, `ProjectDenylistLoader`, `TokenLookupFunc` from `allowlist_cache.go` (already deleted)
-- [x] Remove `ConfigReloader` type and `SetConfigReloader` from proxy.go
-- [x] Remove `ConfigError` type if no longer needed (or keep if proxy still returns 502 for config errors)
-- [x] **Test**: `make test` passes, `make lint` clean, no unused imports
+- [ ] Replace `checkNoRunningCloisters()` with `container.NewManager().HasRunningCloister(name)`
+- [ ] Keep the error message formatting in cmd
+- [ ] Delete local `checkNoRunningCloisters` function
 
 ---
 
-## Phase 7: End-to-End Validation
+## Phase 6: Thin out remaining cmd handlers
 
-Validate the full flow works with the real guardian (requires Docker).
+With phases 1-5 done, update all cmd files to use the extracted functions.
+This phase is a sweep to ensure each handler is a thin shim.
 
-### 7.1 Integration smoke test
+### 6.1 Audit and simplify cmd handlers
 
-- [x] `make build` succeeds
-- [x] `make test` passes (all unit tests)
-- [x] `make lint` passes
-- [x] Manual or integration test: start guardian, register token, proxy request to allowed domain → allowed
-- [x] Manual or integration test: proxy request to denied domain → denied
-- [x] Manual or integration test: proxy request to unlisted domain → approval prompt appears
-- [x] Manual or integration test: approve with session scope → subsequent requests allowed for that token only
-- [x] Manual or integration test: approve with project scope → persisted to decisions file, survives reload
-- [x] Manual or integration test: SIGHUP → config changes take effect
+- [ ] Review each `run*` function in cmd/ to confirm it's now delegation + output + error wrapping
+- [ ] Remove any remaining helper functions that were made redundant by phases 1-5
+- [ ] Verify no unused imports remain
+- [ ] **Test**: `make test` passes, `make lint` clean
+
+---
+
+## Phase 7: Extract guardian server startup
+
+The largest extraction: move `runGuardianProxy` and its ~10 setup helpers from
+`cmd/guardian.go` into `internal/guardian/server.go`.
+
+### 7.1 Define Server type
+
+- [ ] Create `internal/guardian/server.go` with `Server` struct
+- [ ] Fields: registry, config, policyEngine, patternCache, auditLogger, and the 4 stoppable servers
+- [ ] Constructor: `NewServer(registry *token.Registry, cfg *config.GlobalConfig, decisions *config.Decisions) (*Server, error)`
+- [ ] Move `setupPolicyEngine`, `setupProxyServer`, `setupPatternCache`, `setupAuditLogger`, `setupDomainApproval`, `setupExecutorClient` into `Server` methods or constructor
+
+### 7.2 Add Run and Shutdown methods
+
+- [ ] `func (s *Server) Run() error` — starts all servers, blocks on signal, shuts down
+- [ ] Move `startAllServers`, `awaitShutdownSignal`, `shutdownAllServers` as Server methods
+- [ ] Move `stoppable` interface into `server.go`
+- [ ] Move `domainApprovalResult` type and `extractPatterns` helper
+
+### 7.3 Move supporting functions
+
+- [ ] Move `loadPersistedTokens` → Server method or standalone in guardian package
+- [ ] Move `loadGuardianConfig`, `loadGuardianDecisions` → standalone funcs in guardian package (they just wrap config.Load with fallback)
+- [ ] Move `formatDuration`, `getGuardianUptime` — `formatDuration` is a utility (could go in a `util` or stay in guardian); `getGuardianUptime` uses `docker.Run` so it stays in guardian or cmd
+
+### 7.4 Update cmd/guardian.go
+
+- [ ] `runGuardianProxy` becomes: load config, create Server, call `server.Run()`
+- [ ] Delete all moved helper functions and types (`guardianState`, `domainApprovalResult`, `stoppable`, `setup*`, etc.)
+- [ ] Keep `getGuardianUptime` and `formatDuration` in cmd if they're only used for `guardian status` output
+
+### 7.5 Test Server construction
+
+- [ ] **Test**: `server_test.go` — `NewServer` with default config creates valid server (no panic, components initialized)
+- [ ] **Test**: Verify PolicyEngine is wired correctly (check a default-allowed domain)
+- [ ] **Test**: `extractPatterns` (if moved) — simple mapping test
+
+---
+
+## Phase 8: End-to-end validation
+
+### 8.1 Automated checks
+
+- [ ] `make build` succeeds
+- [ ] `make test` passes (all unit tests)
+- [ ] `make lint` passes
+- [ ] `make fmt` produces no changes
+
+### 8.2 Integration validation (requires Docker)
+
+- [ ] `make test-integration` passes
+- [ ] `make test-e2e` passes
+- [ ] Manual: `cloister start` in a project, verify attach works
+- [ ] Manual: `cloister stop`, verify token revoked
+- [ ] Manual: `cloister guardian status` shows correct info
+- [ ] Manual: `cloister shutdown` stops everything cleanly
 
 ---
 
 ## Future Phases (Deferred)
 
-### PolicyEngine Enhancements
-- Time-based decision expiry ("allow for 1 hour")
-- Per-domain rate limiting
-- Decision audit log (queryable history of all Check calls)
-- Policy dry-run mode (log what would happen without enforcing)
+### Setup wizard extraction
+- Move `setup_claude.go` / `setup_codex.go` credential-save logic to `config.SetAgentConfig()`
+- Keep interactive prompting in cmd (inherently UI-layer)
 
-### Config Simplification
-- Merge static config and decisions into a single file per scope (eliminate the config/decisions split)
-- Config file watching (inotify) instead of SIGHUP
+### Guardian status extraction
+- Move `getGuardianUptime` + `formatDuration` to guardian package if other consumers emerge
+- Currently only used by `guardian status` command — not worth extracting yet
+
+### Cmd test cleanup
+- `guardian_helpers_test.go` tests config merge patterns, not guardian helpers — rename or move to `config` package
