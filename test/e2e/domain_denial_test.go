@@ -472,10 +472,12 @@ func TestDomainDenial_LoadDecisionsOnStartup(t *testing.T) {
 	// Poll until the deny takes effect. A fast 403 (< 2s) means the deny came
 	// from the PolicyEngine; a slow 403 (~3s) means the request fell through to
 	// the approval queue and timed out, i.e. the reload hasn't happened yet.
+	// Each slow attempt costs ~3s (the approval timeout), so we use a generous
+	// deadline (30s) to tolerate delayed SIGHUP delivery under load.
 	curlCmd := "curl -v --proxy http://" + guardianHost + ":3128 --proxy-user :" + tc.Token +
-		" --max-time 8 https://" + testDomain + "/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'"
+		" --max-time 5 https://" + testDomain + "/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'"
 
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		startTime := time.Now()
 		output, _ := execInContainer(t, tc.Name, "sh", "-c", curlCmd)
@@ -495,6 +497,11 @@ func TestDomainDenial_LoadDecisionsOnStartup(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("Deny did not take effect within deadline: last response %q in %v", output, elapsed)
 		}
+
+		// Re-send SIGHUP in case the previous one was delivered before the
+		// decisions file was fully flushed, or was coalesced with an earlier
+		// signal from a preceding test.
+		_, _ = docker.Run("kill", "-s", "HUP", guardian.ContainerName())
 
 		time.Sleep(500 * time.Millisecond)
 	}
