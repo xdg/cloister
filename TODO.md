@@ -184,11 +184,11 @@ Replace the 502 stub in `handlePlainHTTP` with actual forwarding logic.
 
 ### 5.1 Upstream failure tests
 
-- [ ] **Test**: `TestProxyServer_PlainHTTP_UpstreamRefused` — proxy
+- [x] **Test**: `TestProxyServer_PlainHTTP_UpstreamRefused` — proxy
   forwards to a closed port; expect 502 Bad Gateway
-- [ ] **Test**: `TestProxyServer_PlainHTTP_UpstreamTimeout` — proxy
+- [x] **Test**: `TestProxyServer_PlainHTTP_UpstreamTimeout` — proxy
   forwards to a server that never responds; expect 504 Gateway Timeout
-- [ ] Confirm tests fail or document the current behavior matches
+- [x] Confirm tests fail or document the current behavior matches
 
 ### 5.2 Edge case tests
 
@@ -197,15 +197,15 @@ for non-absolute-URI requests (relative URI, HTTPS scheme). These tests likely
 need raw TCP via `sendHTTPViaProxy` to send the exact request line, since Go's
 HTTP client won't generate these malformed proxy requests.
 
-- [ ] **Test**: `TestProxyServer_PlainHTTP_RelativeURI` — send
+- [x] **Test**: `TestProxyServer_PlainHTTP_RelativeURI` — send
   `GET /path HTTP/1.1` (not absolute URI) via raw TCP through proxy;
   expect 400 Bad Request (not a valid forward proxy request)
-- [ ] **Test**: `TestProxyServer_PlainHTTP_HTTPSScheme` — send
+- [x] **Test**: `TestProxyServer_PlainHTTP_HTTPSScheme` — send
   `GET https://example.com/ HTTP/1.1` via raw TCP through proxy (wrong
   — HTTPS should use CONNECT); expect 400 Bad Request
-- [ ] **Test**: `TestProxyServer_PlainHTTP_EmptyHost` — absolute URI
+- [x] **Test**: `TestProxyServer_PlainHTTP_EmptyHost` — absolute URI
   with empty host; expect 400 Bad Request
-- [ ] Confirm tests fail
+- [x] Confirm tests fail
 
 ---
 

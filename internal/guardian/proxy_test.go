@@ -2794,3 +2794,232 @@ func TestProxyServer_PlainHTTP_NoProxyAuthToUpstream(t *testing.T) {
 		t.Errorf("SECURITY: upstream received Proxy-Authorization=%q; cloister token leaked to upstream", got)
 	}
 }
+
+// --- Phase 5.1: Upstream failure tests ---
+
+func TestProxyServer_PlainHTTP_UpstreamRefused(t *testing.T) {
+	// Create a listener to grab a port, then close it so connections are refused.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to create listener: %v", err)
+	}
+	closedAddr := ln.Addr().String()
+	ln.Close() // port is now unreachable
+
+	closedHost, _, _ := net.SplitHostPort(closedAddr)
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{closedHost}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+	targetURL := fmt.Sprintf("http://%s/", closedAddr)
+
+	status, _, err := sendRawHTTPViaProxy(t, proxyAddr, "GET", targetURL, "test-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	if status != http.StatusBadGateway {
+		t.Errorf("expected 502 Bad Gateway for connection refused, got %d", status)
+	}
+}
+
+func TestProxyServer_PlainHTTP_UpstreamTimeout(t *testing.T) {
+	// Create a TCP listener that accepts connections but never responds.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to create listener: %v", err)
+	}
+	defer ln.Close()
+
+	slowAddr := ln.Addr().String()
+	slowHost, _, _ := net.SplitHostPort(slowAddr)
+
+	// Accept connections in a goroutine but never send a response.
+	go func() {
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				return // listener closed
+			}
+			// Read forever, never respond.
+			go func(c net.Conn) {
+				defer c.Close()
+				buf := make([]byte, 1024)
+				for {
+					if _, err := c.Read(buf); err != nil {
+						return
+					}
+				}
+			}(conn)
+		}
+	}()
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{slowHost}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+	// Set a very short response header timeout so the test doesn't wait long.
+	p.Transport = &http.Transport{
+		ResponseHeaderTimeout: 100 * time.Millisecond,
+	}
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+	targetURL := fmt.Sprintf("http://%s/", slowAddr)
+
+	status, _, err := sendRawHTTPViaProxy(t, proxyAddr, "GET", targetURL, "test-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	// Phase 6 should map timeout errors to 504; current code returns 502 for all errors.
+	if status != http.StatusGatewayTimeout {
+		t.Errorf("expected 504 Gateway Timeout for unresponsive upstream, got %d", status)
+	}
+}
+
+// --- Phase 5.2: Edge case tests ---
+
+// sendRawRequestLine sends an arbitrary raw HTTP request line through the proxy
+// without any URL parsing. This allows sending malformed or unusual request lines
+// that sendRawHTTPViaProxy cannot produce (relative URIs, HTTPS scheme, empty host).
+func sendRawRequestLine(t *testing.T, proxyAddr, requestLine, hostHeader, token string) (int, string, error) {
+	t.Helper()
+
+	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", proxyAddr)
+	if err != nil {
+		return 0, "", fmt.Errorf("dial proxy: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return 0, "", fmt.Errorf("set deadline: %w", err)
+	}
+
+	var reqBuilder strings.Builder
+	reqBuilder.WriteString(requestLine + "\r\n")
+	if hostHeader != "" {
+		reqBuilder.WriteString(fmt.Sprintf("Host: %s\r\n", hostHeader))
+	}
+	if token != "" {
+		auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + token))
+		reqBuilder.WriteString(fmt.Sprintf("Proxy-Authorization: Basic %s\r\n", auth))
+	}
+	reqBuilder.WriteString("Connection: close\r\n")
+	reqBuilder.WriteString("\r\n")
+
+	if _, err := conn.Write([]byte(reqBuilder.String())); err != nil {
+		return 0, "", fmt.Errorf("write request: %w", err)
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		return 0, "", fmt.Errorf("read response: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body), nil
+}
+
+func TestProxyServer_PlainHTTP_RelativeURI(t *testing.T) {
+	// Send a relative URI (not an absolute URI) — not valid for a forward proxy.
+	// Phase 6 should return 400; current code returns 405 (falls through to default branch).
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{"example.com"}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	status, _, err := sendRawRequestLine(t, proxyAddr, "GET /path HTTP/1.1", "example.com", "test-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	if status != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for relative URI, got %d", status)
+	}
+}
+
+func TestProxyServer_PlainHTTP_HTTPSScheme(t *testing.T) {
+	// Send GET with https:// scheme — HTTPS should use CONNECT, not plain HTTP.
+	// Phase 6 should return 400; current code returns 405.
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{"example.com"}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	status, _, err := sendRawRequestLine(t, proxyAddr, "GET https://example.com/ HTTP/1.1", "example.com", "test-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	if status != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for HTTPS scheme in plain HTTP request, got %d", status)
+	}
+}
+
+func TestProxyServer_PlainHTTP_EmptyHost(t *testing.T) {
+	// Send an absolute URI with an empty host — not valid for forwarding.
+	// Phase 6 should return 400; current code returns 405.
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{""}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	status, _, err := sendRawRequestLine(t, proxyAddr, "GET http:///path HTTP/1.1", "", "test-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	if status != http.StatusBadRequest {
+		t.Errorf("expected 400 Bad Request for empty host in absolute URI, got %d", status)
+	}
+}
