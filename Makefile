@@ -62,10 +62,12 @@ test:
 test-race:
 	go test -race $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
 
-test-integration: $(BINARY) docker-commit-tag
+test-integration: docker-commit-tag
+	go build $(LDFLAGS) -o $(BINARY) $(CMD_PATH)
 	CLOISTER_IMAGE=$(TEST_IMAGE) go test -tags=integration $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 $(PKG)
 
-test-e2e: $(BINARY) docker-commit-tag
+test-e2e: docker-commit-tag
+	go build $(LDFLAGS) -o $(BINARY) $(CMD_PATH)
 	CLOISTER_IMAGE=$(TEST_IMAGE) go test -tags=e2e $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 ./test/e2e/...
 
 test-all: test-race test-integration test-e2e
