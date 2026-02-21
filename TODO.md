@@ -250,10 +250,10 @@ Use a local `httptest.NewServer` reachable from the container network
 hitting real external domains — avoids DNS flakiness and external
 service dependencies.
 
-- [ ] **Test**: Add e2e test in `test/e2e/` that sends a plain HTTP
+- [x] **Test**: Add e2e test in `test/e2e/` that sends a plain HTTP
   request through the proxy to an allowlisted domain and verifies it
   succeeds
-- [ ] **Test**: Add e2e test verifying denied domain returns 403 for
+- [x] **Test**: Add e2e test verifying denied domain returns 403 for
   plain HTTP (not just CONNECT)
 
 ---

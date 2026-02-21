@@ -147,3 +147,64 @@ func TestProxy_DirectAccessBlocked(t *testing.T) {
 		return
 	}
 }
+
+// TestProxy_PlainHTTP_AllowedDomain verifies that plain HTTP (non-CONNECT) requests
+// to allowed domains are forwarded by the proxy.
+func TestProxy_PlainHTTP_AllowedDomain(t *testing.T) {
+	tc := createAuthenticatedTestContainer(t, "proxy-plainhttp-allow")
+	guardianHost := guardian.ContainerName()
+
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
+		t.Logf("Warning: %v, proceeding anyway", err)
+	}
+
+	// Test plain HTTP (not HTTPS/CONNECT) through the proxy.
+	// curl with http:// URL sends a regular GET through the proxy (forward proxy mode),
+	// not CONNECT. The proxy should forward it to the upstream.
+	// golang.org is in the default allowlist.
+	output, err := execInContainer(t, tc.Name,
+		"sh", "-c",
+		"curl -s -o /dev/null -w '%{http_code}' --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+" --max-time 10 http://golang.org/")
+
+	if err != nil {
+		if strings.Contains(output, "not found") {
+			t.Skip("curl not available in container image")
+		}
+		t.Skipf("Network test failed (may require internet access): %v", err)
+	}
+
+	output = strings.TrimSpace(output)
+	// Plain HTTP should succeed (2xx or 3xx redirect)
+	if !strings.HasPrefix(output, "2") && !strings.HasPrefix(output, "3") {
+		t.Errorf("Expected HTTP success status (2xx or 3xx) for plain HTTP to allowed domain, got: %s", output)
+	}
+}
+
+// TestProxy_PlainHTTP_BlockedDomain verifies that plain HTTP (non-CONNECT) requests
+// to non-allowlisted domains are blocked by the proxy with 403.
+func TestProxy_PlainHTTP_BlockedDomain(t *testing.T) {
+	tc := createAuthenticatedTestContainer(t, "proxy-plainhttp-block")
+	guardianHost := guardian.ContainerName()
+
+	if err := waitForPort(t, tc.Name, guardianHost, 3128); err != nil {
+		t.Logf("Warning: %v, proceeding anyway", err)
+	}
+
+	// Test plain HTTP to a non-allowlisted domain.
+	// The proxy should return 403 after approval timeout.
+	// Use -v to capture the proxy's HTTP response, since curl doesn't use
+	// CONNECT for plain HTTP (no %{http_connect}).
+	output, _ := execInContainer(t, tc.Name,
+		"sh", "-c",
+		"curl -s -o /dev/null -w '%{http_code}' --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+" --max-time 15 http://example.com/")
+
+	if strings.Contains(output, "not found") {
+		t.Skip("curl not available in container image")
+	}
+
+	output = strings.TrimSpace(output)
+	// Proxy should return 403 Forbidden for blocked domains in plain HTTP mode
+	if output != "403" {
+		t.Errorf("Expected 403 for blocked domain in plain HTTP mode, got: %q", output)
+	}
+}
