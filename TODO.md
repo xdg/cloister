@@ -204,10 +204,10 @@ The largest extraction: move `runGuardianProxy` and its ~10 setup helpers from
 
 ### 8.1 Automated checks
 
-- [ ] `make build` succeeds
-- [ ] `make test` passes (all unit tests)
-- [ ] `make lint` passes
-- [ ] `make fmt` produces no changes
+- [x] `make build` succeeds
+- [x] `make test` passes (all unit tests)
+- [x] `make lint` passes (20 pre-existing issues, none in changed files)
+- [x] `make fmt` produces no changes
 
 ### 8.2 Integration validation (requires Docker)
 
