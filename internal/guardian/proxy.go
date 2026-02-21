@@ -241,10 +241,10 @@ func (p *ProxyServer) ListenAddr() string {
 }
 
 // handleRequest processes incoming HTTP requests.
-// CONNECT requests are handled as TLS tunnels. Plain HTTP requests with
-// absolute URIs (e.g. "GET http://example.com/ HTTP/1.1") are dispatched
-// to the forward proxy handler. All other request forms return 405.
-// Authentication is checked before processing if TokenValidator is set.
+// CONNECT requests are handled as TLS tunnels. All other requests are
+// dispatched to the forward proxy handler, which authenticates, validates
+// the request form (must be an absolute HTTP URI), applies domain policy,
+// and forwards to the upstream server.
 func (p *ProxyServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodConnect {
 		// Check authentication if TokenValidator is set
@@ -257,13 +257,7 @@ func (p *ProxyServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Plain HTTP forward proxy request: absolute URI form
-	if r.URL.Scheme == "http" && r.URL.Host != "" {
-		p.handlePlainHTTP(w, r)
-		return
-	}
-
-	http.Error(w, "Method Not Allowed - only CONNECT and plain HTTP forward proxy are supported", http.StatusMethodNotAllowed)
+	p.handlePlainHTTP(w, r)
 }
 
 // handlePlainHTTP processes non-CONNECT requests sent in absolute-URI form
@@ -271,11 +265,19 @@ func (p *ProxyServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 // authentication and domain policy checks as CONNECT, then forwards the
 // request to the upstream server.
 func (p *ProxyServer) handlePlainHTTP(w http.ResponseWriter, r *http.Request) {
-	// Authenticate (same as CONNECT path)
+	// Authenticate first (consistent with CONNECT path — auth failures always
+	// return 407 regardless of request form, avoiding information leakage about
+	// what the proxy accepts to unauthenticated clients)
 	if p.TokenValidator != nil {
 		if !p.authenticate(w, r) {
 			return
 		}
+	}
+
+	// Validate request form: must be an absolute HTTP URI
+	if r.URL.Scheme != "http" || r.URL.Host == "" {
+		http.Error(w, "Bad Request - plain HTTP proxy requires an absolute URI with http:// scheme", http.StatusBadRequest)
+		return
 	}
 
 	resolved := p.resolveRequest(r)
@@ -335,7 +337,11 @@ func (p *ProxyServer) forwardHTTP(w http.ResponseWriter, r *http.Request) {
 	resp, err := p.transport().RoundTrip(outReq)
 	if err != nil {
 		clog.Warn("forwardHTTP: upstream request to %s failed: %v", outReq.URL.Host, err)
-		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		if isTimeoutError(err) {
+			http.Error(w, "Gateway Timeout", http.StatusGatewayTimeout)
+		} else {
+			http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		}
 		return
 	}
 	defer resp.Body.Close()

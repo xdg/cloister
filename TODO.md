@@ -213,20 +213,20 @@ HTTP client won't generate these malformed proxy requests.
 
 ### 6.1 Upstream error mapping
 
-- [ ] In `forwardHTTP`, map `net.Error` timeout to 504, connection
+- [x] In `forwardHTTP`, map `net.Error` timeout to 504, connection
   refused to 502, other dial errors to 502 (matching CONNECT behavior
   in `dialAndTunnel`)
-- [ ] Phase 5.1 tests pass
+- [x] Phase 5.1 tests pass
 
 ### 6.2 Request validation
 
-- [ ] In `handlePlainHTTP`, validate **after** auth (consistent with
+- [x] In `handlePlainHTTP`, validate **after** auth (consistent with
   CONNECT path — auth failures should always return 407 regardless of
   request form, and validating before auth leaks information about what
   the proxy accepts to unauthenticated clients): `r.URL.Host` is
   non-empty, `r.URL.Scheme` is `"http"` (not `"https"`), and the
   request is in absolute-URI form; return 400 for violations
-- [ ] Phase 5.2 tests pass
+- [x] Phase 5.2 tests pass
 
 ---
 
