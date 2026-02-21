@@ -183,31 +183,31 @@ func TestCommandResponseOmitEmpty(t *testing.T) {
 			omittedFields:  []string{"reason"},
 		},
 		{
-			name: "denied_omits_exit_stdout_stderr",
+			name: "denied_omits_stdout_stderr",
 			response: CommandResponse{
 				Status: "denied",
 				Reason: "Not allowed",
 			},
-			expectedFields: []string{"status", "reason"},
-			omittedFields:  []string{"pattern", "exit_code", "stdout", "stderr"},
+			expectedFields: []string{"status", "reason", "exit_code"},
+			omittedFields:  []string{"pattern", "stdout", "stderr"},
 		},
 		{
-			name: "timeout_omits_exit_stdout_stderr",
+			name: "timeout_omits_stdout_stderr",
 			response: CommandResponse{
 				Status: "timeout",
 				Reason: "Request timed out",
 			},
-			expectedFields: []string{"status", "reason"},
-			omittedFields:  []string{"pattern", "exit_code", "stdout", "stderr"},
+			expectedFields: []string{"status", "reason", "exit_code"},
+			omittedFields:  []string{"pattern", "stdout", "stderr"},
 		},
 		{
-			name: "error_omits_exit_stdout_stderr",
+			name: "error_omits_stdout_stderr",
 			response: CommandResponse{
 				Status: "error",
 				Reason: "Internal error",
 			},
-			expectedFields: []string{"status", "reason"},
-			omittedFields:  []string{"pattern", "exit_code", "stdout", "stderr"},
+			expectedFields: []string{"status", "reason", "exit_code"},
+			omittedFields:  []string{"pattern", "stdout", "stderr"},
 		},
 		{
 			name: "empty_strings_omitted",
@@ -221,13 +221,13 @@ func TestCommandResponseOmitEmpty(t *testing.T) {
 			omittedFields:  []string{"pattern", "reason", "stdout", "stderr"},
 		},
 		{
-			name: "zero_exit_code_omitted",
+			name: "zero_exit_code_present",
 			response: CommandResponse{
 				Status:   "approved",
 				ExitCode: 0,
 			},
-			expectedFields: []string{"status"},
-			omittedFields:  []string{"pattern", "reason", "exit_code", "stdout", "stderr"},
+			expectedFields: []string{"status", "exit_code"},
+			omittedFields:  []string{"pattern", "reason", "stdout", "stderr"},
 		},
 	}
 

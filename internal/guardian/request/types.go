@@ -32,7 +32,9 @@ type CommandResponse struct {
 
 	// ExitCode is the command's exit code.
 	// Only set when Status is "approved" or "auto_approved".
-	ExitCode int `json:"exit_code,omitempty"`
+	// Not omitempty: exit code 0 must be serialized so hostexec can
+	// distinguish "command succeeded" from "field absent".
+	ExitCode int `json:"exit_code"`
 
 	// Stdout is the command's standard output.
 	// Only set when Status is "approved" or "auto_approved".
