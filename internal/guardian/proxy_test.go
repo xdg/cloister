@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -2108,4 +2109,229 @@ func TestProxyServer_MockPolicyChecker(t *testing.T) {
 		// should log "skipped" and not panic.
 		p.handleSighup()
 	})
+}
+
+// sendRawHTTPViaProxy opens a raw TCP connection to proxyAddr and sends an
+// HTTP request with an absolute URI (forward-proxy style). It returns the
+// response status code and body. If token is non-empty, a Proxy-Authorization
+// header with Basic auth (username "cloister") is included.
+func sendRawHTTPViaProxy(t *testing.T, proxyAddr, method, rawURL, token string) (int, string, error) {
+	t.Helper()
+
+	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", proxyAddr)
+	if err != nil {
+		return 0, "", fmt.Errorf("dial proxy: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return 0, "", fmt.Errorf("set deadline: %w", err)
+	}
+
+	// Extract host from the raw URL for the Host header.
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return 0, "", fmt.Errorf("parse URL: %w", err)
+	}
+	host := parsed.Host
+
+	var reqBuilder strings.Builder
+	reqBuilder.WriteString(fmt.Sprintf("%s %s HTTP/1.1\r\n", method, rawURL))
+	reqBuilder.WriteString(fmt.Sprintf("Host: %s\r\n", host))
+	if token != "" {
+		auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + token))
+		reqBuilder.WriteString(fmt.Sprintf("Proxy-Authorization: Basic %s\r\n", auth))
+	}
+	reqBuilder.WriteString("Connection: close\r\n")
+	reqBuilder.WriteString("\r\n")
+
+	if _, err := conn.Write([]byte(reqBuilder.String())); err != nil {
+		return 0, "", fmt.Errorf("write request: %w", err)
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		return 0, "", fmt.Errorf("read response: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	body, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, string(body), nil
+}
+
+func TestProxyServer_PlainHTTP_AllowedDomain(t *testing.T) {
+	// Send a plain HTTP GET through the proxy to an allowed domain.
+	// Current code returns 405 for all non-CONNECT; this test asserts
+	// the desired behavior: 200 (upstream reachable) or 502 (upstream
+	// unreachable), but NOT 405.
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{"allowed.example.com"}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	status, _, err := sendRawHTTPViaProxy(t, proxyAddr, "GET", "http://allowed.example.com/", "test-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	switch status {
+	case http.StatusOK, http.StatusBadGateway:
+		// expected — 200 if upstream reachable, 502 if not
+	case http.StatusMethodNotAllowed:
+		t.Errorf("plain HTTP GET returned 405; proxy is not routing non-CONNECT requests")
+	default:
+		t.Errorf("expected 200 or 502 for allowed domain, got %d", status)
+	}
+}
+
+func TestProxyServer_PlainHTTP_DeniedDomain(t *testing.T) {
+	// Send a plain HTTP GET to a denied domain with valid token.
+	// Current code returns 405 for all non-CONNECT; this test asserts
+	// the desired behavior: 403 Forbidden, NOT 405.
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine(nil, []string{"denied.example.com"})
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	status, _, err := sendRawHTTPViaProxy(t, proxyAddr, "GET", "http://denied.example.com/", "test-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	switch status {
+	case http.StatusForbidden:
+		// expected — denied domain returns 403
+	case http.StatusMethodNotAllowed:
+		t.Errorf("plain HTTP GET returned 405; proxy is not routing non-CONNECT requests")
+	default:
+		t.Errorf("expected 403 for denied domain, got %d", status)
+	}
+}
+
+func TestProxyServer_PlainHTTP_NoAuth(t *testing.T) {
+	// Send a plain HTTP GET without Proxy-Authorization header.
+	// Current code returns 405 for all non-CONNECT; this test asserts
+	// the desired behavior: 407 Proxy Authentication Required, NOT 405.
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{"example.com"}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	status, _, err := sendRawHTTPViaProxy(t, proxyAddr, "GET", "http://example.com/", "")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	switch status {
+	case http.StatusProxyAuthRequired:
+		// expected — missing auth returns 407
+	case http.StatusMethodNotAllowed:
+		t.Errorf("plain HTTP GET returned 405; proxy is not routing non-CONNECT requests")
+	default:
+		t.Errorf("expected 407 for missing auth, got %d", status)
+	}
+}
+
+func TestProxyServer_PlainHTTP_InvalidToken(t *testing.T) {
+	// Send a plain HTTP GET with an invalid token.
+	// Current code returns 405 for all non-CONNECT; this test asserts
+	// the desired behavior: 407 Proxy Authentication Required, NOT 405.
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{"example.com"}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	status, _, err := sendRawHTTPViaProxy(t, proxyAddr, "GET", "http://example.com/", "bad-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	switch status {
+	case http.StatusProxyAuthRequired:
+		// expected — invalid token returns 407
+	case http.StatusMethodNotAllowed:
+		t.Errorf("plain HTTP GET returned 405; proxy is not routing non-CONNECT requests")
+	default:
+		t.Errorf("expected 407 for invalid token, got %d", status)
+	}
+}
+
+func TestProxyServer_PlainHTTP_Methods(t *testing.T) {
+	// Table-driven test: send various HTTP methods through the proxy to an
+	// allowed domain. Current code returns 405 for all non-CONNECT; this
+	// test asserts that none of the standard methods should return 405.
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{"methods.example.com"}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"}
+
+	for _, method := range methods {
+		t.Run(method, func(t *testing.T) {
+			status, _, err := sendRawHTTPViaProxy(t, proxyAddr, method, "http://methods.example.com/", "test-token")
+			if err != nil {
+				t.Fatalf("request failed: %v", err)
+			}
+
+			if status == http.StatusMethodNotAllowed {
+				t.Errorf("plain HTTP %s returned 405; proxy is not routing non-CONNECT requests", method)
+			}
+		})
+	}
 }

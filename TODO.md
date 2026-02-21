@@ -70,19 +70,19 @@ everything non-CONNECT).
 
 These use raw TCP or `sendHTTPViaProxy` to send plain HTTP through the proxy.
 
-- [ ] **Test**: `TestProxyServer_PlainHTTP_AllowedDomain` — send
+- [x] **Test**: `TestProxyServer_PlainHTTP_AllowedDomain` — send
   `GET http://allowed.example.com/ HTTP/1.1` with valid token through
   proxy; expect 200 or 502 (upstream unreachable), NOT 405
-- [ ] **Test**: `TestProxyServer_PlainHTTP_DeniedDomain` — send GET to a
+- [x] **Test**: `TestProxyServer_PlainHTTP_DeniedDomain` — send GET to a
   denied domain with valid token; expect 403, NOT 405
-- [ ] **Test**: `TestProxyServer_PlainHTTP_NoAuth` — send GET without
+- [x] **Test**: `TestProxyServer_PlainHTTP_NoAuth` — send GET without
   `Proxy-Authorization`; expect 407, NOT 405
-- [ ] **Test**: `TestProxyServer_PlainHTTP_InvalidToken` — send GET with
+- [x] **Test**: `TestProxyServer_PlainHTTP_InvalidToken` — send GET with
   bad token; expect 407, NOT 405
-- [ ] **Test**: `TestProxyServer_PlainHTTP_Methods` — table-driven test
+- [x] **Test**: `TestProxyServer_PlainHTTP_Methods` — table-driven test
   sending GET, POST, PUT, DELETE, PATCH, HEAD through proxy to an
   allowed domain; none should return 405
-- [ ] Confirm all tests fail with current code (405 for all)
+- [x] Confirm all tests fail with current code (405 for all)
 
 ### 1.2 Domain policy tests for plain HTTP
 
