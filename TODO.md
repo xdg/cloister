@@ -128,28 +128,28 @@ to.
 
 ### 3.1 Forwarding round-trip tests
 
-- [ ] **Test**: `TestProxyServer_PlainHTTP_ForwardGET` — start
+- [x] **Test**: `TestProxyServer_PlainHTTP_ForwardGET` — start
   `httptest.NewServer` echoing request details; send
   `GET http://<upstream>/path?q=1` through proxy; assert response
   status, body, and that `Host` header reaches upstream correctly
-- [ ] **Test**: `TestProxyServer_PlainHTTP_ForwardPOST` — send POST
+- [x] **Test**: `TestProxyServer_PlainHTTP_ForwardPOST` — send POST
   with body through proxy; assert body arrives at upstream intact
-- [ ] **Test**: `TestProxyServer_PlainHTTP_PreservesHeaders` — send
+- [x] **Test**: `TestProxyServer_PlainHTTP_PreservesHeaders` — send
   request with custom headers (`X-Custom: foo`); verify they reach
   upstream
-- [ ] Confirm tests fail (Phase 2 stub returns 502)
+- [x] Confirm tests fail (Phase 2 stub returns 502)
 
 ### 3.2 Hop-by-hop header tests
 
-- [ ] **Test**: `TestProxyServer_PlainHTTP_StripsHopByHop` — send
+- [x] **Test**: `TestProxyServer_PlainHTTP_StripsHopByHop` — send
   request with `Proxy-Authorization`, `Proxy-Connection`,
   `Connection: keep-alive`, `TE`, `Transfer-Encoding: chunked`
   headers; verify upstream does NOT receive `Proxy-Authorization`,
   `Proxy-Connection`; verify `Connection` is handled correctly
-- [ ] **Test**: `TestProxyServer_PlainHTTP_NoProxyAuthToUpstream` —
+- [x] **Test**: `TestProxyServer_PlainHTTP_NoProxyAuthToUpstream` —
   explicitly verify `Proxy-Authorization` is never forwarded (security
   critical — leaking the cloister token to upstream is a vulnerability)
-- [ ] Confirm tests fail
+- [x] Confirm tests fail
 
 ---
 

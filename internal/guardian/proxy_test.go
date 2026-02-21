@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
@@ -2461,5 +2463,334 @@ func TestProxyServer_PlainHTTP_PolicyCheck(t *testing.T) {
 	}
 	if gotDomain != "check.example.com" {
 		t.Errorf("PolicyChecker called with domain %q, want %q (port should be stripped)", gotDomain, "check.example.com")
+	}
+}
+
+// sendRawHTTPViaProxyFull sends a plain HTTP request through the proxy with full control
+// over method, URL, headers, and body. Returns status code, response headers, and body.
+func sendRawHTTPViaProxyFull(t *testing.T, proxyAddr, method, rawURL, token string, headers map[string]string, body string) (int, http.Header, string, error) {
+	t.Helper()
+
+	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", proxyAddr)
+	if err != nil {
+		return 0, nil, "", fmt.Errorf("dial proxy: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	if err := conn.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return 0, nil, "", fmt.Errorf("set deadline: %w", err)
+	}
+
+	// Extract host from the raw URL for the Host header.
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return 0, nil, "", fmt.Errorf("parse URL: %w", err)
+	}
+	host := parsed.Host
+
+	var reqBuilder strings.Builder
+	reqBuilder.WriteString(fmt.Sprintf("%s %s HTTP/1.1\r\n", method, rawURL))
+	reqBuilder.WriteString(fmt.Sprintf("Host: %s\r\n", host))
+	if token != "" {
+		auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + token))
+		reqBuilder.WriteString(fmt.Sprintf("Proxy-Authorization: Basic %s\r\n", auth))
+	}
+	for k, v := range headers {
+		reqBuilder.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+	}
+	if body != "" {
+		reqBuilder.WriteString(fmt.Sprintf("Content-Length: %d\r\n", len(body)))
+	}
+	reqBuilder.WriteString("Connection: close\r\n")
+	reqBuilder.WriteString("\r\n")
+	if body != "" {
+		reqBuilder.WriteString(body)
+	}
+
+	if _, err := conn.Write([]byte(reqBuilder.String())); err != nil {
+		return 0, nil, "", fmt.Errorf("write request: %w", err)
+	}
+
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	if err != nil {
+		return 0, nil, "", fmt.Errorf("read response: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	respBody, _ := io.ReadAll(resp.Body)
+	return resp.StatusCode, resp.Header, string(respBody), nil
+}
+
+func TestProxyServer_PlainHTTP_ForwardGET(t *testing.T) {
+	// Start a mock upstream that echoes request details as JSON.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		info := map[string]interface{}{
+			"method":  r.Method,
+			"url":     r.URL.String(),
+			"host":    r.Host,
+			"headers": r.Header,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(info)
+	}))
+	defer upstream.Close()
+
+	// Extract host from upstream URL for the policy engine allowlist.
+	upstreamURL, _ := url.Parse(upstream.URL)
+	upstreamHost := upstreamURL.Hostname()
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+	targetURL := fmt.Sprintf("http://%s/path?q=1", upstreamURL.Host)
+
+	status, _, respBody, err := sendRawHTTPViaProxyFull(t, proxyAddr, "GET", targetURL, "test-token", nil, "")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	// This test should FAIL with 502 until forwarding is implemented.
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", status, respBody)
+	}
+
+	var result map[string]interface{}
+	if err := json.Unmarshal([]byte(respBody), &result); err != nil {
+		t.Fatalf("failed to parse response JSON: %v", err)
+	}
+
+	if got := result["method"]; got != "GET" {
+		t.Errorf("upstream saw method %q, want GET", got)
+	}
+	if got, ok := result["url"].(string); !ok || got != "/path?q=1" {
+		t.Errorf("upstream saw url %q, want /path?q=1", got)
+	}
+	if got, ok := result["host"].(string); !ok || got != upstreamURL.Host {
+		t.Errorf("upstream saw host %q, want %q", got, upstreamURL.Host)
+	}
+}
+
+func TestProxyServer_PlainHTTP_ForwardPOST(t *testing.T) {
+	// Start a mock upstream that echoes the request body back.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write(body)
+	}))
+	defer upstream.Close()
+
+	upstreamURL, _ := url.Parse(upstream.URL)
+	upstreamHost := upstreamURL.Hostname()
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+	targetURL := fmt.Sprintf("http://%s/echo", upstreamURL.Host)
+
+	status, _, respBody, err := sendRawHTTPViaProxyFull(t, proxyAddr, "POST", targetURL, "test-token", map[string]string{
+		"Content-Type": "text/plain",
+	}, "hello world")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	// This test should FAIL with 502 until forwarding is implemented.
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", status, respBody)
+	}
+
+	if !strings.Contains(respBody, "hello world") {
+		t.Errorf("expected response body to contain %q, got %q", "hello world", respBody)
+	}
+}
+
+func TestProxyServer_PlainHTTP_PreservesHeaders(t *testing.T) {
+	// Start a mock upstream that echoes request headers as JSON.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(r.Header)
+	}))
+	defer upstream.Close()
+
+	upstreamURL, _ := url.Parse(upstream.URL)
+	upstreamHost := upstreamURL.Hostname()
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+	targetURL := fmt.Sprintf("http://%s/headers", upstreamURL.Host)
+
+	status, _, respBody, err := sendRawHTTPViaProxyFull(t, proxyAddr, "GET", targetURL, "test-token", map[string]string{
+		"X-Custom": "foo",
+	}, "")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	// This test should FAIL with 502 until forwarding is implemented.
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", status, respBody)
+	}
+
+	var headers http.Header
+	if err := json.Unmarshal([]byte(respBody), &headers); err != nil {
+		t.Fatalf("failed to parse response JSON: %v", err)
+	}
+
+	if got := headers.Get("X-Custom"); got != "foo" {
+		t.Errorf("upstream received X-Custom=%q, want %q", got, "foo")
+	}
+}
+
+func TestProxyServer_PlainHTTP_StripsHopByHop(t *testing.T) {
+	// Start a mock upstream that echoes request headers as JSON.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(r.Header)
+	}))
+	defer upstream.Close()
+
+	upstreamURL, _ := url.Parse(upstream.URL)
+	upstreamHost := upstreamURL.Hostname()
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+	targetURL := fmt.Sprintf("http://%s/headers", upstreamURL.Host)
+
+	// Send request with hop-by-hop headers that should be stripped,
+	// plus a normal header that should be preserved.
+	status, _, respBody, err := sendRawHTTPViaProxyFull(t, proxyAddr, "GET", targetURL, "test-token", map[string]string{
+		"Proxy-Connection": "keep-alive",
+		"TE":               "trailers",
+		"X-Custom":         "preserved",
+	}, "")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	// This test should FAIL with 502 until forwarding is implemented.
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", status, respBody)
+	}
+
+	var headers http.Header
+	if err := json.Unmarshal([]byte(respBody), &headers); err != nil {
+		t.Fatalf("failed to parse response JSON: %v", err)
+	}
+
+	// Proxy-Authorization must be stripped (carries the cloister token).
+	if got := headers.Get("Proxy-Authorization"); got != "" {
+		t.Errorf("upstream received Proxy-Authorization=%q, want it stripped", got)
+	}
+
+	// Proxy-Connection is a hop-by-hop header and must be stripped.
+	if got := headers.Get("Proxy-Connection"); got != "" {
+		t.Errorf("upstream received Proxy-Connection=%q, want it stripped", got)
+	}
+
+	// Normal headers must be preserved.
+	if got := headers.Get("X-Custom"); got != "preserved" {
+		t.Errorf("upstream received X-Custom=%q, want %q", got, "preserved")
+	}
+
+	// Connection header should be handled: either stripped entirely
+	// or set to "close" (not forwarded as "keep-alive").
+	if got := headers.Get("Connection"); got == "keep-alive" {
+		t.Errorf("upstream received Connection=%q, want it stripped or set to close", got)
+	}
+}
+
+func TestProxyServer_PlainHTTP_NoProxyAuthToUpstream(t *testing.T) {
+	// Start a mock upstream that echoes request headers as JSON.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(r.Header)
+	}))
+	defer upstream.Close()
+
+	upstreamURL, _ := url.Parse(upstream.URL)
+	upstreamHost := upstreamURL.Hostname()
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine([]string{upstreamHost}, nil)
+	p.TokenValidator = newMockTokenValidator("test-token")
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+	targetURL := fmt.Sprintf("http://%s/headers", upstreamURL.Host)
+
+	// Send request with valid token (Proxy-Authorization is added by the helper).
+	status, _, respBody, err := sendRawHTTPViaProxyFull(t, proxyAddr, "GET", targetURL, "test-token", nil, "")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	// This test should FAIL with 502 until forwarding is implemented.
+	if status != http.StatusOK {
+		t.Fatalf("expected 200, got %d; body: %s", status, respBody)
+	}
+
+	var headers http.Header
+	if err := json.Unmarshal([]byte(respBody), &headers); err != nil {
+		t.Fatalf("failed to parse response JSON: %v", err)
+	}
+
+	// Security critical: the cloister token in Proxy-Authorization must
+	// never be forwarded to the upstream server.
+	if got := headers.Get("Proxy-Authorization"); got != "" {
+		t.Errorf("SECURITY: upstream received Proxy-Authorization=%q; cloister token leaked to upstream", got)
 	}
 }
