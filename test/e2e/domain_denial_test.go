@@ -3,7 +3,6 @@
 package e2e
 
 import (
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +24,7 @@ import (
 // 4. Verify denied_domains in global decisions file includes the domain
 // 5. Make a second request to the same domain and verify immediate 403 (no approval prompt)
 func TestDomainDenial_GlobalScope(t *testing.T) {
+	saveGlobalDecisions(t)
 	tc := createAuthenticatedTestContainer(t, "deny-global")
 	guardianHost := guardian.ContainerName()
 	port := approvalPort(t)
@@ -281,6 +281,7 @@ func TestDomainApproval_OnceScope_RePrompts(t *testing.T) {
 // 4. Make a request to other.evil-test.example.com
 // 5. Verify immediate 403 (wildcard pattern match)
 func TestDomainDenial_Wildcard(t *testing.T) {
+	saveGlobalDecisions(t)
 	tc := createAuthenticatedTestContainer(t, "deny-wildcard")
 	guardianHost := guardian.ContainerName()
 	port := approvalPort(t)
@@ -385,20 +386,15 @@ func TestDomainDenial_DenyWinsOverAllow(t *testing.T) {
 	testDomain := "deny-wins-test.example.com"
 
 	// Write a project decisions file that has the domain in BOTH allowed and denied lists.
-	// The token was registered with project "test-project" by createAuthenticatedTestContainer.
 	decisions := &config.Decisions{
 		Proxy: config.DecisionsProxy{
 			Allow: []config.AllowEntry{{Domain: testDomain}},
 			Deny:  []config.AllowEntry{{Domain: testDomain}},
 		},
 	}
-	if err := config.WriteProjectDecisions("test-project", decisions); err != nil {
+	if err := config.WriteProjectDecisions(tc.Project, decisions); err != nil {
 		t.Fatalf("Failed to write project decisions: %v", err)
 	}
-	t.Cleanup(func() {
-		// Clean up the decisions file after the test
-		_ = os.Remove(config.ProjectDecisionPath("test-project"))
-	})
 
 	// Send SIGHUP to the guardian container to trigger config reload
 	_, err := docker.Run("kill", "-s", "HUP", guardian.ContainerName())
@@ -442,6 +438,7 @@ func TestDomainDenial_DenyWinsOverAllow(t *testing.T) {
 // a denied domain to the global decisions file, sends SIGHUP to trigger a reload,
 // and verifies that the domain is immediately blocked.
 func TestDomainDenial_LoadDecisionsOnStartup(t *testing.T) {
+	saveGlobalDecisions(t)
 	tc := createAuthenticatedTestContainer(t, "deny-startup")
 	guardianHost := guardian.ContainerName()
 
@@ -452,19 +449,19 @@ func TestDomainDenial_LoadDecisionsOnStartup(t *testing.T) {
 
 	testDomain := "startup-denied.example.com"
 
-	// Load existing global decisions and add our test domain to the denied list,
-	// preserving any domains already written by previous tests.
-	existing, err := config.LoadGlobalDecisions()
-	if err != nil {
-		t.Fatalf("Failed to load existing global decisions: %v", err)
+	// Write a fresh global decisions file with only our test domain.
+	// saveGlobalDecisions ensures the original state is restored after the test.
+	decisions := &config.Decisions{
+		Proxy: config.DecisionsProxy{
+			Deny: []config.AllowEntry{{Domain: testDomain}},
+		},
 	}
-	existing.Proxy.Deny = append(existing.Proxy.Deny, config.AllowEntry{Domain: testDomain})
-	if err := config.WriteGlobalDecisions(existing); err != nil {
+	if err := config.WriteGlobalDecisions(decisions); err != nil {
 		t.Fatalf("Failed to write global decisions: %v", err)
 	}
 
 	// Send SIGHUP to the guardian container to trigger config reload
-	_, err = docker.Run("kill", "-s", "HUP", guardian.ContainerName())
+	_, err := docker.Run("kill", "-s", "HUP", guardian.ContainerName())
 	if err != nil {
 		t.Fatalf("Failed to send SIGHUP to guardian: %v", err)
 	}
@@ -472,12 +469,10 @@ func TestDomainDenial_LoadDecisionsOnStartup(t *testing.T) {
 	// Poll until the deny takes effect. A fast 403 (< 2s) means the deny came
 	// from the PolicyEngine; a slow 403 (~3s) means the request fell through to
 	// the approval queue and timed out, i.e. the reload hasn't happened yet.
-	// Each slow attempt costs ~3s (the approval timeout), so we use a generous
-	// deadline (30s) to tolerate delayed SIGHUP delivery under load.
 	curlCmd := "curl -v --proxy http://" + guardianHost + ":3128 --proxy-user :" + tc.Token +
 		" --max-time 5 https://" + testDomain + "/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'"
 
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(15 * time.Second)
 	for {
 		startTime := time.Now()
 		output, _ := execInContainer(t, tc.Name, "sh", "-c", curlCmd)
@@ -497,11 +492,6 @@ func TestDomainDenial_LoadDecisionsOnStartup(t *testing.T) {
 		if time.Now().After(deadline) {
 			t.Fatalf("Deny did not take effect within deadline: last response %q in %v", output, elapsed)
 		}
-
-		// Re-send SIGHUP in case the previous one was delivered before the
-		// decisions file was fully flushed, or was coalesced with an earlier
-		// signal from a preceding test.
-		_, _ = docker.Run("kill", "-s", "HUP", guardian.ContainerName())
 
 		time.Sleep(500 * time.Millisecond)
 	}

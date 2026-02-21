@@ -52,9 +52,10 @@ func TestNetworkIsolation_RequestServerReachable(t *testing.T) {
 	containerName := createTestContainer(t, "reqserver")
 	guardianHost := guardian.ContainerName()
 
-	// Register a test token with the guardian
+	// Register a test token with the guardian using a unique project name
+	testProject := fmt.Sprintf("e2e-reqserver-%d", time.Now().UnixNano())
 	testToken := fmt.Sprintf("test-token-%d", time.Now().UnixNano())
-	if err := guardian.RegisterTokenFull(testToken, containerName, "test-project", ""); err != nil {
+	if err := guardian.RegisterTokenFull(testToken, containerName, testProject, ""); err != nil {
 		t.Fatalf("Failed to register token: %v", err)
 	}
 	t.Cleanup(func() {

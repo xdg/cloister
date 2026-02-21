@@ -149,7 +149,7 @@ func denyDomain(t *testing.T, port int, requestID, scope string, wildcard bool) 
 // 1. Container makes a proxy request to an unlisted domain (blocks in approval queue)
 // 2. Test approves the domain with "project" scope via the approval server API
 // 3. Proxy request completes (approved)
-// 4. Verify approval file written at approvals/projects/test-project.yaml
+// 4. Verify approval file written at approvals/projects/<project>.yaml
 // 5. Verify static config untouched
 func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 	tc := createAuthenticatedTestContainer(t, "approval-proj")
@@ -162,8 +162,7 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 	}
 
 	// Record the static project config state before the test.
-	// The token was registered with project "test-project" by createAuthenticatedTestContainer.
-	projectConfigPath := config.ProjectConfigPath("test-project")
+	projectConfigPath := config.ProjectConfigPath(tc.Project)
 	staticConfigBefore, _ := os.ReadFile(projectConfigPath)
 
 	// Use a unique unlisted domain for this test
@@ -211,8 +210,8 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 	// Verify the decision file was created on disk.
 	// The guardian container writes to the decision dir, which is mounted rw
 	// at /etc/cloister/decisions (overlaying the ro config mount).
-	projectApprovalPath := config.ProjectDecisionPath("test-project")
-	approvals, err := config.LoadProjectDecisions("test-project")
+	projectApprovalPath := config.ProjectDecisionPath(tc.Project)
+	approvals, err := config.LoadProjectDecisions(tc.Project)
 	if err != nil {
 		t.Fatalf("Failed to load project approvals: %v", err)
 	}
@@ -247,6 +246,7 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 // 4. Verify approval file written at approvals/global.yaml
 // 5. Verify static global config untouched
 func TestDomainApprovalPersistence_GlobalScope(t *testing.T) {
+	saveGlobalDecisions(t)
 	tc := createAuthenticatedTestContainer(t, "approval-glob")
 	guardianHost := guardian.ContainerName()
 	port := approvalPort(t)

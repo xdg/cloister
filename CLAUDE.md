@@ -78,6 +78,13 @@ Tests are split into three tiers based on what they require:
 
 **Shared test helpers:** `internal/testutil/` provides `RequireDocker`, `RequireGuardian`, `CleanupContainer`, and unique name generators.
 
+**E2E test isolation rules:**
+- Each test gets a unique project name via `createAuthenticatedTestContainer` — never hardcode `"test-project"`
+- Tests that modify global decisions must call `saveGlobalDecisions(t)` at the top to save/restore state
+- Project decisions files are automatically cleaned up by `createAuthenticatedTestContainer`
+- Use unique domain names per test (already the convention)
+- Tests must not depend on execution order or state from prior tests
+
 ## Makefile Targets
 
 | Target | Description |

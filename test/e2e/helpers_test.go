@@ -4,9 +4,11 @@ package e2e
 
 import (
 	"fmt"
+	"os"
 	"testing"
 	"time"
 
+	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
@@ -14,8 +16,9 @@ import (
 
 // testContainerInfo holds info about a test container with optional proxy auth.
 type testContainerInfo struct {
-	Name  string // Container name
-	Token string // Proxy auth token (empty if unauthenticated)
+	Name    string // Container name
+	Token   string // Proxy auth token (empty if unauthenticated)
+	Project string // Unique project name for token registration
 }
 
 // createTestContainer creates a container on cloister-net for testing.
@@ -52,16 +55,40 @@ func createAuthenticatedTestContainer(t *testing.T, suffix string) testContainer
 
 	containerName := createTestContainer(t, suffix)
 
+	// Generate a unique project name per test to avoid cross-test state pollution
+	project := fmt.Sprintf("e2e-%s-%d", suffix, time.Now().UnixNano())
+
 	// Register a token for this container
 	token := fmt.Sprintf("test-token-%s-%d", suffix, time.Now().UnixNano())
-	if err := guardian.RegisterTokenFull(token, containerName, "test-project", ""); err != nil {
+	if err := guardian.RegisterTokenFull(token, containerName, project, ""); err != nil {
 		t.Fatalf("Failed to register token: %v", err)
 	}
 	t.Cleanup(func() {
 		_ = guardian.RevokeToken(token)
+		// Clean up project decisions file if it was created
+		_ = os.Remove(config.ProjectDecisionPath(project))
 	})
 
-	return testContainerInfo{Name: containerName, Token: token}
+	return testContainerInfo{Name: containerName, Token: token, Project: project}
+}
+
+// saveGlobalDecisions saves the current global decisions file content and
+// restores it when the test completes. Tests that modify global decisions
+// must call this at the top to avoid polluting other tests.
+func saveGlobalDecisions(t *testing.T) {
+	t.Helper()
+
+	path := config.GlobalDecisionPath()
+	original, readErr := os.ReadFile(path)
+
+	t.Cleanup(func() {
+		if readErr != nil {
+			// File didn't exist before; remove it
+			_ = os.Remove(path)
+		} else {
+			_ = os.WriteFile(path, original, 0o644)
+		}
+	})
 }
 
 // waitForPort waits for a port to become reachable from inside a container.
