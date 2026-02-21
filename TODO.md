@@ -211,12 +211,12 @@ The largest extraction: move `runGuardianProxy` and its ~10 setup helpers from
 
 ### 8.2 Integration validation (requires Docker)
 
-- [ ] `make test-integration` passes
-- [ ] `make test-e2e` passes
-- [ ] Manual: `cloister start` in a project, verify attach works
-- [ ] Manual: `cloister stop`, verify token revoked
-- [ ] Manual: `cloister guardian status` shows correct info
-- [ ] Manual: `cloister shutdown` stops everything cleanly
+- [x] `make test-integration` passes
+- [x] `make test-e2e` passes
+- [x] Manual: `cloister start` in a project, verify attach works
+- [x] Manual: `cloister stop`, verify token revoked
+- [x] Manual: `cloister guardian status` shows correct info
+- [x] Manual: `cloister shutdown` stops everything cleanly
 
 ---
 
