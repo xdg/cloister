@@ -86,13 +86,13 @@ These use raw TCP or `sendHTTPViaProxy` to send plain HTTP through the proxy.
 
 ### 1.2 Domain policy tests for plain HTTP
 
-- [ ] **Test**: `TestProxyServer_PlainHTTP_DomainApproval` — send GET to
+- [x] **Test**: `TestProxyServer_PlainHTTP_DomainApproval` — send GET to
   unlisted domain; expect domain approval flow to be invoked (mock
   `DomainApprover` records the call)
-- [ ] **Test**: `TestProxyServer_PlainHTTP_PolicyCheck` — send GET with
+- [x] **Test**: `TestProxyServer_PlainHTTP_PolicyCheck` — send GET with
   `mockPolicyChecker`; verify `Check()` is called with correct token,
   project, and domain extracted from the absolute URI
-- [ ] Confirm all tests fail
+- [x] Confirm all tests fail
 
 ---
 

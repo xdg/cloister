@@ -2335,3 +2335,131 @@ func TestProxyServer_PlainHTTP_Methods(t *testing.T) {
 		})
 	}
 }
+
+func TestProxyServer_PlainHTTP_DomainApproval(t *testing.T) {
+	// When a plain HTTP request targets an unlisted domain with a valid token,
+	// the proxy should invoke the DomainApprover rather than returning 405.
+	// Current code returns 405 for all non-CONNECT; this test documents the
+	// expected behavior.
+
+	var (
+		mu             sync.Mutex
+		capturedDomain string
+	)
+
+	approver := &mockDomainApprover{
+		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
+			mu.Lock()
+			capturedDomain = domain
+			mu.Unlock()
+			return DomainApprovalResult{Approved: true}, nil
+		},
+	}
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = newTestProxyPolicyEngine(nil, nil) // Empty — domain is unlisted
+	p.TokenValidator = newMockTokenValidator("test-token")
+	p.DomainApprover = approver
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	status, _, err := sendRawHTTPViaProxy(t, proxyAddr, "GET", "http://unlisted.example.com/", "test-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	if status == http.StatusMethodNotAllowed {
+		t.Errorf("plain HTTP GET returned 405; proxy is not routing non-CONNECT requests through domain approval")
+	}
+
+	if count := approver.CallCount(); count != 1 {
+		t.Errorf("expected DomainApprover to be called once, got %d calls", count)
+	}
+
+	mu.Lock()
+	got := capturedDomain
+	mu.Unlock()
+	if got != "unlisted.example.com" {
+		t.Errorf("DomainApprover called with domain %q, want %q", got, "unlisted.example.com")
+	}
+}
+
+func TestProxyServer_PlainHTTP_PolicyCheck(t *testing.T) {
+	// When a plain HTTP request arrives with a valid token and TokenLookup,
+	// the proxy should invoke the PolicyChecker with the correct token,
+	// project, and domain (port stripped). Current code returns 405 for all
+	// non-CONNECT; this test documents the expected behavior.
+
+	var (
+		mu              sync.Mutex
+		capturedToken   string
+		capturedProject string
+		capturedDomain  string
+	)
+
+	checker := &mockPolicyChecker{
+		checkFunc: func(token, project, domain string) Decision {
+			mu.Lock()
+			capturedToken = token
+			capturedProject = project
+			capturedDomain = domain
+			mu.Unlock()
+			return Allow
+		},
+	}
+
+	p := NewProxyServer(":0")
+	p.PolicyEngine = checker
+	p.TokenValidator = newMockTokenValidator("test-token")
+	p.TokenLookup = func(tok string) (TokenLookupResult, bool) {
+		if tok == "test-token" {
+			return TokenLookupResult{ProjectName: "myproject", CloisterName: "myproject-main"}, true
+		}
+		return TokenLookupResult{}, false
+	}
+
+	if err := p.Start(); err != nil {
+		t.Fatalf("failed to start proxy server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = p.Stop(ctx)
+	}()
+
+	proxyAddr := p.ListenAddr()
+
+	status, _, err := sendRawHTTPViaProxy(t, proxyAddr, "GET", "http://check.example.com:8080/path?q=1", "test-token")
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+
+	if status == http.StatusMethodNotAllowed {
+		t.Errorf("plain HTTP GET returned 405; proxy is not routing non-CONNECT requests through policy check")
+	}
+
+	mu.Lock()
+	gotToken := capturedToken
+	gotProject := capturedProject
+	gotDomain := capturedDomain
+	mu.Unlock()
+
+	if gotToken != "test-token" {
+		t.Errorf("PolicyChecker called with token %q, want %q", gotToken, "test-token")
+	}
+	if gotProject != "myproject" {
+		t.Errorf("PolicyChecker called with project %q, want %q", gotProject, "myproject")
+	}
+	if gotDomain != "check.example.com" {
+		t.Errorf("PolicyChecker called with domain %q, want %q (port should be stripped)", gotDomain, "check.example.com")
+	}
+}
