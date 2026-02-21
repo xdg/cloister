@@ -1622,8 +1622,8 @@ func (h *proxyTestHarness) sendHTTPViaProxy(rawURL string) (int, error) {
 // auth and domain policy as CONNECT. This is what happens when curl uses
 // http:// URLs with HTTP_PROXY set — curl sends a regular HEAD through the
 // proxy instead of CONNECT. The proxy authenticates the request, checks domain
-// policy, and forwards it. We use golang.org (an allowed domain) which is
-// unreachable from the test environment, so the proxy returns 502 Bad Gateway.
+// policy, and forwards it. We use golang.org (an allowed domain); the response
+// is 502 if the domain is unreachable (sandbox) or 2xx/3xx if reachable.
 func TestProxyApproval_NonCONNECTForwardsPlainHTTP(t *testing.T) {
 	h := newProxyTestHarness(t)
 
@@ -1631,8 +1631,15 @@ func TestProxyApproval_NonCONNECTForwardsPlainHTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sendHTTPViaProxy() error: %v", err)
 	}
-	if statusCode != http.StatusBadGateway {
-		t.Errorf("expected status %d (Bad Gateway), got %d", http.StatusBadGateway, statusCode)
+	// Accept 502 (upstream unreachable in sandbox), or 2xx/3xx (upstream reachable).
+	// The key assertion is that it's NOT 405 (old behavior) or 407 (auth failure).
+	switch {
+	case statusCode == http.StatusBadGateway:
+		// expected in sandbox — domain allowed but upstream unreachable
+	case statusCode >= 200 && statusCode < 400:
+		// expected outside sandbox — domain allowed and upstream reachable
+	default:
+		t.Errorf("expected 502 or 2xx/3xx for allowed domain, got %d", statusCode)
 	}
 
 	// Verify no tunnel handler calls (plain HTTP never invokes TunnelHandler).

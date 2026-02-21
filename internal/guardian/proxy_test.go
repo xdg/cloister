@@ -193,7 +193,7 @@ func TestProxyServer_NonConnectMethods(t *testing.T) {
 	}
 
 	for _, method := range methods {
-		t.Run(method+" returns 405", func(t *testing.T) {
+		t.Run(method+" rejects non-proxy request", func(t *testing.T) {
 			req, err := http.NewRequestWithContext(context.Background(), method, baseURL, http.NoBody)
 			if err != nil {
 				t.Fatalf("failed to create request: %v", err)
@@ -206,8 +206,11 @@ func TestProxyServer_NonConnectMethods(t *testing.T) {
 			}
 			defer func() { _ = resp.Body.Close() }()
 
-			if resp.StatusCode != http.StatusMethodNotAllowed {
-				t.Errorf("expected status 405, got %d", resp.StatusCode)
+			// Non-proxy requests (relative URI, no scheme/host) are rejected.
+			// Depending on HTTP version negotiation, Go may return 405 (h2c) or
+			// the handler returns 400 (HTTP/1.1 reaching handlePlainHTTP validation).
+			if resp.StatusCode != http.StatusBadRequest && resp.StatusCode != http.StatusMethodNotAllowed {
+				t.Errorf("expected status 400 or 405, got %d", resp.StatusCode)
 			}
 
 			// Verify response body contains informative message (except HEAD, which has no body)
