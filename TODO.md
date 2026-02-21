@@ -105,17 +105,17 @@ pass. This is enough to make Phase 1 tests pass.
 
 ### 2.1 Add `handlePlainHTTP` skeleton
 
-- [ ] In `handleRequest`, replace the blanket 405 with a branch: if
+- [x] In `handleRequest`, replace the blanket 405 with a branch: if
   `r.URL.Scheme == "http"` and `r.URL.Host != ""` (absolute-URI form),
   call `handlePlainHTTP(w, r)`; otherwise keep 405 for malformed
   requests
-- [ ] `handlePlainHTTP` calls `authenticate` (reused), `resolveRequest`
+- [x] `handlePlainHTTP` calls `authenticate` (reused), `resolveRequest`
   (reused), extracts domain from `r.URL.Host` via `stripPort`,
   calls `checkDomainAccess` (reused), then returns 502 as a stub
-- [ ] Phase 1 tests pass (auth → 407, denied → 403, allowed → 502,
+- [x] Phase 1 tests pass (auth → 407, denied → 403, allowed → 502,
   approval flow invoked)
-- [ ] Existing CONNECT tests still pass
-- [ ] `TestProxyApproval_NonCONNECTReturns405` now fails (expected — we
+- [x] Existing CONNECT tests still pass
+- [x] `TestProxyApproval_NonCONNECTReturns405` now fails (expected — we
   handle the request instead of returning 405); update it in Phase 7
 
 ---

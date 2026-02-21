@@ -235,22 +235,53 @@ func (p *ProxyServer) ListenAddr() string {
 }
 
 // handleRequest processes incoming HTTP requests.
-// Only CONNECT method is allowed; all other methods return 405.
+// CONNECT requests are handled as TLS tunnels. Plain HTTP requests with
+// absolute URIs (e.g. "GET http://example.com/ HTTP/1.1") are dispatched
+// to the forward proxy handler. All other request forms return 405.
 // Authentication is checked before processing if TokenValidator is set.
 func (p *ProxyServer) handleRequest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodConnect {
-		http.Error(w, "Method Not Allowed - only CONNECT is supported", http.StatusMethodNotAllowed)
+	if r.Method == http.MethodConnect {
+		// Check authentication if TokenValidator is set
+		if p.TokenValidator != nil {
+			if !p.authenticate(w, r) {
+				return
+			}
+		}
+		p.handleConnect(w, r)
 		return
 	}
 
-	// Check authentication if TokenValidator is set
+	// Plain HTTP forward proxy request: absolute URI form
+	if r.URL.Scheme == "http" && r.URL.Host != "" {
+		p.handlePlainHTTP(w, r)
+		return
+	}
+
+	http.Error(w, "Method Not Allowed - only CONNECT and plain HTTP forward proxy are supported", http.StatusMethodNotAllowed)
+}
+
+// handlePlainHTTP processes non-CONNECT requests sent in absolute-URI form
+// (e.g. "GET http://example.com/path HTTP/1.1"). It applies the same
+// authentication and domain policy checks as CONNECT, then stubs a 502
+// response until upstream forwarding is implemented in Phase 4.
+func (p *ProxyServer) handlePlainHTTP(w http.ResponseWriter, r *http.Request) {
+	// Authenticate (same as CONNECT path)
 	if p.TokenValidator != nil {
 		if !p.authenticate(w, r) {
 			return
 		}
 	}
 
-	p.handleConnect(w, r)
+	resolved := p.resolveRequest(r)
+	domain := strings.ToLower(stripPort(r.URL.Host))
+
+	if err := p.checkDomainAccess(domain, resolved); err != nil {
+		http.Error(w, err.Error(), http.StatusForbidden)
+		return
+	}
+
+	// Stub: actual forwarding comes in Phase 4
+	http.Error(w, "Bad Gateway - upstream forwarding not yet implemented", http.StatusBadGateway)
 }
 
 // authenticate checks the Proxy-Authorization header and validates the token.
