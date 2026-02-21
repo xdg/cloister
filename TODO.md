@@ -1,16 +1,24 @@
-# Extract Business Logic from internal/cmd
+# Add Plain HTTP Forward Proxy Support
 
-Move business logic out of CLI command handlers into library packages so
-commands become thin shims. This improves testability and reuse.
+The cloister proxy currently only handles CONNECT (TLS tunneling). Plain HTTP
+requests (GET, POST, etc. with absolute URIs) get 405. This means `curl
+http://example.com` through the proxy fails, even if the domain is allowlisted.
+Add forward proxy support for all standard HTTP methods so non-TLS connections
+work with the same auth, policy, and domain approval flow.
 
 ## Testing Philosophy
 
-- **Unit tests for all extracted functions**: Each moved function gets tests in its destination package
-- **Table-driven tests**: Use table-driven style for functions with multiple input cases (name parsing, token lookup)
-- **In-process tests only**: No Docker, no real guardian. Use `t.TempDir()`, mock interfaces, `httptest`
-- **Go tests**: Use `testing` package; mock `container.Manager` via interfaces where needed
-- **Test what moved, not what stayed**: Cmd handlers that become one-line delegations don't need new tests
-- **Preserve existing test coverage**: Existing tests in destination packages must keep passing
+- **Test-first**: Each behavioral change starts with a failing test that
+  documents the expected behavior, confirmed failing, then the fix
+- **Unit tests only**: All proxy tests use `httptest`, raw TCP, and mock
+  interfaces — no Docker, no real guardian
+- **Reuse existing harness**: `proxyTestHarness`, `sendHTTPViaProxy`,
+  `mockTunnelHandler`, `newTestProxyPolicyEngine` are already in
+  `proxy_test.go` and `proxy_approval_test.go`
+- **Go `testing` package**: Table-driven tests where multiple methods or
+  domains vary; standalone tests for distinct behavioral assertions
+- **Hop-by-hop header handling**: Dedicated tests for header stripping,
+  not just happy-path forwarding
 
 ## Verification Checklist
 
@@ -20,7 +28,8 @@ Before marking a phase complete and committing it:
 2. `make lint` passes
 3. `make fmt` produces no changes
 4. `make build` succeeds
-5. No dead code left behind (unused types, functions, imports)
+5. All new tests confirmed failing before the corresponding fix is applied
+6. No dead code left behind (unused types, functions, imports)
 
 When verification of a phase or subphase is complete, commit all
 relevant newly-created and modified files.
@@ -28,207 +37,240 @@ relevant newly-created and modified files.
 ## Dependencies Between Phases
 
 ```
-Phase 1 (container names) ─────────────────────────┐
-Phase 2 (token lookup) ────────────────────────────┐│
-Phase 3 (project auto-register) ──────────────────┐││
-Phase 4 (cloister detect + attach) ──────────────┐│││
-Phase 5 (container running check) ──────────────┐││││
-                                                 │││││
-                                                 ▼▼▼▼▼
-                                          Phase 6 (cmd shims)
-                                                 │
-                                                 ▼
-                                          Phase 7 (guardian server)
-                                                 │
-                                                 ▼
-                                          Phase 8 (validation)
+Phase 1 (Failing tests: routing + auth)
+       │
+       ▼
+Phase 2 (Route non-CONNECT into new handler, pass auth/domain tests)
+       │
+       ▼
+Phase 3 (Failing tests: HTTP forwarding + hop-by-hop)
+       │
+       ▼
+Phase 4 (Implement forwardHTTP, pass forwarding tests)
+       │
+       ▼
+Phase 5 (Failing tests: error handling + edge cases)
+       │
+       ▼
+Phase 6 (Error handling implementation, pass edge case tests)
+       │
+       ▼
+Phase 7 (Update existing 405 test + e2e coverage)
 ```
 
-Phases 1-5 are independent and can be done in any order. Phase 6 updates all
-cmd files to use the new functions. Phase 7 is the largest extraction (guardian
-server startup). Phase 8 validates everything end-to-end.
+---
+
+## Phase 1: Failing Tests — Routing, Auth, and Domain Policy
+
+Write tests that assert the desired behavior for non-CONNECT requests.
+All tests should fail against the current code (which returns 405 for
+everything non-CONNECT).
+
+### 1.1 Basic routing and auth tests
+
+These use raw TCP or `sendHTTPViaProxy` to send plain HTTP through the proxy.
+
+- [ ] **Test**: `TestProxyServer_PlainHTTP_AllowedDomain` — send
+  `GET http://allowed.example.com/ HTTP/1.1` with valid token through
+  proxy; expect 200 or 502 (upstream unreachable), NOT 405
+- [ ] **Test**: `TestProxyServer_PlainHTTP_DeniedDomain` — send GET to a
+  denied domain with valid token; expect 403, NOT 405
+- [ ] **Test**: `TestProxyServer_PlainHTTP_NoAuth` — send GET without
+  `Proxy-Authorization`; expect 407, NOT 405
+- [ ] **Test**: `TestProxyServer_PlainHTTP_InvalidToken` — send GET with
+  bad token; expect 407, NOT 405
+- [ ] **Test**: `TestProxyServer_PlainHTTP_Methods` — table-driven test
+  sending GET, POST, PUT, DELETE, PATCH, HEAD through proxy to an
+  allowed domain; none should return 405
+- [ ] Confirm all tests fail with current code (405 for all)
+
+### 1.2 Domain policy tests for plain HTTP
+
+- [ ] **Test**: `TestProxyServer_PlainHTTP_DomainApproval` — send GET to
+  unlisted domain; expect domain approval flow to be invoked (mock
+  `DomainApprover` records the call)
+- [ ] **Test**: `TestProxyServer_PlainHTTP_PolicyCheck` — send GET with
+  `mockPolicyChecker`; verify `Check()` is called with correct token,
+  project, and domain extracted from the absolute URI
+- [ ] Confirm all tests fail
 
 ---
 
-## Phase 1: Extract ParseCloisterName to container package
+## Phase 2: Route Non-CONNECT Requests and Apply Auth/Policy
 
-Move name-parsing logic to where the other name functions live.
+Modify `handleRequest` to dispatch plain HTTP requests to a new handler
+that applies the same auth and domain policy as CONNECT. The handler
+does not yet forward to upstream — it can return 502 after policy checks
+pass. This is enough to make Phase 1 tests pass.
 
-### 1.1 Add ParseCloisterName to container/names.go
+### 2.1 Add `handlePlainHTTP` skeleton
 
-- [x] Add `ParseCloisterName(name string) (project, branch string)` to `internal/container/names.go`
-- [x] Logic: split on last hyphen (same as current `cmd/list.go:parseCloisterName`)
-- [x] **Test**: `names_test.go` — "foo-main" → ("foo","main"), "foo-bar-feature" → ("foo-bar","feature"), "foo" → ("foo","")
-
-### 1.2 Update cmd/list.go
-
-- [x] Replace `parseCloisterName()` call with `container.ParseCloisterName()`
-- [x] Delete the local `parseCloisterName` function
-
----
-
-## Phase 2: Extract token reverse lookup to guardian package
-
-Deduplicate `findTokenForCloister` (stop.go) and `tokenForContainer` (shutdown.go).
-
-### 2.1 Add FindTokenForContainer to guardian
-
-- [x] Add `FindTokenForContainer(containerName string) string` to `internal/guardian/` (e.g. `client.go` or new `helpers.go`)
-- [x] Implementation: call `ListTokens()`, iterate map, return matching token or ""
-- [x] Returns "" on any error (best-effort, matches current behavior)
-- [x] **Test**: Unit test with mock HTTP server returning a token map, verify correct container matched
-
-### 2.2 Update cmd/stop.go and cmd/shutdown.go
-
-- [x] Replace `findTokenForCloister()` with `guardian.FindTokenForContainer()`
-- [x] Replace `tokenForContainer()` usage in shutdown.go: call `guardian.FindTokenForContainer()` per container (simpler API; guardian is local so N+1 cost is negligible)
-- [x] Delete both `findTokenForCloister` and `tokenForContainer` local functions
+- [ ] In `handleRequest`, replace the blanket 405 with a branch: if
+  `r.URL.Scheme == "http"` and `r.URL.Host != ""` (absolute-URI form),
+  call `handlePlainHTTP(w, r)`; otherwise keep 405 for malformed
+  requests
+- [ ] `handlePlainHTTP` calls `authenticate` (reused), `resolveRequest`
+  (reused), extracts domain from `r.URL.Host` via `stripPort`,
+  calls `checkDomainAccess` (reused), then returns 502 as a stub
+- [ ] Phase 1 tests pass (auth → 407, denied → 403, allowed → 502,
+  approval flow invoked)
+- [ ] Existing CONNECT tests still pass
+- [ ] `TestProxyApproval_NonCONNECTReturns405` now fails (expected — we
+  handle the request instead of returning 405); update it in Phase 7
 
 ---
 
-## Phase 3: Extract auto-register to project package
+## Phase 3: Failing Tests — HTTP Forwarding
 
-Move the load-register-save pattern into a single library call.
+Write tests that verify actual upstream forwarding behavior. These need
+a mock HTTP upstream (via `httptest.NewServer`) that the proxy forwards
+to.
 
-### 3.1 Add AutoRegister to project/registry.go
+### 3.1 Forwarding round-trip tests
 
-- [x] Add `AutoRegister(name, root, remote, branch string) error` to `internal/project/registry.go`
-- [x] Implementation: LoadRegistry, build Info, Register, SaveRegistry. Log warnings for collision errors, return nil on collision (best-effort semantics matching current behavior)
-- [x] **Test**: `registry_test.go` — successful registration writes to temp dir; collision returns nil; load failure returns error
+- [ ] **Test**: `TestProxyServer_PlainHTTP_ForwardGET` — start
+  `httptest.NewServer` echoing request details; send
+  `GET http://<upstream>/path?q=1` through proxy; assert response
+  status, body, and that `Host` header reaches upstream correctly
+- [ ] **Test**: `TestProxyServer_PlainHTTP_ForwardPOST` — send POST
+  with body through proxy; assert body arrives at upstream intact
+- [ ] **Test**: `TestProxyServer_PlainHTTP_PreservesHeaders` — send
+  request with custom headers (`X-Custom: foo`); verify they reach
+  upstream
+- [ ] Confirm tests fail (Phase 2 stub returns 502)
 
-### 3.2 Update cmd/start.go
+### 3.2 Hop-by-hop header tests
 
-- [x] Replace `autoRegisterProject()` call with `project.AutoRegister()`
-- [x] Delete the local `autoRegisterProject` function
-
----
-
-## Phase 4: Extract cloister detection and attach-existing
-
-Move cloister name detection and attach-or-start logic to library packages.
-
-### 4.1 Add DetectName to cloister package
-
-- [x] Add `DetectName() (string, error)` to `internal/cloister/` (new file `detect.go` or add to existing)
-- [x] Implementation: `project.DetectGitRoot(".")` → `project.Name(root)` → `container.GenerateCloisterName(name)`
-- [x] **Test**: Unit test with injected git detection (use functional options or interface to mock project detection)
-
-### 4.2 Add AttachExisting to cloister package
-
-- [x] Add `AttachExisting(containerName string, opts ...Option) (int, error)` to `internal/cloister/`
-- [x] Implementation: check if running via Manager, start if stopped, call Attach. Return exit code.
-- [x] The function does NOT print output — cmd handler does that
-- [x] **Test**: Unit test with mock ContainerManager — test stopped-then-started path, already-running path, start-fails path
-
-### 4.3 Update cmd/stop.go and cmd/start.go
-
-- [x] Replace `detectCloisterName()` with `cloister.DetectName()`
-- [x] Replace `attachToExisting()` business logic with `cloister.AttachExisting()`, keep output formatting in cmd
-- [x] Delete local functions
+- [ ] **Test**: `TestProxyServer_PlainHTTP_StripsHopByHop` — send
+  request with `Proxy-Authorization`, `Proxy-Connection`,
+  `Connection: keep-alive`, `TE`, `Transfer-Encoding: chunked`
+  headers; verify upstream does NOT receive `Proxy-Authorization`,
+  `Proxy-Connection`; verify `Connection` is handled correctly
+- [ ] **Test**: `TestProxyServer_PlainHTTP_NoProxyAuthToUpstream` —
+  explicitly verify `Proxy-Authorization` is never forwarded (security
+  critical — leaking the cloister token to upstream is a vulnerability)
+- [ ] Confirm tests fail
 
 ---
 
-## Phase 5: Extract running-cloister check to container package
+## Phase 4: Implement HTTP Forwarding
 
-Move the "are there running cloisters for project X?" check.
+Replace the 502 stub in `handlePlainHTTP` with actual forwarding logic.
 
-### 5.1 Add HasRunningCloister to container.Manager
+### 4.1 Implement `forwardHTTP`
 
-- [x] Add `HasRunningCloister(projectName string) (string, error)` to `container.Manager`
-- [x] Returns the name of a running cloister matching the project, or "" if none
-- [x] Skips guardian container and non-running containers
-- [x] **Test**: Unit test with mock DockerRunner — returns running container matching prefix, returns "" when none match
-
-### 5.2 Update cmd/project.go
-
-- [x] Replace `checkNoRunningCloisters()` with `container.NewManager().HasRunningCloister(name)`
-- [x] Keep the error message formatting in cmd
-- [x] Delete local `checkNoRunningCloisters` function
-
----
-
-## Phase 6: Thin out remaining cmd handlers
-
-With phases 1-5 done, update all cmd files to use the extracted functions.
-This phase is a sweep to ensure each handler is a thin shim.
-
-### 6.1 Audit and simplify cmd handlers
-
-- [x] Review each `run*` function in cmd/ to confirm it's now delegation + output + error wrapping
-- [x] Remove any remaining helper functions that were made redundant by phases 1-5
-- [x] Verify no unused imports remain
-- [x] **Test**: `make test` passes, `make lint` clean
+- [ ] Create `forwardHTTP(w http.ResponseWriter, r *http.Request)` that:
+  - Clones the inbound request for the outbound call
+  - Sets `r.URL` from the absolute URI (already parsed by Go)
+  - Strips hop-by-hop headers: `Proxy-Authorization`,
+    `Proxy-Connection`, and headers listed in the `Connection` header
+  - Uses `http.Transport` (with `dialTimeout` and configured timeouts)
+    to execute the request against the upstream
+  - Copies response status, headers, and body back to `w`
+  - Does NOT follow redirects (the client handles those)
+  - Does NOT set `X-Forwarded-For` — omit to avoid leaking internal
+    container IPs to upstream (this is a security sandbox, not a
+    transparent corporate proxy)
+- [ ] Add `*http.Transport` as a field on `ProxyServer` (not package-level)
+  to allow connection reuse and to respect proxy-configured timeouts
+- [ ] Phase 3 forwarding tests pass
+- [ ] Phase 3 hop-by-hop tests pass
+- [ ] Phase 1 tests still pass (allowed domain now gets 200 from mock
+  upstream instead of 502)
 
 ---
 
-## Phase 7: Extract guardian server startup
+## Phase 5: Failing Tests — Error Handling and Edge Cases
 
-The largest extraction: move `runGuardianProxy` and its ~10 setup helpers from
-`cmd/guardian.go` into `internal/guardian/server.go`.
+### 5.1 Upstream failure tests
 
-### 7.1 Define Server type
+- [ ] **Test**: `TestProxyServer_PlainHTTP_UpstreamRefused` — proxy
+  forwards to a closed port; expect 502 Bad Gateway
+- [ ] **Test**: `TestProxyServer_PlainHTTP_UpstreamTimeout` — proxy
+  forwards to a server that never responds; expect 504 Gateway Timeout
+- [ ] Confirm tests fail or document the current behavior matches
 
-- [x] Create `internal/guardian/server.go` with `Server` struct
-- [x] Fields: registry, config, policyEngine, patternCache, auditLogger, and the 4 stoppable servers
-- [x] Constructor: `NewServer(registry *token.Registry, cfg *config.GlobalConfig, decisions *config.Decisions) (*Server, error)`
-- [x] Move `setupPolicyEngine`, `setupProxyServer`, `setupPatternCache`, `setupAuditLogger`, `setupDomainApproval`, `setupExecutorClient` into `Server` methods or constructor
+### 5.2 Edge case tests
 
-### 7.2 Add Run and Shutdown methods
+**Note:** Go's `net/http` server may not populate `r.URL.Scheme`/`r.URL.Host`
+for non-absolute-URI requests (relative URI, HTTPS scheme). These tests likely
+need raw TCP via `sendHTTPViaProxy` to send the exact request line, since Go's
+HTTP client won't generate these malformed proxy requests.
 
-- [x] `func (s *Server) Run() error` — starts all servers, blocks on signal, shuts down
-- [x] Move `startAllServers`, `awaitShutdownSignal`, `shutdownAllServers` as Server methods
-- [x] Move `stoppable` interface into `server.go`
-- [x] Move `domainApprovalResult` type and `extractPatterns` helper
-
-### 7.3 Move supporting functions
-
-- [x] Move `loadPersistedTokens` → Server method or standalone in guardian package
-- [x] Move `loadGuardianConfig`, `loadGuardianDecisions` → standalone funcs in guardian package (they just wrap config.Load with fallback)
-- [x] Move `formatDuration`, `getGuardianUptime` — `formatDuration` is a utility (could go in a `util` or stay in guardian); `getGuardianUptime` uses `docker.Run` so it stays in guardian or cmd
-
-### 7.4 Update cmd/guardian.go
-
-- [x] `runGuardianProxy` becomes: load config, create Server, call `server.Run()`
-- [x] Delete all moved helper functions and types (`guardianState`, `domainApprovalResult`, `stoppable`, `setup*`, etc.)
-- [x] Keep `getGuardianUptime` and `formatDuration` in cmd if they're only used for `guardian status` output
-
-### 7.5 Test Server construction
-
-- [x] **Test**: `server_test.go` — `NewServer` with default config creates valid server (no panic, components initialized)
-- [x] **Test**: Verify PolicyEngine is wired correctly (check a default-allowed domain)
-- [x] **Test**: `extractPatterns` (if moved) — simple mapping test
+- [ ] **Test**: `TestProxyServer_PlainHTTP_RelativeURI` — send
+  `GET /path HTTP/1.1` (not absolute URI) via raw TCP through proxy;
+  expect 400 Bad Request (not a valid forward proxy request)
+- [ ] **Test**: `TestProxyServer_PlainHTTP_HTTPSScheme` — send
+  `GET https://example.com/ HTTP/1.1` via raw TCP through proxy (wrong
+  — HTTPS should use CONNECT); expect 400 Bad Request
+- [ ] **Test**: `TestProxyServer_PlainHTTP_EmptyHost` — absolute URI
+  with empty host; expect 400 Bad Request
+- [ ] Confirm tests fail
 
 ---
 
-## Phase 8: End-to-end validation
+## Phase 6: Error Handling Implementation
 
-### 8.1 Automated checks
+### 6.1 Upstream error mapping
 
-- [x] `make build` succeeds
-- [x] `make test` passes (all unit tests)
-- [x] `make lint` passes (20 pre-existing issues, none in changed files)
-- [x] `make fmt` produces no changes
+- [ ] In `forwardHTTP`, map `net.Error` timeout to 504, connection
+  refused to 502, other dial errors to 502 (matching CONNECT behavior
+  in `dialAndTunnel`)
+- [ ] Phase 5.1 tests pass
 
-### 8.2 Integration validation (requires Docker)
+### 6.2 Request validation
 
-- [x] `make test-integration` passes
-- [x] `make test-e2e` passes
-- [x] Manual: `cloister start` in a project, verify attach works
-- [x] Manual: `cloister stop`, verify token revoked
-- [x] Manual: `cloister guardian status` shows correct info
-- [x] Manual: `cloister shutdown` stops everything cleanly
+- [ ] In `handlePlainHTTP`, validate **after** auth (consistent with
+  CONNECT path — auth failures should always return 407 regardless of
+  request form, and validating before auth leaks information about what
+  the proxy accepts to unauthenticated clients): `r.URL.Host` is
+  non-empty, `r.URL.Scheme` is `"http"` (not `"https"`), and the
+  request is in absolute-URI form; return 400 for violations
+- [ ] Phase 5.2 tests pass
+
+---
+
+## Phase 7: Update Existing Tests and E2E
+
+### 7.1 Update the existing 405 test
+
+- [ ] Rename `TestProxyApproval_NonCONNECTReturns405` to
+  `TestProxyApproval_NonCONNECTForwardsPlainHTTP` (or similar)
+- [ ] Update assertion: the test currently sends
+  `HEAD http://some-domain.example.com/` through the proxy and expects
+  405; update to expect the correct new behavior (403 if domain is
+  unlisted, or 200 if allowed, depending on harness config)
+- [ ] Verify no tunnel handler calls (plain HTTP should never invoke
+  `TunnelHandler`)
+
+### 7.2 E2E test for plain HTTP proxy
+
+Use a local `httptest.NewServer` reachable from the container network
+(bind to the Docker bridge IP or use host networking) rather than
+hitting real external domains — avoids DNS flakiness and external
+service dependencies.
+
+- [ ] **Test**: Add e2e test in `test/e2e/` that sends a plain HTTP
+  request through the proxy to an allowlisted domain and verifies it
+  succeeds
+- [ ] **Test**: Add e2e test verifying denied domain returns 403 for
+  plain HTTP (not just CONNECT)
 
 ---
 
 ## Future Phases (Deferred)
 
-### Setup wizard extraction
-- Move `setup_claude.go` / `setup_codex.go` credential-save logic to `config.SetAgentConfig()`
-- Keep interactive prompting in cmd (inherently UI-layer)
+### WebSocket Support
+- Plain HTTP upgrade to WebSocket through the proxy
+- Requires special handling of `Connection: Upgrade` + `Upgrade: websocket`
 
-### Guardian status extraction
-- Move `getGuardianUptime` + `formatDuration` to guardian package if other consumers emerge
-- Currently only used by `guardian status` command — not worth extracting yet
+### HTTPS-in-HTTP (CONNECT with policy inspection)
+- MitM-style TLS inspection for CONNECT requests (out of scope, security implications)
 
-### Cmd test cleanup
-- `guardian_helpers_test.go` tests config merge patterns, not guardian helpers — rename or move to `config` package
+### Request/Response Logging
+- Audit logging for plain HTTP requests (method, URL, status, latency)
+- Currently only CONNECT tunnels are logged; forwarded requests should match
+
+### Rate Limiting
+- Per-token or per-domain rate limiting for forwarded requests
+- CONNECT tunnels are long-lived so rate limiting is less meaningful there
