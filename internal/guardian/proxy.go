@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -95,12 +96,17 @@ type ProxyServer struct {
 	// tokens that were manually added or removed from disk.
 	OnTokenReload func()
 
-	server     *http.Server
-	listener   net.Listener
-	mu         sync.Mutex
-	running    bool
-	sighupChan chan os.Signal
-	stopSighup chan struct{}
+	// Transport is the HTTP transport used for forwarding plain HTTP requests.
+	// If nil, a default transport with dialTimeout is created on first use.
+	Transport *http.Transport
+
+	server        *http.Server
+	listener      net.Listener
+	mu            sync.Mutex
+	running       bool
+	sighupChan    chan os.Signal
+	stopSighup    chan struct{}
+	transportOnce sync.Once
 }
 
 // NewProxyServer creates a new proxy server listening on the specified address.
@@ -262,8 +268,8 @@ func (p *ProxyServer) handleRequest(w http.ResponseWriter, r *http.Request) {
 
 // handlePlainHTTP processes non-CONNECT requests sent in absolute-URI form
 // (e.g. "GET http://example.com/path HTTP/1.1"). It applies the same
-// authentication and domain policy checks as CONNECT, then stubs a 502
-// response until upstream forwarding is implemented in Phase 4.
+// authentication and domain policy checks as CONNECT, then forwards the
+// request to the upstream server.
 func (p *ProxyServer) handlePlainHTTP(w http.ResponseWriter, r *http.Request) {
 	// Authenticate (same as CONNECT path)
 	if p.TokenValidator != nil {
@@ -280,8 +286,69 @@ func (p *ProxyServer) handlePlainHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Stub: actual forwarding comes in Phase 4
-	http.Error(w, "Bad Gateway - upstream forwarding not yet implemented", http.StatusBadGateway)
+	p.forwardHTTP(w, r)
+}
+
+// transport returns the HTTP transport for forwarding plain HTTP requests,
+// lazily initializing it with proxy-appropriate timeouts if not already set.
+func (p *ProxyServer) transport() *http.Transport {
+	p.transportOnce.Do(func() {
+		if p.Transport == nil {
+			p.Transport = &http.Transport{
+				DialContext: (&net.Dialer{
+					Timeout: dialTimeout,
+				}).DialContext,
+				ResponseHeaderTimeout: 60 * time.Second,
+			}
+		}
+	})
+	return p.Transport
+}
+
+// forwardHTTP forwards a plain HTTP request to the upstream server and copies
+// the response back to the client. It strips hop-by-hop headers, does not
+// follow redirects, and does not set X-Forwarded-For.
+func (p *ProxyServer) forwardHTTP(w http.ResponseWriter, r *http.Request) {
+	// Clone the request for the outbound call
+	outReq := r.Clone(r.Context())
+	outReq.RequestURI = "" // Must be empty for http.Client/Transport
+
+	// Hop-by-hop headers that must not be forwarded
+	outReq.Header.Del("Proxy-Authorization")
+	outReq.Header.Del("Proxy-Connection")
+
+	// Remove headers listed in the Connection header, then Connection itself
+	if connHeaders := outReq.Header.Get("Connection"); connHeaders != "" {
+		for _, h := range strings.Split(connHeaders, ",") {
+			outReq.Header.Del(strings.TrimSpace(h))
+		}
+		outReq.Header.Del("Connection")
+	}
+
+	outReq.Header.Del("TE")
+	outReq.Header.Del("Transfer-Encoding")
+	outReq.Header.Del("Keep-Alive")
+	outReq.Header.Del("Trailer")
+	outReq.Header.Del("Upgrade")
+
+	// Execute the request using RoundTrip directly to avoid following redirects
+	resp, err := p.transport().RoundTrip(outReq)
+	if err != nil {
+		clog.Warn("forwardHTTP: upstream request to %s failed: %v", outReq.URL.Host, err)
+		http.Error(w, "Bad Gateway", http.StatusBadGateway)
+		return
+	}
+	defer resp.Body.Close()
+
+	// Copy response headers
+	for key, values := range resp.Header {
+		for _, v := range values {
+			w.Header().Add(key, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	//nolint:errcheck // Best-effort copy to response writer; nothing useful to do on error
+	io.Copy(w, resp.Body)
 }
 
 // authenticate checks the Proxy-Authorization header and validates the token.

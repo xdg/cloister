@@ -159,7 +159,7 @@ Replace the 502 stub in `handlePlainHTTP` with actual forwarding logic.
 
 ### 4.1 Implement `forwardHTTP`
 
-- [ ] Create `forwardHTTP(w http.ResponseWriter, r *http.Request)` that:
+- [x] Create `forwardHTTP(w http.ResponseWriter, r *http.Request)` that:
   - Clones the inbound request for the outbound call
   - Sets `r.URL` from the absolute URI (already parsed by Go)
   - Strips hop-by-hop headers: `Proxy-Authorization`,
@@ -171,11 +171,11 @@ Replace the 502 stub in `handlePlainHTTP` with actual forwarding logic.
   - Does NOT set `X-Forwarded-For` — omit to avoid leaking internal
     container IPs to upstream (this is a security sandbox, not a
     transparent corporate proxy)
-- [ ] Add `*http.Transport` as a field on `ProxyServer` (not package-level)
+- [x] Add `*http.Transport` as a field on `ProxyServer` (not package-level)
   to allow connection reuse and to respect proxy-configured timeouts
-- [ ] Phase 3 forwarding tests pass
-- [ ] Phase 3 hop-by-hop tests pass
-- [ ] Phase 1 tests still pass (allowed domain now gets 200 from mock
+- [x] Phase 3 forwarding tests pass
+- [x] Phase 3 hop-by-hop tests pass
+- [x] Phase 1 tests still pass (allowed domain now gets 200 from mock
   upstream instead of 502)
 
 ---
