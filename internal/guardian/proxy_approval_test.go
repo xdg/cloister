@@ -1617,28 +1617,31 @@ func (h *proxyTestHarness) sendHTTPViaProxy(rawURL string) (int, error) {
 	return resp.StatusCode, nil
 }
 
-// TestProxyApproval_NonCONNECTReturns405 verifies that HTTP requests (not
-// CONNECT) sent through the proxy return 405 Method Not Allowed. This is what
-// happens when curl uses http:// URLs with HTTP_PROXY set — curl sends a
-// regular HEAD through the proxy instead of CONNECT.
-func TestProxyApproval_NonCONNECTReturns405(t *testing.T) {
+// TestProxyApproval_NonCONNECTForwardsPlainHTTP verifies that plain HTTP
+// requests (not CONNECT) sent through the proxy are forwarded with the same
+// auth and domain policy as CONNECT. This is what happens when curl uses
+// http:// URLs with HTTP_PROXY set — curl sends a regular HEAD through the
+// proxy instead of CONNECT. The proxy authenticates the request, checks domain
+// policy, and forwards it. We use golang.org (an allowed domain) which is
+// unreachable from the test environment, so the proxy returns 502 Bad Gateway.
+func TestProxyApproval_NonCONNECTForwardsPlainHTTP(t *testing.T) {
 	h := newProxyTestHarness(t)
 
-	statusCode, err := h.sendHTTPViaProxy("http://some-domain.example.com/")
+	statusCode, err := h.sendHTTPViaProxy("http://golang.org/")
 	if err != nil {
 		t.Fatalf("sendHTTPViaProxy() error: %v", err)
 	}
-	if statusCode != http.StatusMethodNotAllowed {
-		t.Errorf("expected status %d (Method Not Allowed), got %d", http.StatusMethodNotAllowed, statusCode)
+	if statusCode != http.StatusBadGateway {
+		t.Errorf("expected status %d (Bad Gateway), got %d", http.StatusBadGateway, statusCode)
 	}
 
-	// Verify no tunnel handler calls.
+	// Verify no tunnel handler calls (plain HTTP never invokes TunnelHandler).
 	calls := h.TunnelHandler.getCalls()
 	if len(calls) != 0 {
 		t.Errorf("expected 0 tunnel handler calls, got %d: %v", len(calls), calls)
 	}
 
-	// Verify no pending domain requests (non-CONNECT should never reach approval).
+	// Verify no pending domain requests (allowed domains skip the approval queue).
 	count, err := h.pendingDomainCount()
 	if err != nil {
 		t.Fatalf("pendingDomainCount() error: %v", err)

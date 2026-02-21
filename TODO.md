@@ -234,13 +234,13 @@ HTTP client won't generate these malformed proxy requests.
 
 ### 7.1 Update the existing 405 test
 
-- [ ] Rename `TestProxyApproval_NonCONNECTReturns405` to
+- [x] Rename `TestProxyApproval_NonCONNECTReturns405` to
   `TestProxyApproval_NonCONNECTForwardsPlainHTTP` (or similar)
-- [ ] Update assertion: the test currently sends
+- [x] Update assertion: the test currently sends
   `HEAD http://some-domain.example.com/` through the proxy and expects
   405; update to expect the correct new behavior (403 if domain is
   unlisted, or 200 if allowed, depending on harness config)
-- [ ] Verify no tunnel handler calls (plain HTTP should never invoke
+- [x] Verify no tunnel handler calls (plain HTTP should never invoke
   `TunnelHandler`)
 
 ### 7.2 E2E test for plain HTTP proxy
