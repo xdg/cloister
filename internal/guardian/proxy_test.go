@@ -16,6 +16,7 @@ import (
 
 	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
+	"github.com/xdg/cloister/internal/token"
 )
 
 // mockTokenValidator is a simple TokenValidator for testing.
@@ -1167,6 +1168,72 @@ func TestProxyServer_PolicyEngineSighup(t *testing.T) {
 			t.Errorf("expected PolicyEngine reload error to be logged, got: %s", logBuf.String())
 		}
 	})
+}
+
+func TestProxyServer_SighupReloadsTokensFromDisk(t *testing.T) {
+	// When a token file is manually deleted from disk and reload (SIGHUP) is
+	// triggered, the in-memory registry should revoke tokens that no longer
+	// have backing files on disk.
+
+	tokenDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	// Create a token store and persist a token.
+	store, err := token.NewStore(tokenDir)
+	if err != nil {
+		t.Fatalf("failed to create token store: %v", err)
+	}
+	if err := store.SaveFull("test-cloister", "tok-secret-123", "myproject", "/work"); err != nil {
+		t.Fatalf("failed to save token: %v", err)
+	}
+
+	// Load tokens into a registry (simulates guardian startup).
+	registry := token.NewRegistry()
+	tokens, err := store.Load()
+	if err != nil {
+		t.Fatalf("failed to load tokens: %v", err)
+	}
+	for tok, info := range tokens {
+		registry.RegisterFull(tok, info.CloisterName, info.ProjectName, info.WorktreePath)
+	}
+
+	// Sanity: token is valid before deletion.
+	if !registry.Validate("tok-secret-123") {
+		t.Fatal("token should be valid before deletion")
+	}
+
+	// Delete the token file from disk (simulates manual cleanup).
+	if err := store.Remove("test-cloister"); err != nil {
+		t.Fatalf("failed to remove token file: %v", err)
+	}
+
+	// Build a PolicyEngine that uses this registry as its project lister.
+	pe := newTestProxyPolicyEngine([]string{"example.com"}, nil)
+	pe.projectLister = registry
+	pe.configLoader = func() (*config.GlobalConfig, error) {
+		return &config.GlobalConfig{}, nil
+	}
+	pe.decisionLoader = func() (*config.Decisions, error) {
+		return &config.Decisions{}, nil
+	}
+
+	// Wire up the proxy server and trigger reload.
+	p := NewProxyServer(":0")
+	p.PolicyEngine = pe
+	p.TokenValidator = registry
+	p.OnTokenReload = func() {
+		if err := token.ReconcileWithStore(registry, store); err != nil {
+			t.Errorf("token reconciliation failed: %v", err)
+		}
+	}
+
+	p.handleSighup()
+
+	// After reload, the deleted token should no longer be valid.
+	if registry.Validate("tok-secret-123") {
+		t.Error("token deleted from disk should be revoked from registry after SIGHUP reload")
+	}
 }
 
 func TestProxyServer_PerProjectAllowlist(t *testing.T) {

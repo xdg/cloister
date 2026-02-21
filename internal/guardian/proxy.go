@@ -90,6 +90,11 @@ type ProxyServer struct {
 	// be invalidated when config changes. Called only when PolicyEngine is set.
 	OnReload func()
 
+	// OnTokenReload is an optional callback invoked during SIGHUP to reconcile
+	// the in-memory token registry with on-disk token storage. This handles
+	// tokens that were manually added or removed from disk.
+	OnTokenReload func()
+
 	server     *http.Server
 	listener   net.Listener
 	mu         sync.Mutex
@@ -170,6 +175,12 @@ func (p *ProxyServer) startSighupHandler() {
 
 // handleSighup is called when SIGHUP is received to reload configuration.
 func (p *ProxyServer) handleSighup() {
+	// Reconcile tokens with disk before reloading policies, so that
+	// revoked tokens are removed and new tokens are picked up.
+	if p.OnTokenReload != nil {
+		p.OnTokenReload()
+	}
+
 	// PolicyEngine path: reload all policies from disk.
 	if p.PolicyEngine != nil {
 		if pe, ok := p.PolicyEngine.(*PolicyEngine); ok {

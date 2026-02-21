@@ -123,3 +123,35 @@ func (s *Store) Load() (map[string]Info, error) {
 func (s *Store) Dir() string {
 	return s.dir
 }
+
+// ReconcileWithStore synchronizes the in-memory registry with the on-disk store.
+// Tokens present in the registry but missing from disk are revoked.
+// Tokens present on disk but missing from the registry are added.
+func ReconcileWithStore(registry *Registry, store *Store) error {
+	diskTokens, err := store.Load()
+	if err != nil {
+		return fmt.Errorf("failed to load tokens from disk: %w", err)
+	}
+
+	// Build set of disk tokens for fast lookup.
+	diskSet := make(map[string]struct{}, len(diskTokens))
+	for tok := range diskTokens {
+		diskSet[tok] = struct{}{}
+	}
+
+	// Revoke in-memory tokens that are no longer on disk.
+	for tok := range registry.List() {
+		if _, onDisk := diskSet[tok]; !onDisk {
+			registry.Revoke(tok)
+		}
+	}
+
+	// Add tokens from disk that are missing from the registry.
+	for tok, info := range diskTokens {
+		if !registry.Validate(tok) {
+			registry.RegisterFull(tok, info.CloisterName, info.ProjectName, info.WorktreePath)
+		}
+	}
+
+	return nil
+}

@@ -12,6 +12,7 @@ import (
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/guardian"
+	"github.com/xdg/cloister/internal/token"
 )
 
 // testContainerInfo holds info about a test container with optional proxy auth.
@@ -58,18 +59,32 @@ func createAuthenticatedTestContainer(t *testing.T, suffix string) testContainer
 	// Generate a unique project name per test to avoid cross-test state pollution
 	project := fmt.Sprintf("e2e-%s-%d", suffix, time.Now().UnixNano())
 
-	// Register a token for this container
-	token := fmt.Sprintf("test-token-%s-%d", suffix, time.Now().UnixNano())
-	if err := guardian.RegisterTokenFull(token, containerName, project, ""); err != nil {
+	// Register a token for this container.
+	// Persist to disk first (matching the production cloister start flow),
+	// then register via API so the guardian's in-memory registry picks it up.
+	tok := fmt.Sprintf("test-token-%s-%d", suffix, time.Now().UnixNano())
+	tokenDir, err := token.DefaultTokenDir()
+	if err != nil {
+		t.Fatalf("Failed to get token dir: %v", err)
+	}
+	store, err := token.NewStore(tokenDir)
+	if err != nil {
+		t.Fatalf("Failed to create token store: %v", err)
+	}
+	if err := store.SaveFull(containerName, tok, project, ""); err != nil {
+		t.Fatalf("Failed to persist token to disk: %v", err)
+	}
+	if err := guardian.RegisterTokenFull(tok, containerName, project, ""); err != nil {
 		t.Fatalf("Failed to register token: %v", err)
 	}
 	t.Cleanup(func() {
-		_ = guardian.RevokeToken(token)
+		_ = guardian.RevokeToken(tok)
+		_ = store.Remove(containerName)
 		// Clean up project decisions file if it was created
 		_ = os.Remove(config.ProjectDecisionPath(project))
 	})
 
-	return testContainerInfo{Name: containerName, Token: token, Project: project}
+	return testContainerInfo{Name: containerName, Token: tok, Project: project}
 }
 
 // saveGlobalDecisions saves the current global decisions file content and

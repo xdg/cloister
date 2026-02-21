@@ -81,6 +81,18 @@ func NewServer(registry *token.Registry, cfg *config.GlobalConfig, decisions *co
 	proxy.OnReload = func() {
 		s.patternCache.Clear()
 	}
+	proxy.OnTokenReload = func() {
+		store, err := token.NewStore(ContainerTokenDir)
+		if err != nil {
+			clog.Warn("SIGHUP token reload: failed to open token store: %v", err)
+			return
+		}
+		if err := token.ReconcileWithStore(s.registry, store); err != nil {
+			clog.Warn("SIGHUP token reload: %v", err)
+			return
+		}
+		clog.Info("SIGHUP token registry reconciled with disk")
+	}
 	api.TokenRevoker = s.policyEngine
 
 	execClient := setupExecutorClient()
