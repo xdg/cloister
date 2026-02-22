@@ -265,7 +265,13 @@ linters:
     gosec:
       excludes:
         - G104  # Duplicates errcheck
+        - G115  # Integer overflow conversion — fd casts are safe
+        - G117  # Field name matches secret pattern — intentional for auth structs
+        - G204  # Subprocess with variable — we wrap docker/git CLIs
         - G304  # File path from variable — too many false positives
+        - G702  # Command injection via taint — we wrap docker/git CLIs
+        - G703  # Path traversal via taint — tmpfiles from os.CreateTemp are safe
+        - G704  # SSRF via taint — internal guardian requests with controlled URLs
       config:
         global:
           audit: false  # Set true for stricter checks in CI

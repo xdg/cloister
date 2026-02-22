@@ -234,7 +234,7 @@ func (h *EventHub) BroadcastDomainRequestRemoved(id string) {
 // For multiline data, each line must be prefixed with "data: " per the SSE spec.
 func FormatSSE(event Event) string {
 	var buf bytes.Buffer
-	buf.WriteString(fmt.Sprintf("event: %s\n", event.Type))
+	fmt.Fprintf(&buf, "event: %s\n", event.Type)
 
 	// Split data into lines and prefix each with "data: "
 	lines := bytes.Split([]byte(event.Data), []byte("\n"))

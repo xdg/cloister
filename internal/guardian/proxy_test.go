@@ -35,18 +35,18 @@ func newMockTokenValidator(tokens ...string) *mockTokenValidator {
 	return v
 }
 
-func (v *mockTokenValidator) Validate(token string) bool {
-	return v.validTokens[token]
+func (v *mockTokenValidator) Validate(tok string) bool {
+	return v.validTokens[tok]
 }
 
 // mockPolicyChecker is a lightweight PolicyChecker for proxy tests that
 // delegates to a caller-provided function.
 type mockPolicyChecker struct {
-	checkFunc func(token, project, domain string) Decision
+	checkFunc func(tok, project, domain string) Decision
 }
 
-func (m *mockPolicyChecker) Check(token, project, domain string) Decision {
-	return m.checkFunc(token, project, domain)
+func (m *mockPolicyChecker) Check(tok, project, domain string) Decision {
+	return m.checkFunc(tok, project, domain)
 }
 
 // newTestProxyPolicyEngine creates a PolicyEngine for proxy tests with
@@ -796,10 +796,10 @@ func TestProxyServer_Authentication(t *testing.T) {
 
 			// Build CONNECT request with optional auth header
 			var reqBuilder strings.Builder
-			reqBuilder.WriteString(fmt.Sprintf("CONNECT %s HTTP/1.1\r\n", upstreamAddr))
-			reqBuilder.WriteString(fmt.Sprintf("Host: %s\r\n", upstreamAddr))
+			fmt.Fprintf(&reqBuilder, "CONNECT %s HTTP/1.1\r\n", upstreamAddr)
+			fmt.Fprintf(&reqBuilder, "Host: %s\r\n", upstreamAddr)
 			if tc.authHeader != "" {
-				reqBuilder.WriteString(fmt.Sprintf("Proxy-Authorization: %s\r\n", tc.authHeader))
+				fmt.Fprintf(&reqBuilder, "Proxy-Authorization: %s\r\n", tc.authHeader)
 			}
 			reqBuilder.WriteString("\r\n")
 
@@ -1368,17 +1368,17 @@ func TestProxyServer_PerProjectAllowlist(t *testing.T) {
 
 // mockDomainApprover is a test implementation of DomainApprover.
 type mockDomainApprover struct {
-	approveFunc func(project, cloister, domain, token string) (DomainApprovalResult, error)
+	approveFunc func(project, cloister, domain, tok string) (DomainApprovalResult, error)
 	callCount   int
 	mu          sync.Mutex
 }
 
-func (m *mockDomainApprover) RequestApproval(project, cloister, domain, token string) (DomainApprovalResult, error) {
+func (m *mockDomainApprover) RequestApproval(project, cloister, domain, tok string) (DomainApprovalResult, error) {
 	m.mu.Lock()
 	m.callCount++
 	m.mu.Unlock()
 	if m.approveFunc != nil {
-		return m.approveFunc(project, cloister, domain, token)
+		return m.approveFunc(project, cloister, domain, tok)
 	}
 	return DomainApprovalResult{Approved: false}, nil
 }
@@ -2120,7 +2120,7 @@ func TestProxyServer_MockPolicyChecker(t *testing.T) {
 // HTTP request with an absolute URI (forward-proxy style). It returns the
 // response status code and body. If token is non-empty, a Proxy-Authorization
 // header with Basic auth (username "cloister") is included.
-func sendRawHTTPViaProxy(t *testing.T, proxyAddr, method, rawURL, token string) (int, string, error) {
+func sendRawHTTPViaProxy(t *testing.T, proxyAddr, method, rawURL, tok string) (_ int, _ string, _ error) { //nolint:unparam // test helper returns body for future use
 	t.Helper()
 
 	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", proxyAddr)
@@ -2141,11 +2141,11 @@ func sendRawHTTPViaProxy(t *testing.T, proxyAddr, method, rawURL, token string) 
 	host := parsed.Host
 
 	var reqBuilder strings.Builder
-	reqBuilder.WriteString(fmt.Sprintf("%s %s HTTP/1.1\r\n", method, rawURL))
-	reqBuilder.WriteString(fmt.Sprintf("Host: %s\r\n", host))
-	if token != "" {
-		auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + token))
-		reqBuilder.WriteString(fmt.Sprintf("Proxy-Authorization: Basic %s\r\n", auth))
+	fmt.Fprintf(&reqBuilder, "%s %s HTTP/1.1\r\n", method, rawURL)
+	fmt.Fprintf(&reqBuilder, "Host: %s\r\n", host)
+	if tok != "" {
+		auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + tok))
+		fmt.Fprintf(&reqBuilder, "Proxy-Authorization: Basic %s\r\n", auth)
 	}
 	reqBuilder.WriteString("Connection: close\r\n")
 	reqBuilder.WriteString("\r\n")
@@ -2353,7 +2353,7 @@ func TestProxyServer_PlainHTTP_DomainApproval(t *testing.T) {
 	)
 
 	approver := &mockDomainApprover{
-		approveFunc: func(project, cloister, domain, token string) (DomainApprovalResult, error) {
+		approveFunc: func(_, _, domain, _ string) (DomainApprovalResult, error) {
 			mu.Lock()
 			capturedDomain = domain
 			mu.Unlock()
@@ -2471,7 +2471,7 @@ func TestProxyServer_PlainHTTP_PolicyCheck(t *testing.T) {
 
 // sendRawHTTPViaProxyFull sends a plain HTTP request through the proxy with full control
 // over method, URL, headers, and body. Returns status code, response headers, and body.
-func sendRawHTTPViaProxyFull(t *testing.T, proxyAddr, method, rawURL, token string, headers map[string]string, body string) (int, http.Header, string, error) {
+func sendRawHTTPViaProxyFull(t *testing.T, proxyAddr, method, rawURL, tok string, headers map[string]string, body string) (_ int, _ http.Header, _ string, _ error) { //nolint:revive,unparam // test helper with naturally many params
 	t.Helper()
 
 	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", proxyAddr)
@@ -2492,17 +2492,17 @@ func sendRawHTTPViaProxyFull(t *testing.T, proxyAddr, method, rawURL, token stri
 	host := parsed.Host
 
 	var reqBuilder strings.Builder
-	reqBuilder.WriteString(fmt.Sprintf("%s %s HTTP/1.1\r\n", method, rawURL))
-	reqBuilder.WriteString(fmt.Sprintf("Host: %s\r\n", host))
-	if token != "" {
-		auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + token))
-		reqBuilder.WriteString(fmt.Sprintf("Proxy-Authorization: Basic %s\r\n", auth))
+	fmt.Fprintf(&reqBuilder, "%s %s HTTP/1.1\r\n", method, rawURL)
+	fmt.Fprintf(&reqBuilder, "Host: %s\r\n", host)
+	if tok != "" {
+		auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + tok))
+		fmt.Fprintf(&reqBuilder, "Proxy-Authorization: Basic %s\r\n", auth)
 	}
 	for k, v := range headers {
-		reqBuilder.WriteString(fmt.Sprintf("%s: %s\r\n", k, v))
+		fmt.Fprintf(&reqBuilder, "%s: %s\r\n", k, v)
 	}
 	if body != "" {
-		reqBuilder.WriteString(fmt.Sprintf("Content-Length: %d\r\n", len(body)))
+		fmt.Fprintf(&reqBuilder, "Content-Length: %d\r\n", len(body))
 	}
 	reqBuilder.WriteString("Connection: close\r\n")
 	reqBuilder.WriteString("\r\n")
@@ -2802,7 +2802,7 @@ func TestProxyServer_PlainHTTP_NoProxyAuthToUpstream(t *testing.T) {
 
 func TestProxyServer_PlainHTTP_UpstreamRefused(t *testing.T) {
 	// Create a listener to grab a port, then close it so connections are refused.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create listener: %v", err)
 	}
@@ -2839,7 +2839,7 @@ func TestProxyServer_PlainHTTP_UpstreamRefused(t *testing.T) {
 
 func TestProxyServer_PlainHTTP_UpstreamTimeout(t *testing.T) {
 	// Create a TCP listener that accepts connections but never responds.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	ln, err := (&net.ListenConfig{}).Listen(context.Background(), "tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("failed to create listener: %v", err)
 	}
@@ -2904,7 +2904,7 @@ func TestProxyServer_PlainHTTP_UpstreamTimeout(t *testing.T) {
 // sendRawRequestLine sends an arbitrary raw HTTP request line through the proxy
 // without any URL parsing. This allows sending malformed or unusual request lines
 // that sendRawHTTPViaProxy cannot produce (relative URIs, HTTPS scheme, empty host).
-func sendRawRequestLine(t *testing.T, proxyAddr, requestLine, hostHeader, token string) (int, string, error) {
+func sendRawRequestLine(t *testing.T, proxyAddr, requestLine, hostHeader, tok string) (_ int, _ string, _ error) { //nolint:unparam // test helper returns body for future use
 	t.Helper()
 
 	conn, err := (&net.Dialer{Timeout: 5 * time.Second}).DialContext(context.Background(), "tcp", proxyAddr)
@@ -2920,11 +2920,11 @@ func sendRawRequestLine(t *testing.T, proxyAddr, requestLine, hostHeader, token 
 	var reqBuilder strings.Builder
 	reqBuilder.WriteString(requestLine + "\r\n")
 	if hostHeader != "" {
-		reqBuilder.WriteString(fmt.Sprintf("Host: %s\r\n", hostHeader))
+		fmt.Fprintf(&reqBuilder, "Host: %s\r\n", hostHeader)
 	}
-	if token != "" {
-		auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + token))
-		reqBuilder.WriteString(fmt.Sprintf("Proxy-Authorization: Basic %s\r\n", auth))
+	if tok != "" {
+		auth := base64.StdEncoding.EncodeToString([]byte("cloister:" + tok))
+		fmt.Fprintf(&reqBuilder, "Proxy-Authorization: Basic %s\r\n", auth)
 	}
 	reqBuilder.WriteString("Connection: close\r\n")
 	reqBuilder.WriteString("\r\n")

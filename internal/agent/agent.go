@@ -355,7 +355,7 @@ func MergeTOMLConfig(hostFileName string, _ []string, forcedValues map[string]an
 	sort.Strings(sectionNames)
 
 	for _, section := range sectionNames {
-		result.WriteString(fmt.Sprintf("\n[%s]\n", section))
+		fmt.Fprintf(&result, "\n[%s]\n", section)
 		for key, value := range sections[section] {
 			result.WriteString(formatTOMLValue(key, value))
 		}

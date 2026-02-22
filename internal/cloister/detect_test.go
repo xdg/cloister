@@ -45,7 +45,7 @@ func TestDetectName(t *testing.T) {
 		origDetectGitRoot := detectGitRoot
 		t.Cleanup(func() { detectGitRoot = origDetectGitRoot })
 
-		detectGitRoot = func(path string) (string, error) {
+		detectGitRoot = func(_ string) (string, error) {
 			return "", errors.New("not a git repo")
 		}
 
@@ -66,10 +66,10 @@ func TestDetectName(t *testing.T) {
 			projectName = origProjectName
 		})
 
-		detectGitRoot = func(path string) (string, error) {
+		detectGitRoot = func(_ string) (string, error) {
 			return "/fake/root", nil
 		}
-		projectName = func(gitRoot string) (string, error) {
+		projectName = func(_ string) (string, error) {
 			return "", errors.New("no remote configured")
 		}
 
