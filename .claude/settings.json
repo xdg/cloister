@@ -4,5 +4,18 @@
       "Skill(d2-diagram)",
       "Bash(d2:*)"
     ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pre-commit-tests.sh"
+          }
+        ]
+      }
+    ]
   }
 }
