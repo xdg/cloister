@@ -480,3 +480,68 @@ func TestAPIServer_RevokeTokenWithNilTokenRevoker(t *testing.T) {
 		t.Error("token was not revoked from registry")
 	}
 }
+
+func TestAPIServer_OnTokenRegistered(t *testing.T) {
+	registry := newMockRegistry()
+	api := NewAPIServer(":0", registry)
+
+	var callbackProject string
+	var callbackCount int
+	api.OnTokenRegistered = func(projectName string) {
+		callbackProject = projectName
+		callbackCount++
+	}
+
+	if err := api.Start(); err != nil {
+		t.Fatalf("failed to start API server: %v", err)
+	}
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = api.Stop(ctx)
+	}()
+
+	baseURL := "http://" + api.ListenAddr()
+	client := noProxyClient()
+
+	// Register with a project — callback should fire.
+	body := `{"token":"tok1","cloister":"c1","project":"myproj"}`
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/tokens", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+	if callbackCount != 1 {
+		t.Errorf("expected callback count 1, got %d", callbackCount)
+	}
+	if callbackProject != "myproj" {
+		t.Errorf("expected callback project %q, got %q", "myproj", callbackProject)
+	}
+
+	// Register without a project — callback should NOT fire.
+	callbackCount = 0
+	body = `{"token":"tok2","cloister":"c2"}`
+	req, err = http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/tokens", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = client.Do(req)
+	if err != nil {
+		t.Fatalf("request failed: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	if callbackCount != 0 {
+		t.Errorf("expected callback count 0 for no-project registration, got %d", callbackCount)
+	}
+}

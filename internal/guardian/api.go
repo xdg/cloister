@@ -46,6 +46,11 @@ type APIServer struct {
 	// If nil, no session cleanup is performed.
 	TokenRevoker TokenRevoker
 
+	// OnTokenRegistered is called after a token is successfully registered
+	// with a non-empty project name. This allows the PolicyEngine to load
+	// the project's policy eagerly.
+	OnTokenRegistered func(projectName string)
+
 	server   *http.Server
 	listener net.Listener
 	mu       sync.Mutex
@@ -190,6 +195,10 @@ func (a *APIServer) handleRegisterToken(w http.ResponseWriter, r *http.Request) 
 	}
 
 	a.Registry.RegisterFull(req.Token, req.Cloister, req.Project, req.Worktree)
+
+	if req.Project != "" && a.OnTokenRegistered != nil {
+		a.OnTokenRegistered(req.Project)
+	}
 
 	a.writeJSON(w, http.StatusCreated, statusResponse{Status: "registered"})
 }

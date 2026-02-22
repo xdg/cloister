@@ -627,3 +627,52 @@ func TestPolicyEngine_ReloadAll(t *testing.T) {
 		t.Errorf("proj-initial.com after reload: got %v, want Allow", got)
 	}
 }
+
+func TestPolicyEngine_EnsureProject(t *testing.T) {
+	projectCfgLoader := func(name string) (*config.ProjectConfig, error) {
+		if name == "late-project" {
+			return &config.ProjectConfig{
+				Proxy: config.ProjectProxyConfig{
+					Allow: []config.AllowEntry{{Domain: "late-domain.com"}},
+				},
+			}, nil
+		}
+		return &config.ProjectConfig{}, nil
+	}
+	projectDecLoader := func(_ string) (*config.Decisions, error) {
+		return &config.Decisions{}, nil
+	}
+
+	pe, err := NewPolicyEngine(
+		&config.GlobalConfig{}, &config.Decisions{}, nil,
+		WithProjectConfigLoader(projectCfgLoader),
+		WithProjectDecisionLoader(projectDecLoader),
+	)
+	if err != nil {
+		t.Fatalf("NewPolicyEngine: %v", err)
+	}
+
+	// Before EnsureProject, project domain is not loaded.
+	if got := pe.Check("tok", "late-project", "late-domain.com"); got != AskHuman {
+		t.Fatalf("before EnsureProject: got %v, want AskHuman", got)
+	}
+
+	// EnsureProject loads the project policy.
+	if err := pe.EnsureProject("late-project"); err != nil {
+		t.Fatalf("EnsureProject: %v", err)
+	}
+
+	if got := pe.Check("tok", "late-project", "late-domain.com"); got != Allow {
+		t.Errorf("after EnsureProject: got %v, want Allow", got)
+	}
+
+	// Calling again is a no-op (idempotent).
+	if err := pe.EnsureProject("late-project"); err != nil {
+		t.Fatalf("EnsureProject second call: %v", err)
+	}
+
+	// Empty name is a no-op.
+	if err := pe.EnsureProject(""); err != nil {
+		t.Fatalf("EnsureProject empty: %v", err)
+	}
+}

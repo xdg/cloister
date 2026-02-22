@@ -94,6 +94,11 @@ func NewServer(registry *token.Registry, cfg *config.GlobalConfig, decisions *co
 		clog.Info("SIGHUP token registry reconciled with disk")
 	}
 	api.TokenRevoker = s.policyEngine
+	api.OnTokenRegistered = func(projectName string) {
+		if err := s.policyEngine.EnsureProject(projectName); err != nil {
+			clog.Warn("failed to load project policy on token register: %v", err)
+		}
+	}
 
 	execClient := setupExecutorClient()
 

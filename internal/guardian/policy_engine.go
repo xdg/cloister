@@ -573,6 +573,23 @@ func containsEntry(entries []config.AllowEntry, entry config.AllowEntry) bool {
 	return false
 }
 
+// EnsureProject loads a project's policy if it hasn't been loaded yet.
+// This is called when a new token is registered after the PolicyEngine was
+// constructed, so that project-scoped allowlist entries are available
+// immediately without waiting for a domain approval or SIGHUP.
+func (pe *PolicyEngine) EnsureProject(name string) error {
+	if name == "" {
+		return nil
+	}
+	pe.mu.RLock()
+	_, exists := pe.projects[name]
+	pe.mu.RUnlock()
+	if exists {
+		return nil
+	}
+	return pe.ReloadProject(name)
+}
+
 // RevokeToken removes all session-scoped decisions for the given token.
 func (pe *PolicyEngine) RevokeToken(token string) {
 	pe.mu.Lock()
