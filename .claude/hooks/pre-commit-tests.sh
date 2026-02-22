@@ -24,17 +24,17 @@ if ! echo "$COMMAND" | grep -qE '\bgit\s+commit\b'; then
     exit 0
 fi
 
-# Run the full test suite, capturing output for the deny response.
-if TEST_OUTPUT=$(make test-all 2>&1); then
-    exit 0
-fi
-
-# Tests failed - deny the commit with test output as context.
-jq -n --arg output "$TEST_OUTPUT" '{
-    hookSpecificOutput: {
-        hookEventName: "PreToolUse",
-        permissionDecision: "deny",
-        permissionDecisionReason: "make test-all failed - fix tests before committing",
-        additionalContext: ("Test output:\n" + $output)
-    }
-}'
+# Run fmt, lint, then tests — stop at first failure.
+for target in fmt lint test-all; do
+    if ! STEP_OUTPUT=$(make "$target" 2>&1); then
+        jq -n --arg target "$target" --arg output "$STEP_OUTPUT" '{
+            hookSpecificOutput: {
+                hookEventName: "PreToolUse",
+                permissionDecision: "deny",
+                permissionDecisionReason: ("make " + $target + " failed - fix before committing"),
+                additionalContext: ("Output:\n" + $output)
+            }
+        }'
+        exit 0
+    fi
+done
