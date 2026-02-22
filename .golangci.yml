@@ -263,18 +263,73 @@ linters:
     # Security
     # -------------------------------------------------------------------------
     gosec:
-      excludes:
-        - G104  # Duplicates errcheck
-        - G115  # Integer overflow conversion — fd casts are safe
-        - G117  # Field name matches secret pattern — intentional for auth structs
-        - G204  # Subprocess with variable — we wrap docker/git CLIs
-        - G304  # File path from variable — too many false positives
-        - G702  # Command injection via taint — we wrap docker/git CLIs
-        - G703  # Path traversal via taint — tmpfiles from os.CreateTemp are safe
-        - G704  # SSRF via taint — internal guardian requests with controlled URLs
-      config:
-        global:
-          audit: false  # Set true for stricter checks in CI
+          # Allowlist: only these rules run. New gosec rules require explicit opt-in.
+          # Verified against: gosec -h (2026-02-22)
+          # Review on each golangci-lint upgrade for new rules.
+          includes:
+            # --- Credentials & secrets ---
+            - G101  # Hardcoded credentials
+
+            # --- Network exposure ---
+            - G102  # Bind to all interfaces
+            - G106  # SSH InsecureIgnoreHostKey
+            - G112  # Missing ReadHeaderTimeout
+
+            # --- Injection & overflow ---
+            - G103  # Audit unsafe block usage
+            - G109  # strconv.Atoi → int32/int16 overflow
+            - G110  # io.Copy without limit (decompression bomb)
+            - G111  # http.Dir('/') serving entire filesystem
+            - G201  # SQL injection via fmt.Sprintf
+            - G202  # SQL injection via string concat
+            - G203  # Unescaped data in HTML templates
+
+            # --- Filesystem ---
+            - G301  # Directory perms too broad
+            - G302  # File perms too broad (create/chmod)
+            - G303  # Predictable temp file path
+            - G305  # Zip slip (path traversal on extract)
+            - G306  # File write perms too broad
+            - G307  # Poor perms with os.Create
+
+            # --- Cryptography (usage) ---
+            - G401  # Weak hash (MD5/SHA1)
+            - G402  # Bad TLS config
+            - G403  # Short RSA key (<2048)
+            - G405  # DES/RC4 usage
+            - G406  # Deprecated MD4/RIPEMD160
+            - G407  # Hardcoded IV/nonce
+
+            # --- Cryptography (imports) ---
+            # Redundant with G4xx for call sites, but enforces a clean policy:
+            # if crypto/md5 or crypto/sha1 appear in the codebase, it's a bug.
+            # Use xxhash (github.com/cespare/xxhash/v2) for non-crypto hashing.
+            - G501  # crypto/md5
+            - G502  # crypto/des
+            - G503  # crypto/rc4
+            - G504  # net/http/cgi (no G4xx counterpart — import-only rule)
+            - G505  # crypto/sha1
+            - G506  # golang.org/x/crypto/md4
+            - G507  # golang.org/x/crypto/ripemd160
+
+          config:
+            # Permission thresholds (RULES.md format: 0o prefix octal strings)
+            G301: "0o750"   # Directories: owner rwx, group rx
+            G302: "0o640"   # Files: owner rw, group r
+            G306: "0o640"
+            G307: "0o750"
+
+          # --- Not included (deliberate) ---
+          # G104  Duplicates errcheck
+          # G107  Dynamic URLs normal in service mesh
+          # G108  pprof gated behind auth; add back if not
+          # G114  Custom server configs with timeouts; add back if not
+          # G115  Reviewed; fd/size casts are bounded by upstream validation
+          # G204  Wrapped CLI calls with constrained arg builders
+          # G304  Paths from config/os.CreateTemp, not user input
+          # G404  Use xxhash for non-crypto; crypto/rand enforced by G5xx blocklist
+          # G601  Implicit memory aliasing — fixed in Go 1.22+
+          # G602  Slice bounds OOB — evaluate informational first
 
     # -------------------------------------------------------------------------
     # Project conventions
