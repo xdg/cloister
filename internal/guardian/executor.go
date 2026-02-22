@@ -4,6 +4,7 @@ package guardian
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -65,7 +66,7 @@ func StartExecutor() (*ExecutorInfo, error) {
 	}
 
 	// Start the executor process in the background
-	cmd := exec.CommandContext(context.Background(), executablePath, "executor", "run") //nolint:gosec // G204: args are not user-controlled
+	cmd := exec.CommandContext(context.Background(), executablePath, "executor", "run")
 	cmd.Env = append(os.Environ(), SharedSecretEnvVar+"="+secret)
 	// Detach from parent process group so it survives parent exit
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -83,7 +84,7 @@ func StartExecutor() (*ExecutorInfo, error) {
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		state, err = executor.LoadDaemonState()
-		if err == nil && state != nil && state.TCPPort > 0 {
+		if err == nil && state.TCPPort > 0 {
 			// Daemon state written with port
 			break
 		}
@@ -91,7 +92,7 @@ func StartExecutor() (*ExecutorInfo, error) {
 	}
 
 	// Final check - verify daemon state was written with port
-	if state == nil || state.TCPPort == 0 {
+	if state == nil || errors.Is(err, executor.ErrNoState) || state.TCPPort == 0 {
 		// Executor may have failed to start, try to clean up
 		_ = cmd.Process.Kill()
 		return nil, fmt.Errorf("executor failed to start (no port in daemon state)")
@@ -109,13 +110,12 @@ func StartExecutor() (*ExecutorInfo, error) {
 // Returns nil if no executor is running (idempotent).
 func StopExecutor() error {
 	state, err := executor.LoadDaemonState()
-	if err != nil {
-		return fmt.Errorf("failed to load executor state: %w", err)
-	}
-
-	if state == nil {
+	if errors.Is(err, executor.ErrNoState) {
 		// No executor running
 		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to load executor state: %w", err)
 	}
 
 	// Send SIGTERM for graceful shutdown

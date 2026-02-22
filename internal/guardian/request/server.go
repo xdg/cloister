@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"slices"
 	"sync"
 	"time"
 
@@ -184,11 +185,9 @@ func (s *Server) parseAndValidateRequest(w http.ResponseWriter, r *http.Request)
 		return nil
 	}
 
-	for _, arg := range req.Args {
-		if containsNUL(arg) {
-			s.writeJSON(w, http.StatusBadRequest, CommandResponse{Status: "error", Reason: "arguments cannot contain NUL bytes"})
-			return nil
-		}
+	if slices.ContainsFunc(req.Args, containsNUL) {
+		s.writeJSON(w, http.StatusBadRequest, CommandResponse{Status: "error", Reason: "arguments cannot contain NUL bytes"})
+		return nil
 	}
 
 	info, ok := CloisterInfo(r.Context())
@@ -325,7 +324,7 @@ func (s *Server) handleManualApprove(w http.ResponseWriter, vr *validatedRequest
 }
 
 // writeJSON writes a JSON response with the given status code.
-func (s *Server) writeJSON(w http.ResponseWriter, status int, v interface{}) {
+func (s *Server) writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	if err := json.NewEncoder(w).Encode(v); err != nil {

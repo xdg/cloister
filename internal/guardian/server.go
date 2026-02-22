@@ -183,7 +183,11 @@ func (s *Server) setupPolicyEngine(globalDecisions *config.Decisions) *PolicyEng
 	if err != nil {
 		clog.Warn("failed to create policy engine: %v", err)
 		// Create a minimal engine with defaults; this cannot fail with valid inputs.
-		pe, _ = NewPolicyEngine(config.DefaultGlobalConfig(), &config.Decisions{}, nil) //nolint:errcheck
+		var fallbackErr error
+		pe, fallbackErr = NewPolicyEngine(config.DefaultGlobalConfig(), &config.Decisions{}, nil)
+		if fallbackErr != nil {
+			clog.Warn("failed to create fallback policy engine: %v", fallbackErr)
+		}
 	}
 	return pe
 }

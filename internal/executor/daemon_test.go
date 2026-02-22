@@ -1,6 +1,7 @@
 package executor_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,25 +48,19 @@ func TestDaemonState_SaveLoadRemove(t *testing.T) {
 	}
 
 	// Verify state is gone
-	loaded, err = executor.LoadDaemonState()
-	if err != nil {
-		t.Fatalf("executor.LoadDaemonState() after remove error: %v", err)
-	}
-	if loaded != nil {
-		t.Error("Expected nil state after removal")
+	_, err = executor.LoadDaemonState()
+	if !errors.Is(err, executor.ErrNoState) {
+		t.Errorf("executor.LoadDaemonState() after remove: got %v, want ErrNoState", err)
 	}
 }
 
 func TestDaemonState_LoadNonExistent(t *testing.T) {
 	testutil.IsolateXDGDirs(t)
 
-	// Loading non-existent state should return nil, no error
-	state, err := executor.LoadDaemonState()
-	if err != nil {
-		t.Fatalf("executor.LoadDaemonState() error: %v", err)
-	}
-	if state != nil {
-		t.Error("Expected nil state for non-existent file")
+	// Loading non-existent state should return ErrNoState
+	_, err := executor.LoadDaemonState()
+	if !errors.Is(err, executor.ErrNoState) {
+		t.Errorf("executor.LoadDaemonState() got %v, want ErrNoState", err)
 	}
 }
 
@@ -142,8 +137,8 @@ func TestCleanupStaleState(t *testing.T) {
 	}
 
 	// Verify state is gone
-	loaded, _ := executor.LoadDaemonState()
-	if loaded != nil {
+	_, err = executor.LoadDaemonState()
+	if !errors.Is(err, executor.ErrNoState) {
 		t.Error("Expected state to be cleaned up")
 	}
 

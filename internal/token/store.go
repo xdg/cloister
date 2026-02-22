@@ -1,5 +1,5 @@
 // Package token provides token generation, validation, and persistence.
-package token //nolint:revive // intentional: does not conflict at import path level
+package token
 
 import (
 	"encoding/json"

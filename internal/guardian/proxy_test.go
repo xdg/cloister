@@ -52,7 +52,7 @@ func (m *mockPolicyChecker) Check(tok, project, domain string) Decision {
 // newTestProxyPolicyEngine creates a PolicyEngine for proxy tests with
 // the given global allow domains. No project lister or file loaders are
 // configured (session/project/global reload not needed for basic proxy tests).
-func newTestProxyPolicyEngine(allowDomains, denyDomains []string) *PolicyEngine { //nolint:unparam // denyDomains used by callers constructing deny-specific scenarios
+func newTestProxyPolicyEngine(allowDomains, denyDomains []string) *PolicyEngine {
 	return &PolicyEngine{
 		global: ProxyPolicy{
 			Allow: NewDomainSet(allowDomains, nil),
@@ -589,7 +589,7 @@ func TestProxyServer_TunnelIdleTimeout(t *testing.T) {
 		}()
 
 		// Send data at intervals less than the timeout to keep connection alive
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			time.Sleep(50 * time.Millisecond)
 			// Write to the source write end
 			_, err := srcWrite.Write([]byte("ping"))
@@ -2527,7 +2527,7 @@ func sendRawHTTPViaProxyFull(t *testing.T, proxyAddr, method, rawURL, tok string
 func TestProxyServer_PlainHTTP_ForwardGET(t *testing.T) {
 	// Start a mock upstream that echoes request details as JSON.
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		info := map[string]interface{}{
+		info := map[string]any{
 			"method":  r.Method,
 			"url":     r.URL.String(),
 			"host":    r.Host,
@@ -2568,7 +2568,7 @@ func TestProxyServer_PlainHTTP_ForwardGET(t *testing.T) {
 		t.Fatalf("expected 200, got %d; body: %s", status, respBody)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal([]byte(respBody), &result); err != nil {
 		t.Fatalf("failed to parse response JSON: %v", err)
 	}

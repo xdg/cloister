@@ -30,6 +30,7 @@ linters:
     - errorlint       # Correct error wrapping/comparison patterns
     - wrapcheck       # Force error wrapping at package boundaries
     - nilerr          # Catches `if err != nil { return nil }` bugs
+    - nilnil          # Catches `return nil, nil` — ambiguous success/failure
 
     # --- Function complexity ---
     - funlen          # Max function length
@@ -44,9 +45,13 @@ linters:
     - staticcheck     # The gold standard static analyzer
     - unused          # Dead code detection
     - ineffassign     # Dead assignment detection
+    - exhaustive      # Exhaustive switch/map on enum types
+    - reassign        # Detects reassignment of package-level vars from other packages
+    - modernize       # Suggests modern Go idioms
 
     # --- Style and naming ---
     - misspell        # Typos in comments/strings
+    - dupword         # Catches repeated words ("the the") in comments/strings
     - predeclared     # Shadowing of predeclared identifiers (e.g., `error`, `len`)
 
     # --- Security/correctness ---
@@ -57,8 +62,13 @@ linters:
     # --- Concurrency ---
     - copyloopvar     # Loop variable capture bugs (pre-Go 1.22 patterns)
 
+    # --- Lint hygiene ---
+    - nolintlint      # Require explanation and specific linter for //nolint directives
+
     # --- Project conventions ---
     - forbidigo       # Forbid fmt.Print* and log.* outside designated packages
+    - depguard        # Deny dangerous/deprecated imports
+    - gomoddirectives # Prevent local replace directives in go.mod
 
   exclusions:
     rules:
@@ -73,6 +83,8 @@ linters:
           - gosec
           - bodyclose
           - forbidigo
+          - depguard
+          - nilnil
 
       # Generated code — skip entirely.
       - path: \.pb\.go$
@@ -127,6 +139,8 @@ linters:
         - os.RemoveAll
         - (*os.Process).Kill
         - (*net.Listener).Close
+        # Shutdown — nothing actionable if log close fails
+        - github.com/xdg/cloister/internal/clog.Close
 
     errorlint:
       errorf: true
@@ -173,7 +187,6 @@ linters:
         - performance
         - opinionated
       disabled-checks:
-        - whyNoLint
         - hugeParam      # Agents shouldn't be forced to use pointers everywhere
 
     revive:
@@ -256,8 +269,16 @@ linters:
       checks:
         - "all"
 
+    govet:
+      enable:
+        - nilness       # Redundant/impossible nil comparisons
+        - unusedwrite   # Writes to variables that are never read
+
     misspell:
       locale: US
+
+    exhaustive:
+      default-signifies-exhaustive: true  # `default:` case counts as exhaustive
 
     # -------------------------------------------------------------------------
     # Security
@@ -342,6 +363,26 @@ linters:
           msg: "use clog.* for logging"
       exclude-godoc-examples: true
       analyze-types: true
+
+    nolintlint:
+      require-explanation: true
+      require-specific: true   # Must name the linter: //nolint:errcheck // reason
+
+    depguard:
+      rules:
+        main:
+          deny:
+            - pkg: "math/rand$"
+              desc: "use math/rand/v2 for non-crypto randomness"
+            - pkg: "github.com/pkg/errors"
+              desc: "use stdlib errors + fmt.Errorf with %w"
+            - pkg: "io/ioutil"
+              desc: "deprecated since Go 1.16 — use io and os packages"
+
+    gomoddirectives:
+      replace-local: false       # No local replace directives
+      toolchain-forbidden: false
+      go-debug-forbidden: true
 
 formatters:
   enable:

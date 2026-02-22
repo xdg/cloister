@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os/exec"
 	"path/filepath"
 
@@ -146,7 +147,7 @@ func (a *CodexAgent) Name() string {
 // It returns credential env vars without requiring a running container.
 func (a *CodexAgent) GetContainerEnvVars(agentCfg *config.AgentConfig) (map[string]string, error) {
 	if agentCfg == nil || agentCfg.AuthMethod == "" {
-		return nil, nil
+		return map[string]string{}, nil
 	}
 
 	injector := a.Injector
@@ -195,9 +196,7 @@ func (a *CodexAgent) Setup(containerName string, agentCfg *config.AgentConfig) (
 		}
 
 		// Collect env vars for container
-		for key, value := range injectionConfig.EnvVars {
-			result.EnvVars[key] = value
-		}
+		maps.Copy(result.EnvVars, injectionConfig.EnvVars)
 
 		// Write credential files to container (if any)
 		for destPath, content := range injectionConfig.Files {
@@ -229,7 +228,7 @@ func appendCodexCloisterRules(containerName string) error {
 	agentsMDPath := codexDir + "/" + codexAgentsMD
 
 	// Create .codex directory if it doesn't exist
-	mkdirCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "mkdir", "-p", codexDir) //nolint:gosec // G204: args are not user-controlled
+	mkdirCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "mkdir", "-p", codexDir)
 	if output, err := mkdirCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create .codex directory: %w: %s", err, output)
 	}
@@ -237,7 +236,7 @@ func appendCodexCloisterRules(containerName string) error {
 	// Append to AGENTS.md (create if doesn't exist)
 	// Use a marker to avoid duplicating the content on repeated runs
 	marker := "# Cloister Environment"
-	appendCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "sh", "-c", //nolint:gosec // G204: args are not user-controlled
+	appendCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "sh", "-c",
 		fmt.Sprintf(`grep -qF %q %s 2>/dev/null || echo %q >> %s`,
 			marker, agentsMDPath, codexCloisterRulesContent, agentsMDPath))
 	if output, err := appendCmd.CombinedOutput(); err != nil {
@@ -261,13 +260,9 @@ func mergeCodexConfig(containerName string, skipPerms bool) error {
 
 	// Build forced values
 	forcedValues := make(map[string]any)
-	for k, v := range codexConfigForcedValues {
-		forcedValues[k] = v
-	}
+	maps.Copy(forcedValues, codexConfigForcedValues)
 	if skipPerms {
-		for k, v := range codexConfigSkipPermsForcedValues {
-			forcedValues[k] = v
-		}
+		maps.Copy(forcedValues, codexConfigSkipPermsForcedValues)
 	}
 
 	// Use the TOML merge utility

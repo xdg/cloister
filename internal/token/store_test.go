@@ -1,4 +1,4 @@
-package token //nolint:revive // token is the correct domain name despite stdlib go/token
+package token
 
 import (
 	"os"

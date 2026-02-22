@@ -31,7 +31,7 @@ type SocketRequest struct {
 type SocketResponse struct {
 	Success  bool            `json:"success"`
 	Error    string          `json:"error,omitempty"`
-	Response ExecuteResponse `json:"response,omitempty"`
+	Response ExecuteResponse `json:"response,omitzero"`
 }
 
 // SocketServer listens on a Unix socket or TCP port and executes commands via an Executor.

@@ -395,7 +395,7 @@ func TestClientWireFormat(t *testing.T) {
 	}
 
 	// Verify raw JSON structure
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(rawLine, &parsed); err != nil {
 		t.Fatalf("Failed to parse raw request: %v", err)
 	}
@@ -411,7 +411,7 @@ func TestClientWireFormat(t *testing.T) {
 	}
 
 	// Verify nested structure
-	reqMap, ok := parsed["request"].(map[string]interface{})
+	reqMap, ok := parsed["request"].(map[string]any)
 	if !ok {
 		t.Fatal("Wire format 'request' is not an object")
 	}

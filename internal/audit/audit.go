@@ -113,6 +113,8 @@ func (e *Event) isDomainEvent() bool {
 // formatTypeSpecificFields appends type-specific key=value pairs to the builder.
 func (e *Event) formatTypeSpecificFields(b *strings.Builder) {
 	switch e.Type {
+	case EventRequest, EventTimeout, EventDomainRequest, EventDomainTimeout:
+		// No type-specific fields
 	case EventAutoApprove:
 		writeOptionalField(b, "pattern", e.Pattern)
 	case EventApprove:

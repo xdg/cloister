@@ -225,7 +225,7 @@ func TestQueue_AddMultiple(t *testing.T) {
 
 	// Add multiple requests and verify unique IDs
 	ids := make(map[string]bool)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		req := &PendingRequest{
 			Cloister:  "test-cloister",
 			Project:   "test-project",
@@ -424,10 +424,10 @@ func TestQueue_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent adds
 	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func(_ int) {
 			defer wg.Done()
-			for j := 0; j < idsPerGoroutine; j++ {
+			for range idsPerGoroutine {
 				req := &PendingRequest{
 					Cloister:  "test-cloister",
 					Project:   "test-project",
@@ -441,7 +441,7 @@ func TestQueue_ConcurrentAccess(t *testing.T) {
 				}
 				idsChan <- id
 			}
-		}(i)
+		}(0)
 	}
 	wg.Wait()
 	close(idsChan)
@@ -459,11 +459,11 @@ func TestQueue_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent reads and removes
 	wg.Add(numGoroutines * 2)
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		// Reader goroutine
 		go func() {
 			defer wg.Done()
-			for j := 0; j < idsPerGoroutine; j++ {
+			for range idsPerGoroutine {
 				_ = q.List()
 				_ = q.Len()
 			}
@@ -472,10 +472,7 @@ func TestQueue_ConcurrentAccess(t *testing.T) {
 		go func(n int) {
 			defer wg.Done()
 			start := n * idsPerGoroutine
-			end := start + idsPerGoroutine
-			if end > len(allIDs) {
-				end = len(allIDs)
-			}
+			end := min(start+idsPerGoroutine, len(allIDs))
 			for j := start; j < end; j++ {
 				q.Remove(allIDs[j])
 			}
@@ -507,7 +504,7 @@ func TestQueue_ConcurrentGetAndRemove(t *testing.T) {
 	// Concurrent Get
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_, _ = q.Get(id)
 		}
 	}()
@@ -529,7 +526,7 @@ func TestQueue_ConcurrentGetAndRemove(t *testing.T) {
 
 func TestGenerateID_Length(t *testing.T) {
 	// Generate multiple IDs and verify format
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		id, err := generateID()
 		if err != nil {
 			t.Fatalf("generateID() error = %v", err)
@@ -548,7 +545,7 @@ func TestGenerateID_Length(t *testing.T) {
 
 func TestGenerateID_Unique(t *testing.T) {
 	ids := make(map[string]bool)
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		id, err := generateID()
 		if err != nil {
 			t.Fatalf("generateID() error = %v", err)

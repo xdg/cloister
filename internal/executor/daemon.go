@@ -3,12 +3,16 @@ package executor
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"syscall"
 )
+
+// ErrNoState is returned by LoadDaemonState when no state file exists.
+var ErrNoState = errors.New("no daemon state file")
 
 // InstanceIDEnvVar matches guardian.InstanceIDEnvVar for test isolation.
 // We duplicate it here to avoid an import cycle (guardian imports executor).
@@ -78,7 +82,7 @@ func SaveDaemonState(state *DaemonState) error {
 }
 
 // LoadDaemonState loads the daemon state from disk.
-// Returns nil if the state file doesn't exist.
+// Returns ErrNoState if the state file doesn't exist.
 func LoadDaemonState() (*DaemonState, error) {
 	path, err := DaemonStatePath()
 	if err != nil {
@@ -88,7 +92,7 @@ func LoadDaemonState() (*DaemonState, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, ErrNoState
 		}
 		return nil, fmt.Errorf("failed to read state: %w", err)
 	}
@@ -158,11 +162,14 @@ func StopDaemon(state *DaemonState) error {
 // This handles cases where the daemon crashed without cleanup.
 func CleanupStaleState() error {
 	state, err := LoadDaemonState()
+	if errors.Is(err, ErrNoState) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}
 
-	if state != nil && !IsDaemonRunning(state) {
+	if !IsDaemonRunning(state) {
 		// Remove stale socket file
 		if state.SocketPath != "" {
 			_ = os.Remove(state.SocketPath)

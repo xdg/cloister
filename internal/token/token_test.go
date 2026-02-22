@@ -1,4 +1,4 @@
-package token //nolint:revive // package name matches package under test
+package token
 
 import (
 	"regexp"
@@ -27,7 +27,7 @@ func TestGenerate_Unique(t *testing.T) {
 	const numTokens = 100
 	tokens := make(map[string]struct{}, numTokens)
 
-	for i := 0; i < numTokens; i++ {
+	for range numTokens {
 		token := Generate()
 		if _, exists := tokens[token]; exists {
 			t.Errorf("duplicate token generated: %s", token)
@@ -42,7 +42,7 @@ func TestGenerate_Unique(t *testing.T) {
 
 func TestGenerate_LowercaseHex(t *testing.T) {
 	// Generate multiple tokens and ensure all use lowercase hex
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		token := Generate()
 		for _, c := range token {
 			if (c >= 'A' && c <= 'F') || (c >= 'G' && c <= 'Z') {

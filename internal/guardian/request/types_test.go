@@ -239,7 +239,7 @@ func TestCommandResponseOmitEmpty(t *testing.T) {
 			}
 
 			// Unmarshal into a map to check field presence
-			var result map[string]interface{}
+			var result map[string]any
 			if err := json.Unmarshal(data, &result); err != nil {
 				t.Fatalf("failed to unmarshal to map: %v", err)
 			}
@@ -276,7 +276,7 @@ func TestCommandResponseJSONFieldNames(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatalf("failed to unmarshal to map: %v", err)
 	}
@@ -327,7 +327,7 @@ func TestCommandRequestJSONFieldNames(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatalf("failed to unmarshal to map: %v", err)
 	}
@@ -359,7 +359,7 @@ func TestCommandRequestCmdOmitEmpty(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var result map[string]interface{}
+	var result map[string]any
 	if err := json.Unmarshal(data, &result); err != nil {
 		t.Fatalf("failed to unmarshal to map: %v", err)
 	}
@@ -379,7 +379,7 @@ func TestCommandRequestCmdOmitEmpty(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var result2 map[string]interface{}
+	var result2 map[string]any
 	if err := json.Unmarshal(data2, &result2); err != nil {
 		t.Fatalf("failed to unmarshal to map: %v", err)
 	}

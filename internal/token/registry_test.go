@@ -1,4 +1,4 @@
-package token //nolint:revive // intentional: does not conflict at import path level
+package token
 
 import (
 	"sync"
@@ -175,21 +175,21 @@ func TestRegistry_ThreadSafety(_ *testing.T) {
 	wg.Add(numGoroutines * 3) // register, validate, revoke goroutines
 
 	// Register goroutines
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func(_ int) {
 			defer wg.Done()
-			for j := 0; j < numOps; j++ {
+			for range numOps {
 				token := Generate()
 				r.Register(token, "cloister")
 			}
-		}(i)
+		}(0)
 	}
 
 	// Validate goroutines
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOps; j++ {
+			for range numOps {
 				token := Generate()
 				r.Validate(token) // may or may not be registered
 			}
@@ -197,10 +197,10 @@ func TestRegistry_ThreadSafety(_ *testing.T) {
 	}
 
 	// Lookup and revoke goroutines
-	for i := 0; i < numGoroutines; i++ {
+	for range numGoroutines {
 		go func() {
 			defer wg.Done()
-			for j := 0; j < numOps; j++ {
+			for range numOps {
 				token := Generate()
 				r.Lookup(token)
 				r.Revoke(token) // may or may not be registered

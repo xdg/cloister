@@ -230,7 +230,7 @@ func TestDomainQueue_AddMultiple(t *testing.T) {
 	// Add multiple requests with different domains and verify unique IDs
 	// (same domain+token would be deduplicated)
 	ids := make(map[string]bool)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		req := &DomainRequest{
 			Cloister:  "test-cloister",
 			Project:   "test-project",
@@ -425,10 +425,10 @@ func TestDomainQueue_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent adds - use unique token+domain combinations to avoid deduplication
 	wg.Add(numGoroutines)
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		go func(n int) {
 			defer wg.Done()
-			for j := 0; j < idsPerGoroutine; j++ {
+			for j := range idsPerGoroutine {
 				req := &DomainRequest{
 					Cloister:  "test-cloister",
 					Project:   "test-project",
@@ -460,11 +460,11 @@ func TestDomainQueue_ConcurrentAccess(t *testing.T) {
 
 	// Concurrent reads and removes
 	wg.Add(numGoroutines * 2)
-	for i := 0; i < numGoroutines; i++ {
+	for i := range numGoroutines {
 		// Reader goroutine
 		go func() {
 			defer wg.Done()
-			for j := 0; j < idsPerGoroutine; j++ {
+			for range idsPerGoroutine {
 				_ = q.List()
 				_ = q.Len()
 			}
@@ -473,10 +473,7 @@ func TestDomainQueue_ConcurrentAccess(t *testing.T) {
 		go func(n int) {
 			defer wg.Done()
 			start := n * idsPerGoroutine
-			end := start + idsPerGoroutine
-			if end > len(allIDs) {
-				end = len(allIDs)
-			}
+			end := min(start+idsPerGoroutine, len(allIDs))
 			for j := start; j < end; j++ {
 				q.Remove(allIDs[j])
 			}
@@ -508,7 +505,7 @@ func TestDomainQueue_ConcurrentGetAndRemove(t *testing.T) {
 	// Concurrent Get
 	go func() {
 		defer wg.Done()
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			_, _ = q.Get(id)
 		}
 	}()

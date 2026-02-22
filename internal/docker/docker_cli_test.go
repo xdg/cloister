@@ -271,8 +271,8 @@ func TestRunJSON_StrictVsNonStrict(t *testing.T) {
 }
 
 func TestFindContainerByExactName_NotFound(t *testing.T) {
-	info, err := FindContainerByExactName("cloister-nonexistent-container-test-exact-12345")
-	if err != nil {
+	_, err := FindContainerByExactName("cloister-nonexistent-container-test-exact-12345")
+	if err != nil && !errors.Is(err, ErrContainerNotFound) {
 		var cmdErr *CommandError
 		if errors.As(err, &cmdErr) {
 			var execErr *exec.Error
@@ -286,14 +286,14 @@ func TestFindContainerByExactName_NotFound(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if info != nil {
-		t.Errorf("expected nil for non-existent container, got: %+v", info)
+	if !errors.Is(err, ErrContainerNotFound) {
+		t.Errorf("expected ErrContainerNotFound, got: %v", err)
 	}
 }
 
 func TestFindContainerByExactName_SubstringMatch(t *testing.T) {
-	info, err := FindContainerByExactName("cloister-exact-test")
-	if err != nil {
+	_, err := FindContainerByExactName("cloister-exact-test")
+	if err != nil && !errors.Is(err, ErrContainerNotFound) {
 		var cmdErr *CommandError
 		if errors.As(err, &cmdErr) {
 			var execErr *exec.Error
@@ -307,7 +307,7 @@ func TestFindContainerByExactName_SubstringMatch(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if info != nil {
-		t.Errorf("expected nil, got container: %+v", info)
+	if !errors.Is(err, ErrContainerNotFound) {
+		t.Errorf("expected ErrContainerNotFound, got: %v", err)
 	}
 }

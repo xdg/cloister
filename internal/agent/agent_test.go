@@ -164,13 +164,13 @@ func TestCodexAgent_Name(t *testing.T) {
 func TestCodexAgent_GetContainerEnvVars_NoConfig(t *testing.T) {
 	agent := NewCodexAgent()
 
-	// nil config should return nil
+	// nil config should return empty map
 	envVars, err := agent.GetContainerEnvVars(nil)
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if envVars != nil {
-		t.Errorf("expected nil env vars for nil config, got %v", envVars)
+	if len(envVars) != 0 {
+		t.Errorf("expected empty env vars for nil config, got %v", envVars)
 	}
 }
 
@@ -182,8 +182,8 @@ func TestCodexAgent_GetContainerEnvVars_NoAuthMethod(t *testing.T) {
 	if err != nil {
 		t.Errorf("unexpected error: %v", err)
 	}
-	if envVars != nil {
-		t.Errorf("expected nil env vars for empty auth method, got %v", envVars)
+	if len(envVars) != 0 {
+		t.Errorf("expected empty env vars for empty auth method, got %v", envVars)
 	}
 }
 

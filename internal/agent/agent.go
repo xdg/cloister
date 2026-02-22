@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -76,7 +77,7 @@ func GetContainerEnvVars(a Agent, agentCfg *config.AgentConfig) (map[string]stri
 	if provider, ok := a.(ContainerEnvProvider); ok {
 		return provider.GetContainerEnvVars(agentCfg)
 	}
-	return nil, nil
+	return map[string]string{}, nil
 }
 
 // Registry maps agent names to their implementations.
@@ -172,7 +173,7 @@ func CopyDirToContainer(containerName, dirName string, excludePatterns []string,
 	}
 
 	// Clear any pre-existing directory in the container (from image build)
-	clearCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "rm", "-rf", containerHomeDir+"/"+dirName) //nolint:gosec // G204: args are not user-controlled
+	clearCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "rm", "-rf", containerHomeDir+"/"+dirName)
 	if output, err := clearCmd.CombinedOutput(); err != nil {
 		clog.Warn("failed to clear existing %s: %v: %s", dirName, err, output)
 	}
@@ -235,9 +236,7 @@ func WriteFileToContainer(containerName, destPath, content string) error {
 func MergeJSONConfig(hostFileName string, fieldsToCopy []string, forcedValues, conditionalCopy map[string]any) (string, error) {
 	merged := make(map[string]any)
 
-	for key, value := range forcedValues {
-		merged[key] = value
-	}
+	maps.Copy(merged, forcedValues)
 
 	hostConfig := readHostJSON(hostFileName)
 	if hostConfig != nil {
@@ -330,9 +329,7 @@ func MergeTOMLConfig(hostFileName string, _ []string, forcedValues map[string]an
 	sections := make(map[string]map[string]any)
 
 	for key, value := range forcedValues {
-		if idx := strings.Index(key, "."); idx != -1 {
-			section := key[:idx]
-			subkey := key[idx+1:]
+		if section, subkey, ok := strings.Cut(key, "."); ok {
 			if sections[section] == nil {
 				sections[section] = make(map[string]any)
 			}
@@ -387,7 +384,7 @@ func AppendBashAlias(containerName, aliasLine string) error {
 
 	// Use grep to check if alias already exists, then append if not.
 	// The command exits 0 if alias exists, 1 if not. We use || to append only when grep fails.
-	cmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "sh", "-c", //nolint:gosec // G204: args are not user-controlled
+	cmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "sh", "-c",
 		fmt.Sprintf(`grep -qF %q %s || echo %q >> %s`,
 			aliasLine, bashrcPath, aliasLine, bashrcPath))
 	output, err := cmd.CombinedOutput()

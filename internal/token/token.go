@@ -1,4 +1,4 @@
-package token //nolint:revive // intentional: does not conflict at import path level
+package token
 
 import (
 	"crypto/rand"

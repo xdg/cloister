@@ -3,10 +3,12 @@ package agent
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os/exec"
 	"path/filepath"
 
 	"github.com/xdg/cloister/internal/claude"
+	"github.com/xdg/cloister/internal/clog"
 	"github.com/xdg/cloister/internal/config"
 )
 
@@ -144,9 +146,7 @@ func (a *ClaudeAgent) GetContainerEnvVars(agentCfg *config.AgentConfig) (map[str
 			return nil, fmt.Errorf("credential injection failed: %w", err)
 		}
 
-		for k, v := range injectionConfig.EnvVars {
-			envVars[k] = v
-		}
+		maps.Copy(envVars, injectionConfig.EnvVars)
 	}
 
 	return envVars, nil
@@ -231,8 +231,10 @@ func copyClaudeSettings(containerName string) {
 		homeDir = ""
 	}
 	// Log but don't fail - missing settings is not fatal
-	_ = CopyDirToContainer(containerName, claudeSettingsDir, settingsExcludePatterns, //nolint:errcheck // intentional: missing settings non-fatal
-		claudePluginTransform(homeDir))
+	if err := CopyDirToContainer(containerName, claudeSettingsDir, settingsExcludePatterns,
+		claudePluginTransform(homeDir)); err != nil {
+		clog.Debug("failed to copy claude settings: %v", err)
+	}
 }
 
 // injectCredentials injects credentials into the container if configured.
@@ -251,9 +253,7 @@ func (a *ClaudeAgent) injectCredentials(containerName string, agentCfg *config.A
 		return fmt.Errorf("credential injection failed: %w", err)
 	}
 
-	for key, value := range injectionConfig.EnvVars {
-		result.EnvVars[key] = value
-	}
+	maps.Copy(result.EnvVars, injectionConfig.EnvVars)
 	for destPath, content := range injectionConfig.Files {
 		if err := WriteFileToContainer(containerName, destPath, content); err != nil {
 			return fmt.Errorf("failed to write credential file %s: %w", destPath, err)
@@ -279,7 +279,7 @@ func writeClaudeConfig(containerName string) error {
 func writeCloisterRules(containerName string) error {
 	// Create rules directory if it doesn't exist
 	rulesDir := filepath.Dir(cloisterRulesPath)
-	mkdirCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "mkdir", "-p", rulesDir) //nolint:gosec // G204: args are not user-controlled
+	mkdirCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "mkdir", "-p", rulesDir)
 	if output, err := mkdirCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create rules directory: %w: %s", err, output)
 	}

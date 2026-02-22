@@ -237,8 +237,7 @@ func FormatSSE(event Event) string {
 	fmt.Fprintf(&buf, "event: %s\n", event.Type)
 
 	// Split data into lines and prefix each with "data: "
-	lines := bytes.Split([]byte(event.Data), []byte("\n"))
-	for _, line := range lines {
+	for line := range bytes.SplitSeq([]byte(event.Data), []byte("\n")) {
 		buf.WriteString("data: ")
 		buf.Write(line)
 		buf.WriteByte('\n')

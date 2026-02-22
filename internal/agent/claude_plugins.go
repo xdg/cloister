@@ -35,7 +35,7 @@ func claudePluginTransform(hostHomeDir string) func(tmpDir string) error {
 			if transformed, err := transformMarketplaces(data, hostHomeDir, validNames); err != nil {
 				clog.Warn("failed to transform known_marketplaces.json: %v", err)
 			} else {
-				if err := os.WriteFile(marketplacesPath, transformed, 0o600); err != nil { //nolint:gosec // G306: plugin config readable by owner only in container
+				if err := os.WriteFile(marketplacesPath, transformed, 0o600); err != nil {
 					clog.Warn("failed to write transformed known_marketplaces.json: %v", err)
 				}
 			}
@@ -47,7 +47,7 @@ func claudePluginTransform(hostHomeDir string) func(tmpDir string) error {
 			if transformed, err := transformInstalledPlugins(data, hostHomeDir); err != nil {
 				clog.Warn("failed to transform installed_plugins.json: %v", err)
 			} else {
-				if err := os.WriteFile(installedPath, transformed, 0o600); err != nil { //nolint:gosec // G306: plugin config readable by owner only in container
+				if err := os.WriteFile(installedPath, transformed, 0o600); err != nil {
 					clog.Warn("failed to write transformed installed_plugins.json: %v", err)
 				}
 			}

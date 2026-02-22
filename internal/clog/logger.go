@@ -95,14 +95,14 @@ func (l *Logger) log(level Level, format string, args ...any) {
 
 	// Write to file if configured
 	if l.fileWriter != nil {
-		_, _ = l.fileWriter.Write([]byte(line)) //nolint:errcheck // logger cannot log its own write failures
+		_, _ = l.fileWriter.Write([]byte(line)) //nolint:errcheck // If we fail to write to the log file, we have no way to report that error, so we ignore it.
 	}
 
 	// Write warn/error to stderr in CLI mode
 	if !l.daemonMode && l.errWriter != nil && level >= LevelWarn {
 		// For stderr, use a simpler format without timestamp
 		errLine := fmt.Sprintf("[%s] %s\n", level, msg)
-		_, _ = l.errWriter.Write([]byte(errLine)) //nolint:errcheck // logger cannot log its own write failures
+		_, _ = l.errWriter.Write([]byte(errLine)) //nolint:errcheck // If we fail to write to stderr, there's not much we can do, so we ignore it.
 	}
 }
 

@@ -28,7 +28,7 @@ func approvalPort(t *testing.T) int {
 	if err != nil {
 		t.Fatalf("Failed to load executor daemon state: %v", err)
 	}
-	if state == nil || state.ApprovalPort == 0 {
+	if state.ApprovalPort == 0 {
 		t.Fatal("Approval port not found in executor daemon state")
 	}
 	return state.ApprovalPort
@@ -69,7 +69,7 @@ func waitForPendingDomain(t *testing.T, port int, domain string) string {
 			continue
 		}
 		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close() //nolint:errcheck // best-effort close in polling loop
+		resp.Body.Close()
 		if err != nil {
 			time.Sleep(100 * time.Millisecond)
 			continue
@@ -112,8 +112,7 @@ func approveDomain(t *testing.T, port int, requestID, scope string) {
 	if err != nil {
 		t.Fatalf("Failed to approve domain: %v", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck // test helper, always followed by ReadAll
-
+	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Approve domain returned status %d: %s", resp.StatusCode, string(respBody))
@@ -135,7 +134,7 @@ func denyDomain(t *testing.T, port int, requestID, scope string, wildcard bool) 
 	if err != nil {
 		t.Fatalf("Failed to deny domain: %v", err)
 	}
-	defer resp.Body.Close() //nolint:errcheck // test helper, always followed by ReadAll
+	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("Deny domain returned status %d: %s", resp.StatusCode, string(respBody))
@@ -172,16 +171,14 @@ func TestDomainApprovalPersistence_ProjectScope(t *testing.T) {
 	var wg sync.WaitGroup
 	var proxyOutput string
 	var proxyErr error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// Make a CONNECT request through the proxy to the unlisted domain.
 		// Use verbose output to capture the HTTP response code.
 		proxyOutput, proxyErr = execInContainer(t, tc.Name,
 			"sh", "-c",
 			"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+
 				" --max-time 15 https://"+testDomain+"/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
-	}()
+	})
 
 	// Wait for the domain approval request to appear in the queue
 	requestID := waitForPendingDomain(t, port, testDomain)
@@ -267,14 +264,12 @@ func TestDomainApprovalPersistence_GlobalScope(t *testing.T) {
 	var wg sync.WaitGroup
 	var proxyOutput string
 	var proxyErr error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		proxyOutput, proxyErr = execInContainer(t, tc.Name,
 			"sh", "-c",
 			"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+
 				" --max-time 15 https://"+testDomain+"/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
-	}()
+	})
 
 	// Wait for the domain approval request to appear in the queue
 	requestID := waitForPendingDomain(t, port, testDomain)
@@ -341,14 +336,12 @@ func TestDomainApprovalPersistence_SubsequentRequestAllowed(t *testing.T) {
 
 	// First request: will block in approval queue
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		_, _ = execInContainer(t, tc.Name,
 			"sh", "-c",
 			"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+
 				" --max-time 15 https://"+testDomain+"/ 2>&1")
-	}()
+	})
 
 	// Approve the first request with project scope
 	requestID := waitForPendingDomain(t, port, testDomain)

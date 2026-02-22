@@ -74,7 +74,7 @@ func TestEventHub_BroadcastDropsWhenFull(t *testing.T) {
 	defer hub.Unsubscribe(ch)
 
 	// Fill the buffer (default size is 16)
-	for i := 0; i < 20; i++ {
+	for range 20 {
 		hub.Broadcast(Event{Type: EventRequestAdded, Data: "test"})
 	}
 
@@ -133,17 +133,15 @@ func TestEventHub_ConcurrentAccess(_ *testing.T) {
 	var wg sync.WaitGroup
 
 	// Spawn multiple goroutines doing concurrent operations
-	for i := 0; i < 10; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range 10 {
+		wg.Go(func() {
 			ch := hub.Subscribe()
 			if ch == nil {
 				return
 			}
 			hub.Broadcast(Event{Type: EventRequestAdded, Data: "test"})
 			hub.Unsubscribe(ch)
-		}()
+		})
 	}
 
 	wg.Wait()
@@ -411,8 +409,7 @@ func TestServer_HandleEvents_ServerShutdown(t *testing.T) {
 	// Test that Events.Close returns nil for Subscribe
 	server.Events.Close()
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 
 	req := httptest.NewRequest(http.MethodGet, "/events", http.NoBody).WithContext(ctx)
 	rr := httptest.NewRecorder()

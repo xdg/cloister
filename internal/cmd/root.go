@@ -40,7 +40,7 @@ network access, and maintains development velocity without constant permission p
 	},
 	PersistentPostRun: func(_ *cobra.Command, _ []string) {
 		// Ensure logs are flushed on exit
-		_ = clog.Close() //nolint:errcheck // clog's own close
+		_ = clog.Close()
 	},
 }
 

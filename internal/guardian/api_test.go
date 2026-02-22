@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"testing"
 	"time"
@@ -51,9 +52,7 @@ func (r *mockRegistry) Revoke(tok string) bool {
 
 func (r *mockRegistry) List() map[string]token.Info {
 	result := make(map[string]token.Info, len(r.tokens))
-	for k, v := range r.tokens {
-		result[k] = v
-	}
+	maps.Copy(result, r.tokens)
 	return result
 }
 

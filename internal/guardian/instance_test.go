@@ -162,8 +162,8 @@ func TestProxyEnvVars_ProxyURLFormat(t *testing.T) {
 	for _, varName := range proxyVars {
 		var value string
 		for _, env := range envVars {
-			if strings.HasPrefix(env, varName+"=") {
-				value = strings.TrimPrefix(env, varName+"=")
+			if v, ok := strings.CutPrefix(env, varName+"="); ok {
+				value = v
 				break
 			}
 		}
@@ -180,8 +180,8 @@ func TestProxyEnvVars_DefaultGuardianHost(t *testing.T) {
 
 	var httpProxy string
 	for _, env := range envVars {
-		if strings.HasPrefix(env, "HTTP_PROXY=") {
-			httpProxy = strings.TrimPrefix(env, "HTTP_PROXY=")
+		if v, ok := strings.CutPrefix(env, "HTTP_PROXY="); ok {
+			httpProxy = v
 			break
 		}
 	}
@@ -199,8 +199,8 @@ func TestProxyEnvVars_NoProxyValue(t *testing.T) {
 	for _, varName := range []string{"NO_PROXY", "no_proxy"} {
 		var value string
 		for _, env := range envVars {
-			if strings.HasPrefix(env, varName+"=") {
-				value = strings.TrimPrefix(env, varName+"=")
+			if v, ok := strings.CutPrefix(env, varName+"="); ok {
+				value = v
 				break
 			}
 		}
@@ -215,8 +215,8 @@ func TestProxyEnvVars_RequestPortValue(t *testing.T) {
 
 	var requestPort string
 	for _, env := range envVars {
-		if strings.HasPrefix(env, "CLOISTER_REQUEST_PORT=") {
-			requestPort = strings.TrimPrefix(env, "CLOISTER_REQUEST_PORT=")
+		if v, ok := strings.CutPrefix(env, "CLOISTER_REQUEST_PORT="); ok {
+			requestPort = v
 			break
 		}
 	}

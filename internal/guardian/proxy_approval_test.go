@@ -11,6 +11,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -282,7 +283,7 @@ func (h *proxyTestHarness) denyDomain(id, scope string, wildcard bool) error {
 	approvalAddr := h.ApprovalServer.ListenAddr()
 	url := fmt.Sprintf("http://%s/deny-domain/%s", approvalAddr, id)
 
-	body := map[string]interface{}{"scope": scope, "wildcard": wildcard}
+	body := map[string]any{"scope": scope, "wildcard": wildcard}
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("marshal body: %w", err)
@@ -509,14 +510,7 @@ func TestProxyApproval_AllowProject(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error: %v", err)
 	}
 	allowedDomains := decisions.AllowedDomains()
-	found := false
-	for _, d := range allowedDomains {
-		if d == domain {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(allowedDomains, domain) {
 		t.Fatalf("expected domain %q in project decisions allow list, got: %v", domain, allowedDomains)
 	}
 
@@ -586,14 +580,7 @@ func TestProxyApproval_AllowGlobal(t *testing.T) {
 		t.Fatalf("LoadGlobalDecisions() error: %v", err)
 	}
 	allowedDomains := decisions.AllowedDomains()
-	found := false
-	for _, d := range allowedDomains {
-		if d == domain {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(allowedDomains, domain) {
 		t.Errorf("expected domain %q in global decisions allow list, got: %v", domain, allowedDomains)
 	}
 
@@ -667,14 +654,7 @@ func TestProxyApproval_AllowProjectWildcard(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error: %v", err)
 	}
 	allowedPatterns := decisions.AllowedPatterns()
-	found := false
-	for _, p := range allowedPatterns {
-		if p == "*.wildcard-test.com" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(allowedPatterns, "*.wildcard-test.com") {
 		t.Fatalf("expected pattern %q in project decisions allow list, got: %v", "*.wildcard-test.com", allowedPatterns)
 	}
 
@@ -959,14 +939,7 @@ func TestProxyApproval_DenyProject(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error: %v", err)
 	}
 	deniedDomains := decisions.DeniedDomains()
-	found := false
-	for _, d := range deniedDomains {
-		if d == domain {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(deniedDomains, domain) {
 		t.Fatalf("expected domain %q in project decisions deny list, got: %v", domain, deniedDomains)
 	}
 
@@ -1030,14 +1003,7 @@ func TestProxyApproval_DenyGlobal(t *testing.T) {
 		t.Fatalf("LoadGlobalDecisions() error: %v", err)
 	}
 	deniedDomains := decisions.DeniedDomains()
-	found := false
-	for _, d := range deniedDomains {
-		if d == domain {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(deniedDomains, domain) {
 		t.Errorf("expected domain %q in global decisions deny list, got: %v", domain, deniedDomains)
 	}
 
@@ -1103,14 +1069,7 @@ func TestProxyApproval_DenyProjectWildcard(t *testing.T) {
 		t.Fatalf("LoadProjectDecisions() error: %v", err)
 	}
 	deniedPatterns := decisions.DeniedPatterns()
-	found := false
-	for _, p := range deniedPatterns {
-		if p == "*.deny-wild.com" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(deniedPatterns, "*.deny-wild.com") {
 		t.Fatalf("expected pattern %q in project decisions deny list, got: %v", "*.deny-wild.com", deniedPatterns)
 	}
 
@@ -1703,14 +1662,7 @@ func TestProxyApproval_AllowProjectWithStaticConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProjectDecisions() error: %v", err)
 	}
-	found := false
-	for _, d := range decisions.AllowedDomains() {
-		if d == domain {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(decisions.AllowedDomains(), domain) {
 		t.Fatalf("expected domain %q in project decisions allow list, got: %v", domain, decisions.AllowedDomains())
 	}
 
@@ -1798,14 +1750,7 @@ func TestProxyApproval_AllowProjectSurvivesRestart(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProjectDecisions() error: %v", err)
 	}
-	found := false
-	for _, d := range decisions.AllowedDomains() {
-		if d == domain {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(decisions.AllowedDomains(), domain) {
 		t.Fatalf("expected domain %q in project decisions, got: %v", domain, decisions.AllowedDomains())
 	}
 

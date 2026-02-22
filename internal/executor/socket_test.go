@@ -361,7 +361,7 @@ func TestSocketServerMultipleConnections(t *testing.T) {
 	const numConns = 5
 	done := make(chan bool, numConns)
 
-	for i := 0; i < numConns; i++ {
+	for i := range numConns {
 		go func(idx int) {
 			conn, err := (&net.Dialer{}).DialContext(context.Background(), "unix", sockPath)
 			if err != nil {
@@ -413,7 +413,7 @@ func TestSocketServerMultipleConnections(t *testing.T) {
 
 	// Wait for all connections
 	successCount := 0
-	for i := 0; i < numConns; i++ {
+	for range numConns {
 		select {
 		case success := <-done:
 			if success {

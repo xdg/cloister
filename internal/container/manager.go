@@ -292,11 +292,11 @@ func (m *Manager) HasRunningCloister(projectName string) (string, error) {
 // This performs a single Docker call to retrieve both pieces of information.
 func (m *Manager) ContainerStatus(name string) (exists, running bool, err error) {
 	info, err := m.runner.FindContainerByExactName(name)
+	if errors.Is(err, docker.ErrContainerNotFound) {
+		return false, false, nil
+	}
 	if err != nil {
 		return false, false, err
-	}
-	if info == nil {
-		return false, false, nil
 	}
 	return true, info.State == "running", nil
 }

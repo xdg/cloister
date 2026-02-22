@@ -2,6 +2,7 @@ package guardian
 
 import (
 	"net"
+	"slices"
 	"strings"
 	"sync"
 
@@ -90,10 +91,8 @@ func (ds *DomainSet) AddPattern(pattern string) {
 	ds.mu.Lock()
 	defer ds.mu.Unlock()
 	// Avoid duplicates
-	for _, existing := range ds.patterns {
-		if existing == pattern {
-			return
-		}
+	if slices.Contains(ds.patterns, pattern) {
+		return
 	}
 	ds.patterns = append(ds.patterns, pattern)
 }

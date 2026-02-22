@@ -29,6 +29,9 @@ var (
 	// ErrNoResults indicates the docker command returned no results.
 	// This is not necessarily an error - it may just mean no matching objects were found.
 	ErrNoResults = errors.New("no results from docker command")
+
+	// ErrContainerNotFound indicates no container with the given name exists.
+	ErrContainerNotFound = errors.New("container not found")
 )
 
 // CommandError represents a failed Docker command with stderr output.
@@ -266,11 +269,11 @@ func CopyToContainerWithOwner(srcPath, containerName, destDir, uid, gid string) 
 
 	// Create tar on host with ownership, pipe to container
 	// tar -cf - --owner=UID --group=GID -C parentDir baseName | docker exec -i container tar -xf - -C destDir
-	tarCmd := exec.CommandContext(context.Background(), "tar", "-cf", "-", //nolint:gosec // G204: args are from trusted caller
+	tarCmd := exec.CommandContext(context.Background(), "tar", "-cf", "-",
 		"--owner="+uid, "--group="+gid,
 		"-C", filepath.Dir(srcPath), baseName)
 
-	dockerCmd := exec.CommandContext(context.Background(), "docker", "exec", "-i", containerName, //nolint:gosec // G204: args are from trusted caller
+	dockerCmd := exec.CommandContext(context.Background(), "docker", "exec", "-i", containerName,
 		"tar", "-xf", "-", "-C", destDir)
 
 	// Connect tar stdout to docker stdin
@@ -334,17 +337,17 @@ func WriteFileToContainerWithOwner(containerName, destPath, content, uid, gid st
 	}
 
 	// Ensure destination directory exists in container
-	mkdirCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "mkdir", "-p", destDir) //nolint:gosec // G204: args are from trusted caller
+	mkdirCmd := exec.CommandContext(context.Background(), "docker", "exec", containerName, "mkdir", "-p", destDir)
 	if output, err := mkdirCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w: %s", err, output)
 	}
 
 	// Create tar with ownership and pipe to container
-	tarCmd := exec.CommandContext(context.Background(), "tar", "-cf", "-", //nolint:gosec // G204: args are from trusted caller
+	tarCmd := exec.CommandContext(context.Background(), "tar", "-cf", "-",
 		"--owner="+uid, "--group="+gid,
 		"-C", tmpDir, fileName)
 
-	dockerCmd := exec.CommandContext(context.Background(), "docker", "exec", "-i", containerName, //nolint:gosec // G204: args are from trusted caller
+	dockerCmd := exec.CommandContext(context.Background(), "docker", "exec", "-i", containerName,
 		"tar", "-xf", "-", "-C", destDir)
 
 	pipe, err := tarCmd.StdoutPipe()
@@ -445,5 +448,5 @@ func FindContainerByExactName(name string) (*ContainerInfo, error) {
 		}
 	}
 
-	return nil, nil
+	return nil, ErrContainerNotFound
 }

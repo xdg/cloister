@@ -33,7 +33,7 @@ func (m *mockDockerRunner) FindContainerByExactName(name string) (*docker.Contai
 	if m.findContainerByExactNameFn != nil {
 		return m.findContainerByExactNameFn(name)
 	}
-	return nil, nil
+	return nil, docker.ErrContainerNotFound
 }
 
 func (m *mockDockerRunner) StartContainer(name string) error {
@@ -48,7 +48,7 @@ func TestManager_WithMockRunner_Start(t *testing.T) {
 
 	mock := &mockDockerRunner{
 		findContainerByExactNameFn: func(_ string) (*docker.ContainerInfo, error) {
-			return nil, nil
+			return nil, docker.ErrContainerNotFound
 		},
 		runFunc: func(args ...string) (string, error) {
 			runCalls = append(runCalls, args)
@@ -124,7 +124,7 @@ func TestManager_WithMockRunner_Stop(t *testing.T) {
 func TestManager_WithMockRunner_ContainerNotFound(t *testing.T) {
 	mock := &mockDockerRunner{
 		findContainerByExactNameFn: func(_ string) (*docker.ContainerInfo, error) {
-			return nil, nil
+			return nil, docker.ErrContainerNotFound
 		},
 	}
 

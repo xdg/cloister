@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -40,14 +41,12 @@ func TestDomainDenial_GlobalScope(t *testing.T) {
 	var wg sync.WaitGroup
 	var proxyOutput string
 	var proxyErr error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		proxyOutput, proxyErr = execInContainer(t, tc.Name,
 			"sh", "-c",
 			"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+
 				" --max-time 15 https://"+testDomain+"/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
-	}()
+	})
 
 	// Wait for the domain request to appear, then deny it with global scope
 	requestID := waitForPendingDomain(t, port, testDomain)
@@ -136,14 +135,12 @@ func TestDomainDenial_SessionScope_BlocksSubsequentRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	var proxyOutput string
 	var proxyErr error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		proxyOutput, proxyErr = execInContainer(t, tc.Name,
 			"sh", "-c",
 			"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+
 				" --max-time 15 https://"+testDomain+"/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
-	}()
+	})
 
 	// Wait for the domain request to appear, then deny it with session scope
 	requestID := waitForPendingDomain(t, port, testDomain)
@@ -222,9 +219,7 @@ func TestDomainApproval_OnceScope_RePrompts(t *testing.T) {
 
 	// First request: will block in approval queue
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		output, _ := execInContainer(t, tc.Name,
 			"sh", "-c",
 			"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+
@@ -232,7 +227,7 @@ func TestDomainApproval_OnceScope_RePrompts(t *testing.T) {
 		if strings.Contains(output, "not found") {
 			t.Log("curl not available in container image")
 		}
-	}()
+	})
 
 	// Wait for the first approval request, then approve with "once" scope
 	requestID := waitForPendingDomain(t, port, testDomain)
@@ -246,15 +241,13 @@ func TestDomainApproval_OnceScope_RePrompts(t *testing.T) {
 	time.Sleep(300 * time.Millisecond)
 
 	// Second request: should re-enter the approval queue (scope=once is not persisted)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// This request will block waiting for approval (or timeout)
 		_, _ = execInContainer(t, tc.Name,
 			"sh", "-c",
 			"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+
 				" --max-time 15 https://"+testDomain+"/ 2>&1")
-	}()
+	})
 
 	// Verify the domain appears again in the pending queue (re-prompted)
 	requestID2 := waitForPendingDomain(t, port, testDomain)
@@ -301,14 +294,12 @@ func TestDomainDenial_Wildcard(t *testing.T) {
 	var wg sync.WaitGroup
 	var proxyOutput string
 	var proxyErr error
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		proxyOutput, proxyErr = execInContainer(t, tc.Name,
 			"sh", "-c",
 			"curl -v --proxy http://"+guardianHost+":3128 --proxy-user :"+tc.Token+
 				" --max-time 15 https://"+testDomain+"/ 2>&1 | grep -oE 'HTTP/[0-9.]+ [0-9]+' | head -1 | awk '{print $2}'")
-	}()
+	})
 
 	// Wait for the domain request, then deny with wildcard
 	requestID := waitForPendingDomain(t, port, testDomain)
@@ -333,14 +324,7 @@ func TestDomainDenial_Wildcard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to load global decisions: %v", err)
 	}
-	foundPattern := false
-	for _, p := range decisions.DeniedPatterns() {
-		if p == expectedPattern {
-			foundPattern = true
-			break
-		}
-	}
-	if !foundPattern {
+	if !slices.Contains(decisions.DeniedPatterns(), expectedPattern) {
 		t.Errorf("Expected pattern %q in global decisions denied_patterns, got: %v",
 			expectedPattern, decisions.DeniedPatterns())
 	}

@@ -3,6 +3,7 @@ package cloister
 import (
 	"bytes"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -339,14 +340,7 @@ func TestStart_WithTokenAuth(t *testing.T) {
 
 	// Verify credential env vars were passed to container at creation time
 	envVars := mockMgr.createConfig.EnvVars
-	found := false
-	for _, env := range envVars {
-		if env == "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-test-token" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(envVars, "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-test-token") {
 		t.Errorf("CLAUDE_CODE_OAUTH_TOKEN not found in container env vars: %v", envVars)
 	}
 }
@@ -407,14 +401,7 @@ func TestStart_WithAPIKeyAuth(t *testing.T) {
 
 	// Verify credential env vars were passed to container at creation time
 	envVars := mockMgr.createConfig.EnvVars
-	found := false
-	for _, env := range envVars {
-		if env == "ANTHROPIC_API_KEY=sk-ant-api01-test-key" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(envVars, "ANTHROPIC_API_KEY=sk-ant-api01-test-key") {
 		t.Errorf("ANTHROPIC_API_KEY not found in container env vars: %v", envVars)
 	}
 }
@@ -515,14 +502,7 @@ func TestStart_NoConfigFallsBackToEnvVars(t *testing.T) {
 
 	// Host env var should be passed through (Phase 1 fallback behavior)
 	envVars := mockMgr.createConfig.EnvVars
-	found := false
-	for _, env := range envVars {
-		if env == "ANTHROPIC_API_KEY=host-api-key" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(envVars, "ANTHROPIC_API_KEY=host-api-key") {
 		t.Errorf("ANTHROPIC_API_KEY (from host) not found in container env vars: %v", envVars)
 	}
 }

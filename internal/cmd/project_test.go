@@ -3,6 +3,7 @@ package cmd
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -255,29 +256,13 @@ func TestProjectRemoveCmd_HasConfigFlag(t *testing.T) {
 }
 
 func TestProjectListCmd_HasAlias(t *testing.T) {
-	aliases := projectListCmd.Aliases
-	found := false
-	for _, alias := range aliases {
-		if alias == "ls" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(projectListCmd.Aliases, "ls") {
 		t.Error("list command should have 'ls' alias")
 	}
 }
 
 func TestProjectRemoveCmd_HasAlias(t *testing.T) {
-	aliases := projectRemoveCmd.Aliases
-	found := false
-	for _, alias := range aliases {
-		if alias == "rm" {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !slices.Contains(projectRemoveCmd.Aliases, "rm") {
 		t.Error("remove command should have 'rm' alias")
 	}
 }

@@ -235,36 +235,30 @@ func TestDomainSet_ConcurrentAccess(t *testing.T) {
 	const goroutines = 50
 
 	// Concurrent Contains calls
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range goroutines {
+		wg.Go(func() {
 			_ = ds.Contains("initial.com")
 			_ = ds.Contains("api.initial.com")
 			_ = ds.Contains("notfound.com")
-		}()
+		})
 	}
 
 	// Concurrent Add calls
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range goroutines {
+		wg.Go(func() {
 			ds.Add("added.com")
 			ds.AddPattern("*.added.com")
-		}()
+		})
 	}
 
 	// Mixed concurrent reads and writes
-	for i := 0; i < goroutines; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range goroutines {
+		wg.Go(func() {
 			ds.Add("mixed.com")
 			_ = ds.Contains("mixed.com")
 			ds.AddPattern("*.mixed.com")
 			_ = ds.Contains("api.mixed.com")
-		}()
+		})
 	}
 
 	wg.Wait()

@@ -1,6 +1,7 @@
-package token //nolint:revive // intentional: does not conflict at import path level
+package token
 
 import (
+	"maps"
 	"sync"
 )
 
@@ -104,8 +105,6 @@ func (r *Registry) List() map[string]Info {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	result := make(map[string]Info, len(r.tokens))
-	for k, v := range r.tokens {
-		result[k] = v
-	}
+	maps.Copy(result, r.tokens)
 	return result
 }

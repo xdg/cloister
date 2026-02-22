@@ -321,7 +321,7 @@ func (p *ProxyServer) forwardHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Remove headers listed in the Connection header, then Connection itself
 	if connHeaders := outReq.Header.Get("Connection"); connHeaders != "" {
-		for _, h := range strings.Split(connHeaders, ",") {
+		for h := range strings.SplitSeq(connHeaders, ",") {
 			outReq.Header.Del(strings.TrimSpace(h))
 		}
 		outReq.Header.Del("Connection")
@@ -353,8 +353,9 @@ func (p *ProxyServer) forwardHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	w.WriteHeader(resp.StatusCode)
-	//nolint:errcheck // Best-effort copy to response writer; nothing useful to do on error
-	io.Copy(w, resp.Body)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		clog.Debug("proxy: failed to copy response body: %v", err)
+	}
 }
 
 // authenticate checks the Proxy-Authorization header and validates the token.
@@ -402,13 +403,11 @@ func (p *ProxyServer) parseBasicAuth(authHeader string) (string, bool) {
 
 	// Format is "username:password", we only care about password (token)
 	credentials := string(decoded)
-	colonIdx := strings.Index(credentials, ":")
-	if colonIdx < 0 {
+	_, token, ok := strings.Cut(credentials, ":")
+	if !ok {
 		return "", false
 	}
 
-	// Password (token) is everything after the first colon
-	token := credentials[colonIdx+1:]
 	return token, true
 }
 
@@ -425,7 +424,7 @@ func (p *ProxyServer) logAuthFailure(r *http.Request, reason string) {
 }
 
 // log writes a formatted message to the proxy's logger.
-func (p *ProxyServer) log(format string, args ...interface{}) {
+func (p *ProxyServer) log(format string, args ...any) {
 	clog.Debug(format, args...)
 }
 

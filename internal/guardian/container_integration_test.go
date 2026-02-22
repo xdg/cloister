@@ -82,12 +82,9 @@ func TestGuardian_WhenNotRunning(t *testing.T) {
 	})
 
 	t.Run("GetContainerState_ReturnsNil", func(t *testing.T) {
-		state, err := getContainerState()
-		if err != nil {
-			t.Fatalf("getContainerState() error: %v", err)
-		}
-		if state != nil {
-			t.Error("getContainerState() should return nil when container doesn't exist")
+		_, err := getContainerState()
+		if !errors.Is(err, docker.ErrContainerNotFound) {
+			t.Errorf("getContainerState() = %v, want docker.ErrContainerNotFound", err)
 		}
 	})
 
@@ -141,9 +138,6 @@ func TestGuardian_Lifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatalf("LoadDaemonState() error: %v", err)
 		}
-		if state == nil {
-			t.Fatal("Expected daemon state to exist after guardian start")
-		}
 		if state.TCPPort == 0 {
 			t.Error("Expected TCPPort to be set in daemon state")
 		}
@@ -153,9 +147,6 @@ func TestGuardian_Lifecycle(t *testing.T) {
 		state, err := executor.LoadDaemonState()
 		if err != nil {
 			t.Fatalf("LoadDaemonState() error: %v", err)
-		}
-		if state == nil {
-			t.Fatal("Expected daemon state to exist after guardian start")
 		}
 		if !executor.IsDaemonRunning(state) {
 			t.Errorf("Executor daemon should be running (PID %d)", state.PID)
@@ -167,9 +158,6 @@ func TestGuardian_Lifecycle(t *testing.T) {
 		state, err := executor.LoadDaemonState()
 		if err != nil {
 			t.Fatalf("LoadDaemonState() error: %v", err)
-		}
-		if state == nil {
-			t.Fatal("Expected daemon state to exist after guardian start")
 		}
 
 		// Connect to executor via TCP (using localhost since we're on the host)
@@ -250,10 +238,12 @@ func TestGuardian_Lifecycle(t *testing.T) {
 
 		// Verify executor state is cleaned up
 		state, err := executor.LoadDaemonState()
-		if err != nil {
+		switch {
+		case errors.Is(err, executor.ErrNoState):
+			// State file removed — expected
+		case err != nil:
 			t.Fatalf("LoadDaemonState() error: %v", err)
-		}
-		if state != nil && executor.IsDaemonRunning(state) {
+		case executor.IsDaemonRunning(state):
 			t.Errorf("Executor daemon should not be running after Stop() (PID %d)", state.PID)
 		}
 	})

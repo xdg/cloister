@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 )
 
@@ -72,14 +73,7 @@ func (c *Client) doRequest(method, path string, body, result any, acceptedStatus
 	defer func() { _ = resp.Body.Close() }()
 
 	// Check status
-	statusOK := false
-	for _, accepted := range acceptedStatuses {
-		if resp.StatusCode == accepted {
-			statusOK = true
-			break
-		}
-	}
-	if !statusOK {
+	if !slices.Contains(acceptedStatuses, resp.StatusCode) {
 		var errResp errorResponse
 		if err := json.NewDecoder(resp.Body).Decode(&errResp); err == nil && errResp.Error != "" {
 			return fmt.Errorf("%s", errResp.Error)

@@ -174,10 +174,10 @@ var guardianStatusCmd = &cobra.Command{
 
 		// Check executor status
 		state, err := executor.LoadDaemonState()
-		if err != nil {
-			term.Printf("Executor: (unable to retrieve: %v)\n", err)
-		} else if state == nil {
+		if errors.Is(err, executor.ErrNoState) {
 			term.Println("Executor: not running")
+		} else if err != nil {
+			term.Printf("Executor: (unable to retrieve: %v)\n", err)
 		} else if executor.IsDaemonRunning(state) {
 			term.Printf("Executor: running (PID %d)\n", state.PID)
 		} else {

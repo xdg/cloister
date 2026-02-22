@@ -225,9 +225,11 @@ func runProjectRemove(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("project %q not found in registry\n\nHint: Use 'cloister project list' to see registered projects", name)
 	}
 
-	// Error ignored: HasRunningCloister returns ("", nil) when Docker is unavailable,
-	// so failure means "no running cloisters" — safe to proceed with removal.
-	if running, _ := container.NewManager().HasRunningCloister(name); running != "" { //nolint:errcheck // intentional: see comment above
+	running, err := container.NewManager().HasRunningCloister(name)
+	if err != nil {
+		clog.Debug("failed to check running cloisters: %v", err)
+	}
+	if running != "" {
 		return fmt.Errorf("cannot remove project %q: cloister %q is running; stop it first with 'cloister stop %s'",
 			name, running, running)
 	}

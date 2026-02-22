@@ -139,10 +139,13 @@ func IsRunning() (bool, error) {
 	}
 
 	state, err := getContainerState()
+	if errors.Is(err, docker.ErrContainerNotFound) {
+		return false, nil
+	}
 	if err != nil {
 		return false, err
 	}
-	return state != nil && state.State == "running", nil
+	return state.State == "running", nil
 }
 
 // StartOptions configures guardian container startup.
@@ -221,11 +224,11 @@ func StartWithOptions(opts StartOptions) error {
 // ensureCleanState checks for an existing container and removes it if not running.
 func ensureCleanState() error {
 	state, err := getContainerState()
+	if errors.Is(err, docker.ErrContainerNotFound) {
+		return nil
+	}
 	if err != nil {
 		return err
-	}
-	if state == nil {
-		return nil
 	}
 	if state.State == "running" {
 		return ErrGuardianAlreadyRunning
@@ -335,14 +338,13 @@ func Stop() error {
 		clog.Warn("failed to stop executor daemon: %v", err)
 	}
 
-	state, err := getContainerState()
-	if err != nil {
-		return err
-	}
-
-	if state == nil {
+	_, err := getContainerState()
+	if errors.Is(err, docker.ErrContainerNotFound) {
 		// Container doesn't exist, nothing to do
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 
 	return removeContainer()
@@ -393,11 +395,11 @@ func EnsureRunning() error {
 // saveGuardianPorts saves the guardian ports to executor state so clients can discover them.
 func saveGuardianPorts(_ *ExecutorInfo, tokenAPIPort, approvalPort int) error {
 	execState, err := executor.LoadDaemonState()
+	if errors.Is(err, executor.ErrNoState) {
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("failed to load executor state for port storage: %w", err)
-	}
-	if execState == nil {
-		return nil
 	}
 	execState.TokenAPIPort = tokenAPIPort
 	execState.ApprovalPort = approvalPort
@@ -460,14 +462,11 @@ func WaitReadyWithPort(port int, timeout time.Duration) error {
 }
 
 // getContainerState retrieves the current state of the guardian container.
-// Returns nil if the container doesn't exist.
+// Returns docker.ErrContainerNotFound if the container doesn't exist.
 func getContainerState() (*containerState, error) {
 	info, err := defaultDockerOps.FindContainerByExactName(ContainerName())
 	if err != nil {
 		return nil, err
-	}
-	if info == nil {
-		return nil, nil
 	}
 
 	return &containerState{
@@ -514,7 +513,7 @@ func APIPort() int {
 	}
 	// For test instances, read from executor state
 	state, err := executor.LoadDaemonState()
-	if err != nil || state == nil || state.TokenAPIPort == 0 {
+	if err != nil || state.TokenAPIPort == 0 {
 		// Fallback to default if state not available
 		return DefaultAPIPort
 	}
