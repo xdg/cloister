@@ -19,6 +19,10 @@ GIT_COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo latest)
 DOCKER_TAG := $(if $(VERSION),$(VERSION),latest)
 TEST_IMAGE := cloister:$(GIT_COMMIT)
 
+# Cloister detection: if running inside a cloister, relay Docker-dependent
+# targets to the host via hostexec.
+IN_CLOISTER := $(if $(CLOISTER_TOKEN),1)
+
 # Test settings
 #   COUNT=1    - bust cache, COUNT=N for flakiness testing
 #   RUN=regex  - run only tests matching regex (-run flag)
@@ -62,13 +66,23 @@ test:
 test-race:
 	go test -race $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) $(PKG)
 
-test-integration: docker-commit-tag
+test-integration:
+ifdef IN_CLOISTER
+	hostexec make test-integration $(if $(COUNT),COUNT=$(COUNT)) $(if $(RUN),RUN=$(RUN)) $(if $(filter-out ./...,$(PKG)),PKG=$(PKG)) $(if $(VERBOSE),VERBOSE=$(VERBOSE))
+else
+	$(MAKE) docker-commit-tag
 	go build $(LDFLAGS) -o $(BINARY) $(CMD_PATH)
 	CLOISTER_IMAGE=$(TEST_IMAGE) go test -tags=integration $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 $(PKG)
+endif
 
-test-e2e: docker-commit-tag
+test-e2e:
+ifdef IN_CLOISTER
+	hostexec make test-e2e $(if $(COUNT),COUNT=$(COUNT)) $(if $(RUN),RUN=$(RUN)) $(if $(VERBOSE),VERBOSE=$(VERBOSE))
+else
+	$(MAKE) docker-commit-tag
 	go build $(LDFLAGS) -o $(BINARY) $(CMD_PATH)
 	CLOISTER_IMAGE=$(TEST_IMAGE) go test -tags=e2e $(VERBOSE_FLAG) $(COUNT_FLAG) $(RUN_FLAG) -p 1 ./test/e2e/...
+endif
 
 test-all: test-race test-integration test-e2e
 
