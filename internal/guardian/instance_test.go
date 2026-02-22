@@ -194,7 +194,7 @@ func TestProxyEnvVars_DefaultGuardianHost(t *testing.T) {
 func TestProxyEnvVars_NoProxyValue(t *testing.T) {
 	t.Setenv(InstanceIDEnvVar, "")
 	envVars := ProxyEnvVars("token123", "")
-	expected := "cloister-guardian,localhost,127.0.0.1"
+	expected := "cloister-guardian,localhost,127.0.0.1,::1,::"
 
 	for _, varName := range []string{"NO_PROXY", "no_proxy"} {
 		var value string

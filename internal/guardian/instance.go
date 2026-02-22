@@ -81,7 +81,7 @@ func ProxyEnvVars(tok, guardianHost string) []string {
 	}
 
 	proxyURL := fmt.Sprintf("http://token:%s@%s:%d", tok, guardianHost, DefaultProxyPort)
-	noProxy := fmt.Sprintf("%s,localhost,127.0.0.1", guardianHost)
+	noProxy := fmt.Sprintf("%s,localhost,127.0.0.1,::1,::", guardianHost)
 
 	return []string{
 		"CLOISTER_TOKEN=" + tok,

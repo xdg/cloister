@@ -39,7 +39,7 @@ The proxy uses standard HTTP proxy authentication because custom headers on CONN
 ```bash
 HTTPS_PROXY=http://cloister:${CLOISTER_TOKEN}@cloister-guardian:3128/
 HTTP_PROXY=http://cloister:${CLOISTER_TOKEN}@cloister-guardian:3128/
-NO_PROXY=cloister-guardian,localhost,127.0.0.1
+NO_PROXY=cloister-guardian,localhost,127.0.0.1,::1,::
 ```
 
 Requests without valid credentials are rejected with 401 Unauthorized (proxy) or 407 Proxy Authentication Required.

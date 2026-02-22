@@ -433,7 +433,7 @@ For proxy requests, the token is provided via standard HTTP proxy authentication
 ```bash
 HTTPS_PROXY=http://cloister:${CLOISTER_TOKEN}@cloister-guardian:3128/
 HTTP_PROXY=http://cloister:${CLOISTER_TOKEN}@cloister-guardian:3128/
-NO_PROXY=cloister-guardian,localhost,127.0.0.1
+NO_PROXY=cloister-guardian,localhost,127.0.0.1,::1,::
 ```
 
 ### DNS Resolution

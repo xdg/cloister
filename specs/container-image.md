@@ -120,7 +120,7 @@ When a cloister container starts, the launcher sets these environment variables:
 | `CLOISTER_REQUEST_PORT` | Port for hostexec requests (default: `9998`) |
 | `HTTP_PROXY` / `http_proxy` | Proxy URL with embedded credentials for HTTP traffic |
 | `HTTPS_PROXY` / `https_proxy` | Proxy URL for HTTPS traffic (same as HTTP_PROXY) |
-| `NO_PROXY` / `no_proxy` | Hosts that bypass the proxy (guardian, localhost) |
+| `NO_PROXY` / `no_proxy` | Hosts that bypass the proxy (guardian, localhost, IPv6 loopback) |
 
 The proxy URL format is: `http://token:$CLOISTER_TOKEN@$CLOISTER_GUARDIAN_HOST:3128`
 
