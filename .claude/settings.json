@@ -15,6 +15,15 @@
             "command": ".claude/hooks/pre-commit-tests.sh"
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/no-lint-cheating.sh"
+          }
+        ]
       }
     ]
   }
