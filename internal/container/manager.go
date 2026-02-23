@@ -40,6 +40,8 @@ type DockerRunner interface {
 	FindContainerByExactName(name string) (*docker.ContainerInfo, error)
 	// StartContainer starts a created container.
 	StartContainer(name string) error
+	// EnsureImage checks if an image exists locally and pulls it if not.
+	EnsureImage(image string) error
 }
 
 // defaultDockerRunner implements DockerRunner using the real docker package.
@@ -69,6 +71,11 @@ func (d defaultDockerRunner) FindContainerByExactName(name string) (*docker.Cont
 // StartContainer delegates to the real docker package.
 func (d defaultDockerRunner) StartContainer(name string) error {
 	return docker.StartContainer(name)
+}
+
+// EnsureImage delegates to the real docker package.
+func (d defaultDockerRunner) EnsureImage(image string) error {
+	return docker.EnsureImage(image)
 }
 
 // Manager handles cloister container lifecycle operations.
@@ -119,6 +126,11 @@ func (m *Manager) createContainer(cfg *Config, dockerCmd string, extraArgs ...st
 	}
 	if exists {
 		return "", ErrContainerExists
+	}
+
+	// Ensure image is available locally (pulls with visible progress if needed)
+	if err := m.runner.EnsureImage(cfg.ImageName()); err != nil {
+		return "", fmt.Errorf("failed to ensure image available: %w", err)
 	}
 
 	// Build docker arguments

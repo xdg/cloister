@@ -32,6 +32,9 @@ type DockerOps interface {
 
 	// FindContainerByExactName finds a container with the exact name specified.
 	FindContainerByExactName(name string) (*docker.ContainerInfo, error)
+
+	// EnsureImage checks if an image exists locally and pulls it if not.
+	EnsureImage(image string) error
 }
 
 // DefaultDockerOps implements DockerOps using the real Docker CLI.
@@ -58,6 +61,11 @@ func (DefaultDockerOps) Run(args ...string) (string, error) {
 // FindContainerByExactName implements DockerOps.
 func (DefaultDockerOps) FindContainerByExactName(name string) (*docker.ContainerInfo, error) {
 	return docker.FindContainerByExactName(name)
+}
+
+// EnsureImage implements DockerOps.
+func (DefaultDockerOps) EnsureImage(image string) error {
+	return docker.EnsureImage(image)
 }
 
 // defaultDockerOps is the package-level default Docker operations implementation.
@@ -203,6 +211,10 @@ func StartWithOptions(opts StartOptions) error {
 	tokenAPIPort, approvalPort, err := resolveGuardianPorts(opts)
 	if err != nil {
 		return err
+	}
+
+	if err := defaultDockerOps.EnsureImage(container.DefaultImage()); err != nil {
+		return fmt.Errorf("failed to ensure guardian image available: %w", err)
 	}
 
 	args := buildGuardianRunArgs(opts, tokenAPIPort, approvalPort, dirs)

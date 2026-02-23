@@ -43,6 +43,10 @@ func (m *mockDockerRunner) StartContainer(name string) error {
 	return nil
 }
 
+func (m *mockDockerRunner) EnsureImage(_ string) error {
+	return nil
+}
+
 func TestManager_WithMockRunner_Start(t *testing.T) {
 	var runCalls [][]string
 

@@ -19,6 +19,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/xdg/cloister/internal/term"
 )
 
 // Sentinel errors for docker operations.
@@ -200,6 +202,48 @@ func RunJSON(result any, strict bool, args ...string) error {
 // Deprecated: Use RunJSON with strict=true instead.
 func RunJSONStrict(result any, args ...string) error {
 	return RunJSON(result, true, args...)
+}
+
+// ImageExists checks if a Docker image exists locally.
+func ImageExists(image string) (bool, error) {
+	_, err := Run("image", "inspect", image)
+	if err != nil {
+		var cmdErr *CommandError
+		if errors.As(err, &cmdErr) {
+			if strings.Contains(cmdErr.Stderr, "No such image") {
+				return false, nil
+			}
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// PullImage pulls a Docker image with progress visible on stderr.
+// Unlike Run(), this connects stdout/stderr to os.Stderr so the user
+// sees pull progress.
+func PullImage(image string) error {
+	cmd := exec.CommandContext(context.Background(), "docker", "pull", image)
+	cmd.Stdout = term.Stderr()
+	cmd.Stderr = term.Stderr()
+	if err := cmd.Run(); err != nil {
+		return &CommandError{Command: "pull", Args: []string{"pull", image}, Err: err}
+	}
+	return nil
+}
+
+// EnsureImage checks if an image exists locally and pulls it if not.
+// Prints a message and shows pull progress when pulling.
+func EnsureImage(image string) error {
+	exists, err := ImageExists(image)
+	if err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	term.Printf("Pulling image %s...\n", image)
+	return PullImage(image)
 }
 
 // CheckDaemon verifies the Docker daemon is running and accessible.

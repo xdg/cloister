@@ -15,6 +15,7 @@ type mockDockerOpsRunning struct{}
 func (mockDockerOpsRunning) CheckDaemon() error              { return nil }
 func (mockDockerOpsRunning) EnsureCloisterNetwork() error    { return nil }
 func (mockDockerOpsRunning) Run(_ ...string) (string, error) { return "", nil }
+func (mockDockerOpsRunning) EnsureImage(_ string) error      { return nil }
 func (mockDockerOpsRunning) FindContainerByExactName(_ string) (*docker.ContainerInfo, error) {
 	return &docker.ContainerInfo{
 		ID:    "fake-id",
