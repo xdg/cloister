@@ -5,6 +5,8 @@ builds:
     binary: cloister
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -X github.com/xdg/cloister/internal/version.Version={{ .Version }}
     goos:
       - linux
       - darwin
@@ -13,12 +15,10 @@ builds:
       - arm64
 
 archives:
-  - format: tar.gz
+  - formats:
+      - tar.gz
     name_template: >-
       {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
-    format_overrides:
-      - goos: windows
-        format: zip
 
 checksum:
   name_template: 'checksums.txt'
