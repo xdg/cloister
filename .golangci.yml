@@ -86,6 +86,12 @@ linters:
           - depguard
           - nilnil
 
+      # Package names like "token" and "version" are reasonable for internal
+      # packages despite conflicting with stdlib (go/token, go/version).
+      - linters:
+          - revive
+        text: "avoid package names that conflict"
+
       # Generated code — skip entirely.
       - path: \.pb\.go$
         linters:
