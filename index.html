@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloister - Safe Sandboxing for AI Agents</title>
+  <meta name="description" content="Run AI coding agents in YOLO mode without the risk. Cloister sandboxes agents with filesystem isolation, network allowlists, and human-in-the-loop approval.">
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://xdg.github.io/cloister/">
+  <meta property="og:title" content="Cloister - Safe Sandboxing for AI Agents">
+  <meta property="og:description" content="Run AI coding agents in YOLO mode without the risk. Cloister sandboxes agents with filesystem isolation, network allowlists, and human-in-the-loop approval.">
+  <meta property="og:image" content="https://xdg.github.io/cloister/img/og-banner.png">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@xdg">
+  <meta name="twitter:title" content="Cloister - Safe Sandboxing for AI Agents">
+  <meta name="twitter:description" content="Run AI coding agents in YOLO mode without the risk. Cloister sandboxes agents with filesystem isolation, network allowlists, and human-in-the-loop approval.">
+  <meta name="twitter:image" content="https://xdg.github.io/cloister/img/og-banner.png">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Alegreya:wght@500;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="img/cloister-logo.svg">
+
+  <style>
+    :root {
+      --cloister-stone: #2D3748;
+      --archway-blue: #4A6FA5;
+      --courtyard-white: #F7FAFC;
+      --approval-green: #48BB78;
+      --pending-amber: #ECC94B;
+      --blocked-rust: #C53030;
+      --text-muted: #718096;
+      --border-color: #E2E8F0;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-weight: 400;
+      line-height: 1.6;
+      color: var(--cloister-stone);
+      background: var(--courtyard-white);
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Hero Section */
+    .hero {
+      text-align: center;
+      padding: 40px 24px 32px;
+      background: linear-gradient(180deg, #fff 0%, var(--courtyard-white) 100%);
+      position: relative;
+    }
+
+    .hero .container {
+      position: relative;
+    }
+
+    .github-corner {
+      position: absolute;
+      top: 0;
+      right: 0;
+      color: var(--text-muted);
+      transition: color 0.2s;
+    }
+
+    .github-corner:hover {
+      color: var(--cloister-stone);
+    }
+
+    .github-corner svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .hero-brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .hero-logo {
+      width: 80px;
+      height: auto;
+    }
+
+    .hero-text {
+      text-align: left;
+    }
+
+    .hero-title {
+      font-family: 'Alegreya', Georgia, serif;
+      font-size: 3.5rem;
+      font-weight: 500;
+      color: var(--cloister-stone);
+      letter-spacing: -0.02em;
+      line-height: 1;
+      margin-bottom: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .beta-badge {
+      display: inline-block;
+      font-family: 'Inter', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      background: linear-gradient(135deg, #FEFCBF 0%, #FAF089 100%);
+      color: #B7791F;
+      padding: 4px 10px;
+      border-radius: 12px;
+      box-shadow: 0 2px 4px rgba(183, 121, 31, 0.15);
+      position: relative;
+      top: -8px;
+    }
+
+    .hero-tagline {
+      font-size: 1.1rem;
+      font-weight: 500;
+      color: var(--archway-blue);
+      margin-top: -2px;
+    }
+
+    .cta-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary {
+      background: var(--archway-blue);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: #3d5d8a;
+      transform: translateY(-1px);
+    }
+
+    .btn-success {
+      background: var(--approval-green);
+      color: #fff;
+    }
+
+    .btn-success:hover {
+      background: #38a169;
+      transform: translateY(-1px);
+    }
+
+    .btn-secondary {
+      background: #fff;
+      color: var(--cloister-stone);
+      border: 2px solid var(--border-color);
+    }
+
+    .btn-secondary:hover {
+      border-color: var(--archway-blue);
+      color: var(--archway-blue);
+    }
+
+    /* Section styling */
+    section {
+      padding: 40px 24px;
+    }
+
+    section:nth-child(even) {
+      background: #fff;
+    }
+
+    .section-title {
+      font-size: 1.5rem;
+      font-weight: 600;
+      text-align: center;
+      margin-bottom: 8px;
+      color: var(--cloister-stone);
+    }
+
+    .section-subtitle {
+      text-align: center;
+      color: var(--text-muted);
+      max-width: 700px;
+      margin: 0 auto 24px;
+      font-size: 0.95rem;
+    }
+
+    /* Dilemma Section */
+    .dilemma-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .dilemma-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      border: 2px solid var(--border-color);
+    }
+
+    .dilemma-icon {
+      width: 40px;
+      height: 40px;
+      margin-bottom: 12px;
+    }
+
+    .dilemma-card h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .dilemma-card p {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+
+    .dilemma-problem {
+      border-color: var(--pending-amber);
+    }
+
+    .dilemma-problem .dilemma-icon {
+      color: var(--pending-amber);
+    }
+
+    .dilemma-problem h3 {
+      color: #B7791F;
+    }
+
+    .dilemma-solution {
+      border-color: var(--approval-green);
+      background: linear-gradient(180deg, #fff 0%, #F0FFF4 100%);
+    }
+
+    .dilemma-solution .dilemma-icon {
+      color: var(--approval-green);
+    }
+
+    .dilemma-solution h3 {
+      color: #276749;
+    }
+
+    /* Solution Section */
+    .solution-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      max-width: 950px;
+      margin: 0 auto;
+    }
+
+    .solution-card {
+      background: var(--courtyard-white);
+      border-radius: 10px;
+      padding: 20px;
+      border-left: 4px solid var(--approval-green);
+    }
+
+    .solution-card h3 {
+      font-size: 1.05rem;
+      font-weight: 600;
+      margin-bottom: 8px;
+      color: var(--cloister-stone);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .solution-card p {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+      line-height: 1.5;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85em;
+      background: rgba(45, 55, 72, 0.1);
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    .solution-icon {
+      width: 24px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+
+    /* Features Section */
+    .features-section {
+      text-align: center;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(2, auto);
+      gap: 12px 48px;
+      justify-content: center;
+      max-width: 500px;
+      margin: 0 auto;
+    }
+
+    .feature-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.9rem;
+      text-align: left;
+    }
+
+    .feature-check {
+      color: var(--approval-green);
+      font-weight: 600;
+    }
+
+    .feature-circle {
+      color: var(--text-muted);
+    }
+
+    .feature-soon {
+      color: var(--text-muted);
+    }
+
+    /* Quick Start Section */
+    .quickstart {
+      max-width: 700px;
+      margin: 0 auto;
+    }
+
+    .code-block {
+      background: var(--cloister-stone);
+      border-radius: 10px;
+      padding: 20px;
+      overflow-x: auto;
+      margin-bottom: 12px;
+    }
+
+    .code-block pre {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      line-height: 1.6;
+      color: #E2E8F0;
+      margin: 0;
+    }
+
+    .code-block .comment {
+      color: #718096;
+    }
+
+    .code-block .command {
+      color: #90CDF4;
+    }
+
+    .quickstart-note {
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    /* Footer */
+    footer {
+      background: var(--cloister-stone);
+      color: #fff;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .footer-links {
+      display: flex;
+      justify-content: center;
+      gap: 24px;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+
+    .footer-links a {
+      color: #E2E8F0;
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.875rem;
+      transition: color 0.2s;
+    }
+
+    .footer-links a:hover {
+      color: #fff;
+    }
+
+    .footer-credit {
+      color: #718096;
+      font-size: 0.8rem;
+    }
+
+    .footer-credit a {
+      color: #90CDF4;
+      text-decoration: none;
+    }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .hero {
+        padding: 32px 16px 24px;
+      }
+
+      .hero-brand {
+        gap: 12px;
+      }
+
+      .hero-logo {
+        width: 56px;
+      }
+
+      .hero-title {
+        font-size: 2.25rem;
+      }
+
+      .beta-badge {
+        font-size: 0.7rem;
+        padding: 3px 8px;
+        top: -6px;
+      }
+
+      .hero-tagline {
+        font-size: 1rem;
+      }
+
+      section {
+        padding: 32px 16px;
+      }
+
+      .section-title {
+        font-size: 1.25rem;
+      }
+
+      .cta-buttons {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .btn {
+        width: 100%;
+        max-width: 260px;
+        justify-content: center;
+      }
+
+      .features-grid {
+        grid-template-columns: 1fr;
+        gap: 8px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Hero -->
+  <header class="hero">
+    <div class="container">
+      <a href="https://github.com/xdg/cloister" class="github-corner" aria-label="View on GitHub">
+        <svg viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+        </svg>
+      </a>
+      <div class="hero-brand">
+        <img src="img/cloister-logo.svg" alt="Cloister logo - an arch with stars" class="hero-logo">
+        <div class="hero-text">
+          <h1 class="hero-title">Cloister<span class="beta-badge">Beta</span></h1>
+          <p class="hero-tagline">Skip the permission prompts, safely.</p>
+        </div>
+      </div>
+      <div class="cta-buttons">
+        <a href="#quickstart" class="btn btn-success">Get Started</a>
+        <a href="getting-started/" class="btn btn-primary">Documentation</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- The YOLO Dilemma -->
+    <section>
+      <div class="container">
+        <h2 class="section-title">Safe Autonomy</h2>
+
+        <div class="dilemma-grid">
+          <div class="dilemma-card dilemma-problem">
+            <svg class="dilemma-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="24" cy="24" r="18"/>
+              <path d="M24 14v12" stroke-linecap="round"/>
+              <circle cx="24" cy="32" r="2" fill="currentColor"/>
+            </svg>
+            <h3>Permission Fatigue</h3>
+            <p>Constant prompts disrupt your flow and stop agents from working unsupervised.</p>
+          </div>
+
+          <div class="dilemma-card dilemma-problem">
+            <svg class="dilemma-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M24 6l4 8 9 1-7 6 2 9-8-4-8 4 2-9-7-6 9-1z"/>
+              <path d="M14 38l20-28" stroke-linecap="round"/>
+            </svg>
+            <h3>YOLO Is Risky</h3>
+            <p>Unrestricted permissions mean an over-eager agent can corrupt your system, leak credentials, or worse.</p>
+          </div>
+
+          <div class="dilemma-card dilemma-solution">
+            <svg class="dilemma-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="8" y="16" width="32" height="24" rx="2"/>
+              <path d="M16 16V12a8 8 0 1116 0v4"/>
+              <circle cx="24" cy="28" r="3"/>
+              <path d="M24 31v5" stroke-linecap="round"/>
+            </svg>
+            <h3>Sandbox It</h3>
+            <p>Cloister lets you work productively in a safe environment where mistakes can't escape.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- How It Works -->
+    <section>
+      <div class="container">
+        <h2 class="section-title">How It Works</h2>
+        <p class="section-subtitle">Your project runs in an unprivileged Docker container on an isolated network.<br>A guardian proxy controls all outbound traffic.</p>
+
+        <div class="solution-grid">
+          <div class="solution-card">
+            <h3>
+              <svg class="solution-icon" viewBox="0 0 28 28" fill="none" stroke="#48BB78" stroke-width="2">
+                <path d="M4 7h20v16a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/>
+                <path d="M4 7l3-4h14l3 4"/>
+                <path d="M11 13h6" stroke-linecap="round"/>
+              </svg>
+              Filesystem Isolation
+            </h3>
+            <p>Agents see only your project directory, with no access to files on your system. Mistakes stay git-recoverable.</p>
+          </div>
+
+          <div class="solution-card">
+            <h3>
+              <svg class="solution-icon" viewBox="0 0 28 28" fill="none" stroke="#48BB78" stroke-width="2">
+                <circle cx="14" cy="14" r="10"/>
+                <path d="M14 4v4M14 20v4M4 14h4M20 14h4" stroke-linecap="round"/>
+                <circle cx="14" cy="14" r="4"/>
+              </svg>
+              Network Allowlist
+            </h3>
+            <p>Only allowlisted domains are reachable: AI APIs, package registries, documentation. No surprise outbound connections.</p>
+          </div>
+
+          <div class="solution-card">
+            <h3>
+              <svg class="solution-icon" viewBox="0 0 28 28" fill="none" stroke="#48BB78" stroke-width="2">
+                <circle cx="14" cy="10" r="6"/>
+                <path d="M4 26c0-6 4-10 10-10s10 4 10 10"/>
+                <path d="M10 10l2 2 4-4" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              Human-in-the-Loop
+            </h3>
+            <p>The <code>hostexec</code> escape hatch only surfaces requests matching pre-configured patterns, keeping interruptions relevant.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features-section">
+      <div class="container">
+        <h2 class="section-title">Key Features</h2>
+
+        <div class="features-grid">
+          <div class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>Built-in Claude Code and Codex support</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>Per-project allowlists</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>Automatic credential injection</span>
+          </div>
+          <div class="feature-item">
+            <span class="feature-check">✓</span>
+            <span>Preinstalled dev tools</span>
+          </div>
+          <div class="feature-item feature-soon">
+            <span class="feature-circle">○</span>
+            <span>Git worktree support coming</span>
+          </div>
+          <div class="feature-item feature-soon">
+            <span class="feature-circle">○</span>
+            <span>More agents coming</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Quick Start -->
+    <section id="quickstart">
+      <div class="container">
+        <h2 class="section-title">Quick Start</h2>
+
+        <div class="quickstart">
+          <div class="code-block">
+            <pre><span class="comment"># Install</span>
+<span class="command">curl -fsSL https://raw.githubusercontent.com/xdg/cloister/main/install.sh | sh</span>
+
+<span class="comment"># One-time setup: configure your AI agent credentials</span>
+<span class="command">cloister setup claude</span>
+
+<span class="comment"># Start a cloister for your project</span>
+<span class="command">cd your-project</span>
+<span class="command">cloister start</span>
+
+<span class="comment"># You're now inside the cloister with your project mounted at /work</span>
+<span class="command">cloister:my-project:/work$</span>
+
+<span class="comment"># claude is aliased to `claude --dangerously-skip-permissions`</span>
+<span class="command">cloister:my-project:/work$ claude</span></pre>
+          </div>
+          <p class="quickstart-note">Guardian proxy starts automatically on first use. Monitor at <code>http://localhost:9999</code></p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <div class="footer-links">
+      <a href="https://github.com/xdg/cloister">GitHub</a>
+      <a href="https://github.com/xdg/cloister/blob/main/LICENSE">Apache 2.0 License</a>
+    </div>
+    <p class="footer-credit">Built by <a href="https://xdg.me">xdg</a> <a href="https://x.com/xdg" aria-label="Follow on X" style="margin-left: 4px; vertical-align: middle;"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a></p>
+  </footer>
+</body>
+</html>
