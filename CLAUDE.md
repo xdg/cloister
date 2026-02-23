@@ -105,6 +105,21 @@ Tests are split into three tiers based on what they require:
 
 **Tip:** Use `COUNT=1` to bypass test cache: `make test COUNT=1`
 
+## Claude Code Hooks
+
+Claude Code hooks in `.claude/settings.json` enforce code quality guardrails that agents cannot bypass.
+
+| Hook | Trigger | What It Enforces |
+|------|---------|-----------------|
+| `no-lint-cheating.sh` | `PreToolUse` on `Edit\|Write` | Blocks edits that add `//nolint` directives to `.go` files. Agents must fix lint issues, not suppress them. |
+| `pre-commit-tests.sh` | `PreToolUse` on `Bash` (when command contains `git commit`) | Runs `make fmt`, `make lint`, and `make test-all` before allowing a commit. Also blocks commits that include changes to golangci-lint config or add `//nolint` directives. Only humans may commit lint rule changes. |
+
+**Implications for agents:**
+- Never add `//nolint` directives — the hook will deny the edit
+- Never modify `.golangci.yml` — the commit hook will block it
+- All commits must pass `make fmt`, `make lint`, and `make test-all`
+- If a lint rule is wrong or too noisy, flag it for the human to fix
+
 ## Internal Packages
 
 | Package | Purpose |
