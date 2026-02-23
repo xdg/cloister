@@ -3,6 +3,7 @@
 </p>
 
 <p align="center">
+  <a href="https://cloister.dev/getting-started/"><img src="https://img.shields.io/badge/Docs-cloister.dev-green" alt="Documentation"></a>
   <a href="https://goreportcard.com/report/github.com/xdg/cloister"><img src="https://goreportcard.com/badge/github.com/xdg/cloister" alt="Go Report Card"></a>
   <a href="https://github.com/xdg/cloister/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"></a>
 </p>
