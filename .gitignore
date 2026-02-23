@@ -15,6 +15,9 @@ vendor/
 # Go project binary
 /cloister
 
+# GoReleaser
+RELEASE_NOTES.md
+
 # Go coverage
 coverage.txt
 coverage.html
