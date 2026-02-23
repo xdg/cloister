@@ -10,6 +10,8 @@ These flags apply to all commands:
 |------|-------------|
 | `--help`, `-h` | Show help for command |
 | `--version` | Show version information |
+| `--debug` | Enable debug logging |
+| `--silent` | Suppress non-essential output |
 
 ## Cloister Commands
 
@@ -126,6 +128,26 @@ Active tokens: 2
 Executor: running (PID 12345)
 ```
 
+### cloister guardian reload
+
+Reload guardian configuration without restarting.
+
+```bash
+cloister guardian reload
+```
+
+## Shutdown
+
+### cloister shutdown
+
+Stop all cloisters and the guardian.
+
+```bash
+cloister shutdown
+```
+
+Equivalent to `cloister guardian stop` but reads as a single "shut everything down" operation.
+
 ## Project Commands
 
 ### cloister project list
@@ -135,6 +157,8 @@ List registered projects.
 ```bash
 cloister project list
 ```
+
+**Aliases:** `ls`
 
 ### cloister project show
 
@@ -157,10 +181,18 @@ cloister project edit <name>
 Remove project registration.
 
 ```bash
-cloister project remove <name>
+cloister project remove <name> [--config]
 ```
 
-Does not delete project files, only the Cloister registration.
+**Aliases:** `rm`
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--config` | Also remove the project config file |
+
+Does not delete project files, only the Cloister registration. Errors if a cloister is currently running for the project.
 
 ## Configuration Commands
 
