@@ -116,7 +116,8 @@ Claude Code hooks in `.claude/settings.json` enforce code quality guardrails tha
 
 **Implications for agents:**
 - Never add `//nolint` directives — the hook will deny the edit
-- Never modify `.golangci.yml` — the commit hook will block it
+- Never modify `.golangci.yml` unless asked by the user; they will need to
+  commit any lint rule changes
 - All commits must pass `make fmt`, `make lint`, and `make test-all`
 - If a lint rule is wrong or too noisy, flag it for the human to fix
 
