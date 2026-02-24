@@ -310,49 +310,49 @@ Wire worktree creation into the cloister start/stop lifecycle.
 
 ### 7.1 `list` command update
 
-- [ ] Update `cmd/list.go` to use the cloister registry for project/branch
+- [x] Update `cmd/list.go` to use the cloister registry for project/branch
       resolution instead of `ParseCloisterName`. This eliminates the ambiguity
       problem with hyphenated project names.
-- [ ] Fallback: if a running container isn't in the cloister registry (e.g.
+- [x] Fallback: if a running container isn't in the cloister registry (e.g.
       created before Phase 5), still show it using `ParseCloisterName`.
-- [ ] **Test**: List with a hyphenated project name (e.g. `my-api`) correctly
+- [x] **Test**: List with a hyphenated project name (e.g. `my-api`) correctly
       shows project="my-api" branch="" instead of project="my" branch="api".
 
 ### 7.2 `stop` command update
 
-- [ ] Update `cmd/stop.go` to accept worktree cloister names (should already
+- [x] Update `cmd/stop.go` to accept worktree cloister names (should already
       work since `stop` takes a cloister name, but verify).
-- [ ] When stopping from within a worktree directory, `DetectName` should
+- [x] When stopping from within a worktree directory, `DetectName` should
       return the correct worktree cloister name (Phase 4.2).
-- [ ] **Test**: `cloister stop` from within a worktree directory stops the
+- [x] **Test**: `cloister stop` from within a worktree directory stops the
       correct worktree cloister (not the main checkout).
 
 ### 7.3 `project show` update
 
-- [ ] Update `cmd/project.go` `project show` to list managed worktrees.
+- [x] Update `cmd/project.go` `project show` to list managed worktrees.
       Query the cloister registry for all entries with the project name and
       display them.
-- [ ] **Test**: `project show my-api` lists main checkout and worktrees with
+- [x] **Test**: `project show my-api` lists main checkout and worktrees with
       paths.
 
 ### 7.4 Edge cases
 
-- [ ] Branch names with slashes (e.g. `feature/auth`): verify `SanitizeName`
+- [x] Branch names with slashes (e.g. `feature/auth`): verify `SanitizeName`
       handles them correctly in cloister names and worktree directory names.
       The git worktree path must use the sanitized name, not the raw branch
       name (slashes would create subdirectories).
-- [ ] Long branch names: verify truncation in `SanitizeName` doesn't collide
+- [x] Long branch names: verify truncation in `SanitizeName` doesn't collide
       with other cloister names.
-- [ ] Starting a worktree cloister when the main checkout cloister is not
+- [x] Starting a worktree cloister when the main checkout cloister is not
       running: should work (worktrees are independent containers).
-- [ ] Starting a worktree cloister when no main checkout cloister has ever
+- [x] Starting a worktree cloister when no main checkout cloister has ever
       been created: should work (auto-register project as part of the flow).
-- [ ] `worktree remove` when the worktree was created by `git worktree add`
+- [x] `worktree remove` when the worktree was created by `git worktree add`
       manually (not by cloister): should refuse with a clear error ("not a
       cloister-managed worktree").
-- [ ] **Test**: Branch name `feature/auth` produces cloister name
+- [x] **Test**: Branch name `feature/auth` produces cloister name
       `my-api-feature-auth` and worktree dir uses sanitized name.
-- [ ] **Test**: Start worktree cloister without prior main checkout — project
+- [x] **Test**: Start worktree cloister without prior main checkout — project
       gets auto-registered, worktree created, cloister starts.
 
 ---

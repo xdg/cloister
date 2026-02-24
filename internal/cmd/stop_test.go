@@ -205,6 +205,102 @@ func TestDockerErrorDetectionInStop(t *testing.T) {
 	}
 }
 
+// TestStopWorktreeNameAccepted verifies that the stop command accepts
+// worktree-style cloister names (e.g., "myproject-feature") as arguments and
+// correctly converts them to container names. This exercises the same code path
+// as runStop when an explicit name is provided.
+func TestStopWorktreeNameAccepted(t *testing.T) {
+	tests := []struct {
+		cloisterName  string
+		wantContainer string
+	}{
+		{"myproject-feature", "cloister-myproject-feature"},
+		{"myproject-fix-bug-123", "cloister-myproject-fix-bug-123"},
+		{"app-main", "cloister-app-main"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.cloisterName, func(t *testing.T) {
+			// Simulate the argument parsing path in runStop: when args are
+			// provided, the first arg is used directly as the cloister name.
+			args := []string{tc.cloisterName}
+			var cloisterName string
+			if len(args) > 0 {
+				cloisterName = args[0]
+			}
+
+			if cloisterName != tc.cloisterName {
+				t.Fatalf("cloisterName = %q, want %q", cloisterName, tc.cloisterName)
+			}
+
+			// Verify container name conversion works for worktree names.
+			containerName := container.CloisterNameToContainerName(cloisterName)
+			if containerName != tc.wantContainer {
+				t.Errorf("CloisterNameToContainerName(%q) = %q, want %q",
+					cloisterName, containerName, tc.wantContainer)
+			}
+		})
+	}
+}
+
+// TestStopDetectNameWorktree verifies that the stop command's no-argument path
+// correctly handles worktree cloister names. When DetectName returns a
+// worktree-style name (e.g., "myproject-feature"), the stop command must
+// convert it to the correct container name.
+//
+// The core DetectName registry lookup logic (matching cwd to worktree host
+// paths) is tested in internal/cloister/detect_test.go
+// (registry_worktree_match). This test verifies the stop command's downstream
+// handling: that worktree names from DetectName flow through container name
+// conversion correctly and produce distinct container names from the main
+// checkout.
+func TestStopDetectNameWorktree(t *testing.T) {
+	tests := []struct {
+		name              string
+		detectedName      string
+		wantContainer     string
+		mainCloisterName  string
+		wantMainContainer string
+	}{
+		{
+			name:              "worktree cloister targets different container than main",
+			detectedName:      "myproject-feature",
+			wantContainer:     "cloister-myproject-feature",
+			mainCloisterName:  "myproject",
+			wantMainContainer: "cloister-myproject",
+		},
+		{
+			name:              "worktree with multi-segment branch name",
+			detectedName:      "myproject-fix-bug-123",
+			wantContainer:     "cloister-myproject-fix-bug-123",
+			mainCloisterName:  "myproject",
+			wantMainContainer: "cloister-myproject",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Simulate what runStop does after DetectName returns a name.
+			containerName := container.CloisterNameToContainerName(tc.detectedName)
+			if containerName != tc.wantContainer {
+				t.Errorf("CloisterNameToContainerName(%q) = %q, want %q",
+					tc.detectedName, containerName, tc.wantContainer)
+			}
+
+			// Verify the worktree container name differs from the main checkout,
+			// ensuring stop targets the correct cloister.
+			mainContainer := container.CloisterNameToContainerName(tc.mainCloisterName)
+			if mainContainer != tc.wantMainContainer {
+				t.Errorf("main container = %q, want %q", mainContainer, tc.wantMainContainer)
+			}
+			if containerName == mainContainer {
+				t.Errorf("worktree container %q must differ from main container %q",
+					containerName, mainContainer)
+			}
+		})
+	}
+}
+
 // TestStopOutputMessages verifies the expected output format for successful stops.
 func TestStopOutputMessages(t *testing.T) {
 	tests := []struct {

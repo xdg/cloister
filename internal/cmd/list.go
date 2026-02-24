@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/xdg/cloister/internal/clog"
+	"github.com/xdg/cloister/internal/cloister"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/docker"
 	"github.com/xdg/cloister/internal/term"
@@ -63,10 +64,18 @@ func runList(_ *cobra.Command, _ []string) error {
 	// Print header
 	_, _ = fmt.Fprintln(w, "NAME\tPROJECT\tBRANCH\tUPTIME\tSTATUS")
 
+	// Load registry once for accurate project/branch resolution.
+	// If loading fails, reg will be nil and we fall back to ParseCloisterName.
+	reg, err := cloister.LoadRegistry()
+	if err != nil {
+		clog.Debug("failed to load cloister registry, falling back to name parsing: %v", err)
+		reg = nil
+	}
+
 	// Print each cloister
 	for _, c := range cloisters {
 		cloisterName := container.NameToCloisterName(c.Name)
-		project, branch := container.ParseCloisterName(cloisterName)
+		project, branch := resolveCloisterInfo(cloisterName, reg)
 		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
 			cloisterName,
 			project,
@@ -80,4 +89,17 @@ func runList(_ *cobra.Command, _ []string) error {
 		clog.Warn("failed to flush output: %v", err)
 	}
 	return nil
+}
+
+// resolveCloisterInfo resolves a cloister name to its project and branch.
+// If the registry is available and contains the cloister name, it uses the
+// registry entry for accurate resolution. Otherwise, it falls back to
+// ParseCloisterName, which is ambiguous for hyphenated project names.
+func resolveCloisterInfo(cloisterName string, reg *cloister.Registry) (project, branch string) {
+	if reg != nil {
+		if entry := reg.FindByName(cloisterName); entry != nil {
+			return entry.ProjectName, entry.Branch
+		}
+	}
+	return container.ParseCloisterName(cloisterName)
 }

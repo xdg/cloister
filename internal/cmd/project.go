@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/xdg/cloister/internal/clog"
+	"github.com/xdg/cloister/internal/cloister"
 	"github.com/xdg/cloister/internal/config"
 	"github.com/xdg/cloister/internal/container"
 	"github.com/xdg/cloister/internal/project"
@@ -187,7 +188,34 @@ func runProjectShow(_ *cobra.Command, args []string) error {
 		}
 	}
 
+	// Print managed cloisters (best-effort, don't fail if registry can't load)
+	if cloisters := loadProjectCloisters(name); len(cloisters) > 0 {
+		term.Println()
+		term.Println("Managed Cloisters:")
+		for _, c := range cloisters {
+			branch := c.Branch
+			if branch == "" {
+				branch = "(main)"
+			}
+			term.Printf("  %-14s %-10s %s\n", c.CloisterName, branch, c.HostPath)
+		}
+	}
+
 	return nil
+}
+
+// loadProjectCloisters loads the cloister registry and returns entries for the
+// given project. Returns nil on any error (best-effort).
+func loadProjectCloisters(projectName string) []cloister.RegistryEntry {
+	reg, err := cloister.LoadRegistry()
+	if err != nil {
+		return nil
+	}
+	entries := reg.FindByProject(projectName)
+	if len(entries) == 0 {
+		return nil
+	}
+	return entries
 }
 
 func runProjectEdit(_ *cobra.Command, args []string) error {

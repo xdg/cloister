@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/xdg/cloister/internal/cloister"
 	"github.com/xdg/cloister/internal/container"
 )
 
@@ -107,5 +108,106 @@ func TestDockerNotRunningInList(t *testing.T) {
 	msg := err.Error()
 	if !strings.Contains(msg, "docker is not running") {
 		t.Errorf("expected 'Docker is not running' in error, got: %s", msg)
+	}
+}
+
+// TestResolveCloisterInfo tests the resolveCloisterInfo helper used by the list command.
+func TestResolveCloisterInfo(t *testing.T) {
+	tests := []struct {
+		name        string
+		cloister    string
+		reg         *cloister.Registry
+		wantProject string
+		wantBranch  string
+	}{
+		{
+			name:        "nil registry falls back to ParseCloisterName",
+			cloister:    "my-api",
+			reg:         nil,
+			wantProject: "my",
+			wantBranch:  "api",
+		},
+		{
+			name:     "registry entry found uses registry data",
+			cloister: "my-api",
+			reg: &cloister.Registry{
+				Cloisters: []cloister.RegistryEntry{
+					{CloisterName: "my-api", ProjectName: "my-api", Branch: ""},
+				},
+			},
+			wantProject: "my-api",
+			wantBranch:  "",
+		},
+		{
+			name:     "registry miss falls back to ParseCloisterName",
+			cloister: "unknown-proj",
+			reg: &cloister.Registry{
+				Cloisters: []cloister.RegistryEntry{
+					{CloisterName: "my-api", ProjectName: "my-api", Branch: ""},
+				},
+			},
+			wantProject: "unknown",
+			wantBranch:  "proj",
+		},
+		{
+			name:     "worktree entry with branch",
+			cloister: "my-api-feature",
+			reg: &cloister.Registry{
+				Cloisters: []cloister.RegistryEntry{
+					{CloisterName: "my-api-feature", ProjectName: "my-api", Branch: "feature"},
+				},
+			},
+			wantProject: "my-api",
+			wantBranch:  "feature",
+		},
+		{
+			name:        "simple name no hyphen with nil registry",
+			cloister:    "myproject",
+			reg:         nil,
+			wantProject: "myproject",
+			wantBranch:  "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			project, branch := resolveCloisterInfo(tt.cloister, tt.reg)
+			if project != tt.wantProject {
+				t.Errorf("project = %q, want %q", project, tt.wantProject)
+			}
+			if branch != tt.wantBranch {
+				t.Errorf("branch = %q, want %q", branch, tt.wantBranch)
+			}
+		})
+	}
+}
+
+// TestListHyphenatedProject verifies that with a registry entry for a
+// hyphenated project name like "my-api" (no branch), the resolution shows
+// project="my-api" branch="" instead of the ParseCloisterName result of
+// project="my" branch="api".
+func TestListHyphenatedProject(t *testing.T) {
+	reg := &cloister.Registry{
+		Cloisters: []cloister.RegistryEntry{
+			{CloisterName: "my-api", ProjectName: "my-api", Branch: ""},
+		},
+	}
+
+	// With registry: should resolve correctly
+	project, branch := resolveCloisterInfo("my-api", reg)
+	if project != "my-api" {
+		t.Errorf("with registry: project = %q, want %q", project, "my-api")
+	}
+	if branch != "" {
+		t.Errorf("with registry: branch = %q, want %q", branch, "")
+	}
+
+	// Without registry: ParseCloisterName gives wrong result
+	projectFallback, branchFallback := resolveCloisterInfo("my-api", nil)
+	if projectFallback != "my" {
+		t.Errorf("without registry: project = %q, want %q (fallback behavior)", projectFallback, "my")
+	}
+	if branchFallback != "api" {
+		t.Errorf("without registry: branch = %q, want %q (fallback behavior)", branchFallback, "api")
 	}
 }

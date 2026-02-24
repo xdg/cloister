@@ -40,6 +40,11 @@ func TestSanitizeName(t *testing.T) {
 			expected: "feature-new-feature",
 		},
 		{
+			name:     "feature/auth branch",
+			input:    "feature/auth",
+			expected: "feature-auth",
+		},
+		{
 			name:     "nested branch",
 			input:    "user/feature/branch",
 			expected: "user-feature-branch",
@@ -261,6 +266,24 @@ func TestGenerateWorktreeCloisterName(t *testing.T) {
 			project:  "MyProject",
 			branch:   "Main",
 			expected: "myproject-main",
+		},
+		{
+			name:     "slash branch with hyphenated project",
+			project:  "my-api",
+			branch:   "feature/auth",
+			expected: "my-api-feature-auth",
+		},
+		{
+			name:     "deeply nested slash branch",
+			project:  "my-api",
+			branch:   "user/feature/deep/auth",
+			expected: "my-api-user-feature-deep-auth",
+		},
+		{
+			name:     "long branch name truncated per component",
+			project:  "proj",
+			branch:   strings.Repeat("a", 100),
+			expected: "proj-" + strings.Repeat("a", 63),
 		},
 	}
 

@@ -343,6 +343,151 @@ func TestWithWorktreeOps_InjectionWorks(t *testing.T) {
 	}
 }
 
+// TestStartWorktree_IndependentOfMainCheckout verifies that StartWorktree
+// works without any prior main checkout cloister running or registered.
+// This is an architectural guarantee: StartWorktree calls Start which does
+// not check for a main checkout container or registry entry.
+func TestStartWorktree_IndependentOfMainCheckout(t *testing.T) {
+	mockMgr := &mockManager{createResult: "container-independent-123"}
+	mockGuard := &mockGuardian{}
+	mockCfgLoader := &mockConfigLoader{
+		config: &config.GlobalConfig{
+			Agents: map[string]config.AgentConfig{
+				"claude": {AuthMethod: "token", Token: "test-token"},
+			},
+		},
+	}
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
+	}
+	// Empty registry: no prior main checkout or any other cloister registered.
+	mockReg := &mockRegistryStore{}
+
+	worktreeDir := t.TempDir() + "/worktrees/fresh-project/new-branch"
+
+	mockWt := &mockWorktreeOps{
+		resolveBranchExist: false, // branch is new, not pre-existing
+		dirResult:          worktreeDir,
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
+
+	opts := StartOptions{
+		ProjectPath: "/path/to/fresh-project",
+		ProjectName: "fresh-project",
+		BranchName:  "new-branch",
+	}
+
+	containerID, tok, err := StartWorktree(opts,
+		WithManager(mockMgr),
+		WithGuardian(mockGuard),
+		WithConfigLoader(mockCfgLoader),
+		WithAgent(mockAgt),
+		WithRegistryStore(mockReg),
+		WithWorktreeOps(mockWt),
+	)
+	if err != nil {
+		t.Fatalf("StartWorktree() returned error: %v", err)
+	}
+	if containerID == "" {
+		t.Error("containerID should not be empty")
+	}
+	if tok == "" {
+		t.Error("token should not be empty")
+	}
+
+	// Verify the cloister was created with the worktree name.
+	expectedContainerName := "cloister-fresh-project-new-branch"
+	if mockMgr.startContainerName != expectedContainerName {
+		t.Errorf("container name = %q, want %q", mockMgr.startContainerName, expectedContainerName)
+	}
+
+	// Verify registry has exactly one entry (the worktree, no main checkout).
+	if mockReg.saved == nil {
+		t.Fatal("registry was not saved")
+	}
+	if len(mockReg.saved.Cloisters) != 1 {
+		t.Fatalf("expected 1 registry entry, got %d", len(mockReg.saved.Cloisters))
+	}
+	entry := mockReg.saved.Cloisters[0]
+	if !entry.IsWorktree {
+		t.Error("registry entry IsWorktree should be true")
+	}
+	if entry.Branch != "new-branch" {
+		t.Errorf("registry entry Branch = %q, want %q", entry.Branch, "new-branch")
+	}
+}
+
+// TestStartWorktree_SlashBranch verifies that branch names with slashes
+// (e.g. "feature/auth") produce correct cloister names and container names.
+func TestStartWorktree_SlashBranch(t *testing.T) {
+	mockMgr := &mockManager{createResult: "container-slash-456"}
+	mockGuard := &mockGuardian{}
+	mockCfgLoader := &mockConfigLoader{
+		config: &config.GlobalConfig{
+			Agents: map[string]config.AgentConfig{
+				"claude": {AuthMethod: "token", Token: "test-token"},
+			},
+		},
+	}
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
+	}
+	mockReg := &mockRegistryStore{}
+
+	worktreeDir := t.TempDir() + "/worktrees/my-api/feature-auth"
+
+	mockWt := &mockWorktreeOps{
+		resolveBranchExist: true,
+		dirResult:          worktreeDir,
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
+
+	opts := StartOptions{
+		ProjectPath: "/path/to/my-api",
+		ProjectName: "my-api",
+		BranchName:  "feature/auth",
+	}
+
+	_, _, err := StartWorktree(opts,
+		WithManager(mockMgr),
+		WithGuardian(mockGuard),
+		WithConfigLoader(mockCfgLoader),
+		WithAgent(mockAgt),
+		WithRegistryStore(mockReg),
+		WithWorktreeOps(mockWt),
+	)
+	if err != nil {
+		t.Fatalf("StartWorktree() returned error: %v", err)
+	}
+
+	// The cloister name should have slashes replaced with hyphens.
+	expectedContainerName := "cloister-my-api-feature-auth"
+	if mockMgr.startContainerName != expectedContainerName {
+		t.Errorf("container name = %q, want %q", mockMgr.startContainerName, expectedContainerName)
+	}
+
+	// Verify the branch is stored as the original name (with slash) in the registry.
+	if mockReg.saved == nil {
+		t.Fatal("registry was not saved")
+	}
+	if len(mockReg.saved.Cloisters) != 1 {
+		t.Fatalf("expected 1 registry entry, got %d", len(mockReg.saved.Cloisters))
+	}
+	entry := mockReg.saved.Cloisters[0]
+	if entry.Branch != "feature/auth" {
+		t.Errorf("registry entry Branch = %q, want %q", entry.Branch, "feature/auth")
+	}
+	if entry.CloisterName != "my-api-feature-auth" {
+		t.Errorf("registry entry CloisterName = %q, want %q", entry.CloisterName, "my-api-feature-auth")
+	}
+}
+
 // TestApplyOptions_DefaultWorktreeOps verifies default worktree ops is set.
 func TestApplyOptions_DefaultWorktreeOps(t *testing.T) {
 	deps := applyOptions()

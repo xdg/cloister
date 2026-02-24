@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"slices"
@@ -10,7 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/xdg/cloister/internal/cloister"
 	"github.com/xdg/cloister/internal/project"
+	"github.com/xdg/cloister/internal/term"
+	"github.com/xdg/cloister/internal/testutil"
 )
 
 func TestProjectCmd_HasSubcommands(t *testing.T) {
@@ -264,5 +268,122 @@ func TestProjectListCmd_HasAlias(t *testing.T) {
 func TestProjectRemoveCmd_HasAlias(t *testing.T) {
 	if !slices.Contains(projectRemoveCmd.Aliases, "rm") {
 		t.Error("remove command should have 'rm' alias")
+	}
+}
+
+func TestProjectShowWorktrees(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
+
+	// Create project registry entry
+	projReg := &project.Registry{
+		Projects: []project.RegistryEntry{
+			{
+				Name:     "myapi",
+				Root:     "/home/user/projects/myapi",
+				Remote:   "git@github.com:user/myapi.git",
+				LastUsed: time.Now(),
+			},
+		},
+	}
+	if err := project.SaveRegistry(projReg); err != nil {
+		t.Fatalf("SaveRegistry() error = %v", err)
+	}
+
+	// Create cloister registry entries (main + worktree)
+	cloisterReg := &cloister.Registry{
+		Cloisters: []cloister.RegistryEntry{
+			{
+				CloisterName: "myapi",
+				ProjectName:  "myapi",
+				Branch:       "",
+				HostPath:     "/home/user/projects/myapi",
+				IsWorktree:   false,
+				CreatedAt:    time.Now(),
+			},
+			{
+				CloisterName: "myapi-feature",
+				ProjectName:  "myapi",
+				Branch:       "feature",
+				HostPath:     "/home/user/.local/share/cloister/worktrees/myapi/feature",
+				IsWorktree:   true,
+				CreatedAt:    time.Now(),
+			},
+		},
+	}
+	if err := cloister.SaveRegistry(cloisterReg); err != nil {
+		t.Fatalf("SaveRegistry() error = %v", err)
+	}
+
+	// Capture output
+	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
+
+	cmd := &cobra.Command{}
+	err := runProjectShow(cmd, []string{"myapi"})
+	if err != nil {
+		t.Fatalf("runProjectShow() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Verify managed cloisters section is present
+	if !strings.Contains(output, "Managed Cloisters:") {
+		t.Errorf("output should contain 'Managed Cloisters:', got:\n%s", output)
+	}
+
+	// Verify main cloister entry with (main) marker
+	if !strings.Contains(output, "myapi") || !strings.Contains(output, "(main)") {
+		t.Errorf("output should contain main cloister with (main), got:\n%s", output)
+	}
+
+	// Verify worktree entry
+	if !strings.Contains(output, "myapi-feature") || !strings.Contains(output, "feature") {
+		t.Errorf("output should contain worktree cloister, got:\n%s", output)
+	}
+
+	// Verify host paths are shown
+	if !strings.Contains(output, "/home/user/projects/myapi") {
+		t.Errorf("output should contain main host path, got:\n%s", output)
+	}
+	if !strings.Contains(output, "/home/user/.local/share/cloister/worktrees/myapi/feature") {
+		t.Errorf("output should contain worktree host path, got:\n%s", output)
+	}
+}
+
+func TestProjectShowWorktrees_NoCloisters(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
+
+	// Create project registry entry but no cloister entries
+	projReg := &project.Registry{
+		Projects: []project.RegistryEntry{
+			{
+				Name:     "empty-project",
+				Root:     "/home/user/projects/empty-project",
+				Remote:   "git@github.com:user/empty-project.git",
+				LastUsed: time.Now(),
+			},
+		},
+	}
+	if err := project.SaveRegistry(projReg); err != nil {
+		t.Fatalf("SaveRegistry() error = %v", err)
+	}
+
+	// Capture output
+	var stdout bytes.Buffer
+	term.SetOutput(&stdout)
+	defer term.Reset()
+
+	cmd := &cobra.Command{}
+	err := runProjectShow(cmd, []string{"empty-project"})
+	if err != nil {
+		t.Fatalf("runProjectShow() error = %v", err)
+	}
+
+	output := stdout.String()
+
+	// Should not contain the managed cloisters section
+	if strings.Contains(output, "Managed Cloisters:") {
+		t.Errorf("output should NOT contain 'Managed Cloisters:' when no cloisters exist, got:\n%s", output)
 	}
 }
