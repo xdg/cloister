@@ -120,18 +120,18 @@ the authoritative source for resolving ambiguous cloister names (since
 
 ### 2.2 Registry integration with Start/Stop
 
-- [ ] In `cloister.Start()`: after creating the cloister, register it in the
+- [x] In `cloister.Start()`: after creating the cloister, register it in the
       cloister registry. Include project name, branch, host path, and whether
       it's a worktree.
-- [ ] In `cloister.Stop()`: remove the entry from the cloister registry.
-- [ ] Add registry dependency injection via a new `Option` (e.g.
+- [x] In `cloister.Stop()`: remove the entry from the cloister registry.
+- [x] Add registry dependency injection via a new `Option` (e.g.
       `WithCloisterRegistry`) to allow testing without touching disk.
-- [ ] Backfill: existing `cmd/start.go` flow (main checkout) must register
+- [x] Backfill: existing `cmd/start.go` flow (main checkout) must register
       in the cloister registry. Branch is the detected branch, `IsWorktree`
       is false, `HostPath` is the git root.
-- [ ] **Test**: Mock-based unit test: `Start` registers entry, `Stop` removes
+- [x] **Test**: Mock-based unit test: `Start` registers entry, `Stop` removes
       it. Verify correct fields are passed.
-- [ ] **Test**: Verify that existing main-checkout start flow still works
+- [x] **Test**: Verify that existing main-checkout start flow still works
       (no regression).
 
 ---

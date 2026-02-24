@@ -951,3 +951,219 @@ func TestAttachExisting_IsRunningFails(t *testing.T) {
 		t.Error("Attach() should not be called when IsRunning fails")
 	}
 }
+
+// mockRegistryStore is a test double for RegistryStore.
+type mockRegistryStore struct {
+	registry *Registry
+	loadErr  error
+	saveErr  error
+	saved    *Registry // captures the registry passed to SaveRegistry
+}
+
+func (m *mockRegistryStore) LoadRegistry() (*Registry, error) {
+	if m.loadErr != nil {
+		return nil, m.loadErr
+	}
+	if m.registry == nil {
+		m.registry = &Registry{}
+	}
+	return m.registry, nil
+}
+
+func (m *mockRegistryStore) SaveRegistry(r *Registry) error {
+	m.saved = r
+	return m.saveErr
+}
+
+// TestStart_RegistersInRegistryStore verifies that Start() registers in the cloister registry.
+func TestStart_RegistersInRegistryStore(t *testing.T) {
+	mockMgr := &mockManager{createResult: "container-123"}
+	mockGuard := &mockGuardian{}
+	mockCfgLoader := &mockConfigLoader{
+		config: &config.GlobalConfig{
+			Agents: map[string]config.AgentConfig{
+				"claude": {AuthMethod: "token", Token: "test-token"},
+			},
+		},
+	}
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
+	}
+	mockReg := &mockRegistryStore{}
+
+	t.Setenv("HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
+
+	opts := StartOptions{
+		ProjectPath: "/path/to/project",
+		ProjectName: "testproject",
+		BranchName:  "main",
+	}
+
+	_, _, err := Start(opts,
+		WithManager(mockMgr),
+		WithGuardian(mockGuard),
+		WithConfigLoader(mockCfgLoader),
+		WithAgent(mockAgt),
+		WithRegistryStore(mockReg),
+	)
+	if err != nil {
+		t.Fatalf("Start() returned error: %v", err)
+	}
+
+	// Verify registry was saved
+	if mockReg.saved == nil {
+		t.Fatal("registry was not saved")
+	}
+
+	// Verify the entry was registered
+	if len(mockReg.saved.Cloisters) != 1 {
+		t.Fatalf("expected 1 registry entry, got %d", len(mockReg.saved.Cloisters))
+	}
+
+	entry := mockReg.saved.Cloisters[0]
+	if entry.CloisterName != "testproject" {
+		t.Errorf("CloisterName = %q, want %q", entry.CloisterName, "testproject")
+	}
+	if entry.ProjectName != "testproject" {
+		t.Errorf("ProjectName = %q, want %q", entry.ProjectName, "testproject")
+	}
+	if entry.Branch != "main" {
+		t.Errorf("Branch = %q, want %q", entry.Branch, "main")
+	}
+	if entry.HostPath != "/path/to/project" {
+		t.Errorf("HostPath = %q, want %q", entry.HostPath, "/path/to/project")
+	}
+	if entry.IsWorktree {
+		t.Error("IsWorktree should be false for main checkout")
+	}
+}
+
+// TestStart_RegistryErrorDoesNotFailStart verifies that registry errors don't fail Start().
+func TestStart_RegistryErrorDoesNotFailStart(t *testing.T) {
+	mockMgr := &mockManager{createResult: "container-123"}
+	mockGuard := &mockGuardian{}
+	mockCfgLoader := &mockConfigLoader{
+		config: &config.GlobalConfig{
+			Agents: map[string]config.AgentConfig{
+				"claude": {AuthMethod: "token", Token: "test-token"},
+			},
+		},
+	}
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
+	}
+	mockReg := &mockRegistryStore{
+		loadErr: errors.New("registry load failed"),
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
+
+	var stderrBuf bytes.Buffer
+
+	opts := StartOptions{
+		ProjectPath: "/path/to/project",
+		ProjectName: "testproject",
+		BranchName:  "main",
+	}
+
+	_, _, err := Start(opts,
+		WithManager(mockMgr),
+		WithGuardian(mockGuard),
+		WithConfigLoader(mockCfgLoader),
+		WithAgent(mockAgt),
+		WithRegistryStore(mockReg),
+		WithStderr(&stderrBuf),
+	)
+	if err != nil {
+		t.Fatalf("Start() should succeed even when registry fails, got: %v", err)
+	}
+
+	// Verify warning was written to stderr
+	if !strings.Contains(stderrBuf.String(), "failed to register cloister in registry") {
+		t.Errorf("expected registry warning in stderr, got: %q", stderrBuf.String())
+	}
+}
+
+// TestStop_RemovesFromRegistryStore verifies that Stop() removes from the cloister registry.
+func TestStop_RemovesFromRegistryStore(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
+
+	mockMgr := &mockManager{}
+	mockReg := &mockRegistryStore{
+		registry: &Registry{
+			Cloisters: []RegistryEntry{
+				{CloisterName: "testproject", ProjectName: "testproject", Branch: "main"},
+			},
+		},
+	}
+
+	err := Stop("cloister-testproject", "",
+		WithManager(mockMgr),
+		WithRegistryStore(mockReg),
+	)
+	if err != nil {
+		t.Fatalf("Stop() returned error: %v", err)
+	}
+
+	// Verify registry was saved with the entry removed
+	if mockReg.saved == nil {
+		t.Fatal("registry was not saved")
+	}
+	if len(mockReg.saved.Cloisters) != 0 {
+		t.Errorf("expected 0 registry entries after stop, got %d", len(mockReg.saved.Cloisters))
+	}
+}
+
+// TestStop_RegistryErrorDoesNotFailStop verifies that registry errors don't fail Stop().
+func TestStop_RegistryErrorDoesNotFailStop(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
+
+	mockMgr := &mockManager{}
+	mockReg := &mockRegistryStore{
+		loadErr: errors.New("registry load failed"),
+	}
+
+	var stderrBuf bytes.Buffer
+
+	err := Stop("cloister-testproject", "",
+		WithManager(mockMgr),
+		WithRegistryStore(mockReg),
+		WithStderr(&stderrBuf),
+	)
+	if err != nil {
+		t.Fatalf("Stop() should succeed even when registry fails, got: %v", err)
+	}
+
+	// Verify warning was written to stderr
+	if !strings.Contains(stderrBuf.String(), "failed to load cloister registry for removal") {
+		t.Errorf("expected registry warning in stderr, got: %q", stderrBuf.String())
+	}
+}
+
+// TestWithRegistryStore_InjectionWorks verifies that WithRegistryStore properly injects.
+func TestWithRegistryStore_InjectionWorks(t *testing.T) {
+	mockReg := &mockRegistryStore{}
+	deps := applyOptions(WithRegistryStore(mockReg))
+
+	if deps.registry != mockReg {
+		t.Errorf("applyOptions().registry = %T, want *mockRegistryStore", deps.registry)
+	}
+}
+
+// TestApplyOptions_DefaultRegistryStore verifies default registry is set.
+func TestApplyOptions_DefaultRegistryStore(t *testing.T) {
+	deps := applyOptions()
+
+	if deps.registry == nil {
+		t.Fatal("applyOptions().registry is nil")
+	}
+
+	_, ok := deps.registry.(defaultRegistryStore)
+	if !ok {
+		t.Errorf("applyOptions().registry is %T, want defaultRegistryStore", deps.registry)
+	}
+}

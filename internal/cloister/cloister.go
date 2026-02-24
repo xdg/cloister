@@ -17,6 +17,26 @@ import (
 	"github.com/xdg/cloister/internal/token"
 )
 
+// RegistryStore is the interface for cloister registry persistence.
+// This allows injecting mock implementations for testing.
+type RegistryStore interface {
+	LoadRegistry() (*Registry, error)
+	SaveRegistry(*Registry) error
+}
+
+// defaultRegistryStore implements RegistryStore using the package-level functions.
+type defaultRegistryStore struct{}
+
+// LoadRegistry delegates to the package-level LoadRegistry function.
+func (defaultRegistryStore) LoadRegistry() (*Registry, error) {
+	return LoadRegistry()
+}
+
+// SaveRegistry delegates to the package-level SaveRegistry function.
+func (defaultRegistryStore) SaveRegistry(r *Registry) error {
+	return SaveRegistry(r)
+}
+
 // ContainerManager is the interface for container operations.
 // This allows injecting mock implementations for testing.
 type ContainerManager interface {
@@ -93,6 +113,7 @@ type options struct {
 	guardian     GuardianManager
 	configLoader ConfigLoader
 	agent        agent.Agent
+	registry     RegistryStore
 	stderr       io.Writer
 	globalConfig *config.GlobalConfig // Pre-loaded config (avoids double-load)
 }
@@ -129,6 +150,14 @@ func WithAgent(a agent.Agent) Option {
 	}
 }
 
+// WithRegistryStore sets a custom cloister registry for dependency injection.
+// If not set, the default package-level LoadRegistry/SaveRegistry functions are used.
+func WithRegistryStore(r RegistryStore) Option {
+	return func(o *options) {
+		o.registry = r
+	}
+}
+
 // WithStderr sets a custom writer for stderr output (warnings, deprecation notices).
 // If not set, os.Stderr is used.
 func WithStderr(w io.Writer) Option {
@@ -161,6 +190,9 @@ func applyOptions(opts ...Option) *options {
 		o.configLoader = defaultConfigLoader{}
 	}
 	// Note: o.agent is resolved later in Start() based on config, unless explicitly set
+	if o.registry == nil {
+		o.registry = defaultRegistryStore{}
+	}
 	if o.stderr == nil {
 		o.stderr = os.Stderr
 	}
@@ -263,7 +295,50 @@ func Start(opts StartOptions, options ...Option) (containerID, tok string, err e
 		return "", "", err
 	}
 
+	// Register in the cloister registry (best-effort, don't fail start)
+	if regErr := registerInRegistryStore(deps, cloisterName, opts); regErr != nil {
+		fmt.Fprintf(deps.stderr, "warning: failed to register cloister in registry: %v\n", regErr)
+	}
+
 	return containerID, tok, nil
+}
+
+// removeFromRegistryStore removes a cloister entry from the registry (best-effort).
+func removeFromRegistryStore(deps *options, cloisterName string) {
+	reg, err := deps.registry.LoadRegistry()
+	if err != nil {
+		fmt.Fprintf(deps.stderr, "warning: failed to load cloister registry for removal: %v\n", err)
+		return
+	}
+
+	if err := reg.Remove(cloisterName); err != nil {
+		// Not found is fine — the entry may never have been registered
+		return
+	}
+
+	if err := deps.registry.SaveRegistry(reg); err != nil {
+		fmt.Fprintf(deps.stderr, "warning: failed to save cloister registry after removal: %v\n", err)
+	}
+}
+
+// registerInRegistryStore adds a cloister entry to the registry.
+func registerInRegistryStore(deps *options, cloisterName string, opts StartOptions) error {
+	reg, err := deps.registry.LoadRegistry()
+	if err != nil {
+		return err
+	}
+
+	if err := reg.Register(RegistryEntry{
+		CloisterName: cloisterName,
+		ProjectName:  opts.ProjectName,
+		Branch:       opts.BranchName,
+		HostPath:     opts.ProjectPath,
+		IsWorktree:   false, // hardcoded for now; Phase 4 will add worktree support
+	}); err != nil {
+		return err
+	}
+
+	return deps.registry.SaveRegistry(reg)
 }
 
 // containerSetup groups the parameters needed to create and start a container.
@@ -424,7 +499,13 @@ func Stop(containerName, tok string, options ...Option) error {
 	}
 
 	// Step 3: Stop and remove the container
-	return deps.manager.Stop(containerName)
+	stopErr := deps.manager.Stop(containerName)
+
+	// Step 4: Remove from cloister registry (best-effort)
+	cloisterName := container.NameToCloisterName(containerName)
+	removeFromRegistryStore(deps, cloisterName)
+
+	return stopErr
 }
 
 // Attach attaches an interactive shell to a running cloister container.
