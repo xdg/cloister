@@ -263,14 +263,14 @@ Wire worktree creation into the cloister start/stop lifecycle.
 
 ### 5.2 Add `path` command
 
-- [ ] Add `cloister path <name>` command that prints the host path for a
+- [x] Add `cloister path <name>` command that prints the host path for a
       cloister.
-- [ ] Look up `<name>` in the cloister registry. Print the `HostPath` field.
-- [ ] If no argument, print path for the cloister detected from cwd.
-- [ ] Error if cloister not found in registry.
-- [ ] Output just the path (no decoration) so it's usable in
+- [x] Look up `<name>` in the cloister registry. Print the `HostPath` field.
+- [x] If no argument, print path for the cloister detected from cwd.
+- [x] Error if cloister not found in registry.
+- [x] Output just the path (no decoration) so it's usable in
       `cd $(cloister path ...)`.
-- [ ] **Test**: Register a cloister, run `path <name>`, verify output matches
+- [x] **Test**: Register a cloister, run `path <name>`, verify output matches
       registered path.
 
 ---
