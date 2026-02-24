@@ -236,13 +236,13 @@ Wire worktree creation into the cloister start/stop lifecycle.
 
 ### 4.4 Worktree stop and cleanup
 
-- [ ] When stopping a worktree cloister, the worktree directory is NOT removed
+- [x] When stopping a worktree cloister, the worktree directory is NOT removed
       (user might want to inspect it). Only the container and token are cleaned
       up, same as main checkout.
-- [ ] Worktree directory removal is explicit via `worktree remove` command.
-- [ ] Verify `Stop` works correctly with worktree cloister names (the existing
+- [x] Worktree directory removal is explicit via `worktree remove` command.
+- [x] Verify `Stop` works correctly with worktree cloister names (the existing
       flow should work since it's keyed by container name, but verify).
-- [ ] **Test**: Stop a worktree cloister, verify container stopped, token
+- [x] **Test**: Stop a worktree cloister, verify container stopped, token
       revoked, registry entry removed. Verify worktree directory still exists.
 
 ---

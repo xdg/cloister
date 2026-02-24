@@ -373,6 +373,44 @@ func TestParseCloisterName(t *testing.T) {
 	}
 }
 
+func TestNameToCloisterName_WorktreeStyle(t *testing.T) {
+	// Verify NameToCloisterName correctly handles worktree-style container names.
+	tests := []struct {
+		containerName string
+		cloisterName  string
+	}{
+		{"cloister-myproject-feature", "myproject-feature"},
+		{"cloister-myproject-feature-x", "myproject-feature-x"},
+		{"cloister-my-api-bugfix", "my-api-bugfix"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.containerName, func(t *testing.T) {
+			result := NameToCloisterName(tc.containerName)
+			if result != tc.cloisterName {
+				t.Errorf("NameToCloisterName(%q) = %q, want %q", tc.containerName, result, tc.cloisterName)
+			}
+		})
+	}
+}
+
+func TestWorktreeCloisterNameRoundTrip(t *testing.T) {
+	// Verify that worktree cloister names survive the container name round trip.
+	worktreeNames := []string{
+		"myproject-feature",
+		"myproject-feature-x",
+		"my-api-bugfix",
+	}
+
+	for _, original := range worktreeNames {
+		containerName := CloisterNameToContainerName(original)
+		result := NameToCloisterName(containerName)
+		if result != original {
+			t.Errorf("Round trip failed: %q -> %q -> %q", original, containerName, result)
+		}
+	}
+}
+
 func TestCloisterContainerNameRoundTrip(t *testing.T) {
 	// Test that converting cloister name to container name and back gives the original
 	cloisterNames := []string{

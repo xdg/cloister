@@ -3,6 +3,7 @@ package cloister
 import (
 	"bytes"
 	"errors"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -213,6 +214,10 @@ type mockGuardian struct {
 	registeredCloisterName string
 	registeredProjectName  string
 	registeredWorktreePath string
+
+	// Captured args from RevokeToken
+	revokeTokenCalled bool
+	revokedToken      string
 }
 
 func (m *mockGuardian) EnsureRunning() error {
@@ -233,7 +238,9 @@ func (m *mockGuardian) RegisterTokenFull(_, cloisterName, projectName, worktreeP
 	return m.registerTokenErr
 }
 
-func (m *mockGuardian) RevokeToken(_ string) error {
+func (m *mockGuardian) RevokeToken(tok string) error {
+	m.revokeTokenCalled = true
+	m.revokedToken = tok
 	return m.revokeTokenErr
 }
 
@@ -1236,6 +1243,71 @@ func TestStart_WorktreeNaming(t *testing.T) {
 	}
 	if entry.Branch != "feature-x" {
 		t.Errorf("Branch = %q, want %q", entry.Branch, "feature-x")
+	}
+}
+
+// TestStop_WorktreeCloister verifies that Stop() correctly handles worktree
+// cloister names: the container is stopped, the token is revoked, the registry
+// entry is removed, and the worktree directory itself is NOT touched.
+func TestStop_WorktreeCloister(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
+
+	// Create a real temp dir to represent the worktree directory on the host.
+	// Stop() must NOT remove this directory.
+	worktreeDir := t.TempDir()
+
+	mockMgr := &mockManager{}
+	mockGuard := &mockGuardian{}
+	mockReg := &mockRegistryStore{
+		registry: &Registry{
+			Cloisters: []RegistryEntry{
+				{
+					CloisterName: "myproject-feature",
+					ProjectName:  "myproject",
+					Branch:       "feature",
+					HostPath:     worktreeDir,
+					IsWorktree:   true,
+				},
+			},
+		},
+	}
+
+	err := Stop("cloister-myproject-feature", "test-token",
+		WithManager(mockMgr),
+		WithGuardian(mockGuard),
+		WithRegistryStore(mockReg),
+	)
+	if err != nil {
+		t.Fatalf("Stop() returned error: %v", err)
+	}
+
+	// Verify container "cloister-myproject-feature" was stopped
+	if !mockMgr.stopCalled {
+		t.Error("manager.Stop() was not called")
+	}
+	if mockMgr.stopContainerName != "cloister-myproject-feature" {
+		t.Errorf("stopped container = %q, want %q", mockMgr.stopContainerName, "cloister-myproject-feature")
+	}
+
+	// Verify token was revoked from guardian
+	if !mockGuard.revokeTokenCalled {
+		t.Error("guardian.RevokeToken() was not called")
+	}
+	if mockGuard.revokedToken != "test-token" {
+		t.Errorf("revoked token = %q, want %q", mockGuard.revokedToken, "test-token")
+	}
+
+	// Verify registry entry "myproject-feature" was removed
+	if mockReg.saved == nil {
+		t.Fatal("registry was not saved after Stop()")
+	}
+	if len(mockReg.saved.Cloisters) != 0 {
+		t.Errorf("expected 0 registry entries after stop, got %d: %v", len(mockReg.saved.Cloisters), mockReg.saved.Cloisters)
+	}
+
+	// Verify the worktree directory still exists (Stop does NOT remove it)
+	if _, statErr := os.Stat(worktreeDir); statErr != nil {
+		t.Errorf("worktree directory should still exist after Stop(), but Stat returned: %v", statErr)
 	}
 }
 
