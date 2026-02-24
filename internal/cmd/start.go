@@ -34,9 +34,13 @@ the shell, the cloister remains running. Use 'cloister stop' to terminate it.`,
 // startAgentFlag holds the --agent flag value.
 var startAgentFlag string
 
+// startBranchFlag holds the --branch / -b flag value.
+var startBranchFlag string
+
 func init() {
 	rootCmd.AddCommand(startCmd)
 	startCmd.Flags().StringVar(&startAgentFlag, "agent", "", "AI agent to use (e.g., claude, codex). Overrides config default.")
+	startCmd.Flags().StringVarP(&startBranchFlag, "branch", "b", "", "Create a worktree cloister for the specified branch")
 }
 
 func runStart(_ *cobra.Command, _ []string) error {
@@ -83,6 +87,11 @@ func runStart(_ *cobra.Command, _ []string) error {
 		clog.Warn("failed to auto-register project: %v", err)
 	}
 
+	// If -b was provided, delegate to the worktree flow
+	if startBranchFlag != "" {
+		return runStartWorktree(globalCfg, gitRoot, projectName, startBranchFlag)
+	}
+
 	// Compute cloister name (user-facing) and container name (Docker internal)
 	cloisterName := container.GenerateCloisterName(projectName)
 	containerName := container.CloisterNameToContainerName(cloisterName)
@@ -118,6 +127,51 @@ func runStart(_ *cobra.Command, _ []string) error {
 	term.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
 
 	// Step 8: Propagate shell exit code
+	if exitCode != 0 {
+		return NewExitCodeError(exitCode)
+	}
+
+	return nil
+}
+
+// runStartWorktree handles the worktree start flow when -b is provided.
+func runStartWorktree(globalCfg *config.GlobalConfig, gitRoot, projectName, branch string) error {
+	// Compute worktree cloister name and container name
+	cloisterName := container.GenerateWorktreeCloisterName(projectName, branch)
+	containerName := container.CloisterNameToContainerName(cloisterName)
+
+	term.Printf("Creating worktree for branch: %s\n", branch)
+	term.Printf("Starting cloister: %s\n", cloisterName)
+
+	// Start the worktree cloister
+	_, tok, err := cloister.StartWorktree(cloister.StartOptions{
+		ProjectPath: gitRoot,
+		ProjectName: projectName,
+		BranchName:  branch,
+		Agent:       startAgentFlag,
+	}, cloister.WithGlobalConfig(globalCfg))
+	if err != nil {
+		return handleStartError(err, containerName)
+	}
+
+	// Print startup information
+	term.Printf("Token: %s\n", tok)
+	term.Println()
+	term.Println("Attaching interactive shell...")
+	term.Println()
+
+	// Attach interactive shell
+	exitCode, err := cloister.Attach(containerName)
+	if err != nil {
+		return fmt.Errorf("failed to attach to cloister: %w", err)
+	}
+
+	// Print exit message
+	term.Println()
+	term.Printf("Shell exited with code %d. Cloister still running.\n", exitCode)
+	term.Printf("Use 'cloister stop %s' to terminate.\n", cloisterName)
+
+	// Propagate shell exit code
 	if exitCode != 0 {
 		return NewExitCodeError(exitCode)
 	}

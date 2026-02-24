@@ -218,3 +218,71 @@ func TestDockerErrorDetection(t *testing.T) {
 		})
 	}
 }
+
+// TestStartBranchFlagRegistered verifies that the -b / --branch flag is
+// registered on the start command.
+func TestStartBranchFlagRegistered(t *testing.T) {
+	flag := startCmd.Flags().Lookup("branch")
+	if flag == nil {
+		t.Fatal("expected --branch flag to be registered on startCmd")
+	}
+	if flag.Shorthand != "b" {
+		t.Errorf("expected shorthand 'b', got %q", flag.Shorthand)
+	}
+	if flag.DefValue != "" {
+		t.Errorf("expected default value empty, got %q", flag.DefValue)
+	}
+}
+
+// TestStartBranchFlagNaming verifies that when the branch flag is set,
+// the expected cloister name follows the project-branch pattern.
+func TestStartBranchFlagNaming(t *testing.T) {
+	tests := []struct {
+		project       string
+		branch        string
+		wantCloister  string
+		wantContainer string
+	}{
+		{
+			project:       "myproject",
+			branch:        "feature-x",
+			wantCloister:  "myproject-feature-x",
+			wantContainer: "cloister-myproject-feature-x",
+		},
+		{
+			project:       "my-app",
+			branch:        "main",
+			wantCloister:  "my-app-main",
+			wantContainer: "cloister-my-app-main",
+		},
+		{
+			project:       "MyProject",
+			branch:        "feature/auth",
+			wantCloister:  "myproject-feature-auth",
+			wantContainer: "cloister-myproject-feature-auth",
+		},
+		{
+			project:       "test",
+			branch:        "UPPER_CASE",
+			wantCloister:  "test-upper-case",
+			wantContainer: "cloister-test-upper-case",
+		},
+	}
+
+	for _, tc := range tests {
+		name := tc.project + "/" + tc.branch
+		t.Run(name, func(t *testing.T) {
+			cloisterName := container.GenerateWorktreeCloisterName(tc.project, tc.branch)
+			containerName := container.CloisterNameToContainerName(cloisterName)
+
+			if cloisterName != tc.wantCloister {
+				t.Errorf("GenerateWorktreeCloisterName(%q, %q) = %q, want %q",
+					tc.project, tc.branch, cloisterName, tc.wantCloister)
+			}
+			if containerName != tc.wantContainer {
+				t.Errorf("CloisterNameToContainerName(%q) = %q, want %q",
+					cloisterName, containerName, tc.wantContainer)
+			}
+		})
+	}
+}

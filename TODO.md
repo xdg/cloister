@@ -251,14 +251,14 @@ Wire worktree creation into the cloister start/stop lifecycle.
 
 ### 5.1 Add `-b` flag to `start` command
 
-- [ ] Add `--branch` / `-b` flag to `cmd/start.go`.
-- [ ] When `-b` is provided: detect project from cwd, then delegate to
+- [x] Add `--branch` / `-b` flag to `cmd/start.go`.
+- [x] When `-b` is provided: detect project from cwd, then delegate to
       worktree start orchestration (Phase 4.3) instead of the main checkout
       flow.
-- [ ] Print appropriate messages: "Creating worktree: <path>",
+- [x] Print appropriate messages: "Creating worktree: <path>",
       "Starting cloister: <project>-<branch>".
-- [ ] Handle re-entry: if worktree cloister already exists, attach to it.
-- [ ] **Test**: Cobra command test with `-b feature-x` flag — verify the
+- [x] Handle re-entry: if worktree cloister already exists, attach to it.
+- [x] **Test**: Cobra command test with `-b feature-x` flag — verify the
       correct orchestration path is taken (mock the orchestration layer).
 
 ### 5.2 Add `path` command
