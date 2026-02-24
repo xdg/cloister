@@ -279,13 +279,13 @@ Wire worktree creation into the cloister start/stop lifecycle.
 
 ### 6.1 Add `worktree list` command
 
-- [ ] Add `cloister worktree list` subcommand.
-- [ ] Detect project from cwd (or accept `-p <project>` flag).
-- [ ] Query cloister registry for all entries matching the project.
-- [ ] Display table: WORKTREE (branch or "(main)"), PATH, CLOISTER (name +
+- [x] Add `cloister worktree list` subcommand.
+- [x] Detect project from cwd (or accept `-p <project>` flag).
+- [x] Query cloister registry for all entries matching the project.
+- [x] Display table: WORKTREE (branch or "(main)"), PATH, CLOISTER (name +
       running status).
-- [ ] Running status: check container existence via `ContainerManager`.
-- [ ] **Test**: Register multiple cloisters for a project (main + 2 worktrees),
+- [x] Running status: check container existence via `ContainerManager`.
+- [x] **Test**: Register multiple cloisters for a project (main + 2 worktrees),
       verify `worktree list` output shows all three with correct columns.
 
 ### 6.2 Add `worktree remove` command
