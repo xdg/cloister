@@ -53,11 +53,11 @@ defaults:
   agent: "claude"
 
 log:
-  file: "~/.local/share/cloister/audit.log"
+  file: "~/.local/state/cloister/audit.log"
   stdout: true
   level: "info"
   per_cloister: true
-  per_cloister_dir: "~/.local/share/cloister/logs/"
+  per_cloister_dir: "~/.local/state/cloister/logs/"
 `
 
 // sampleProjectConfig is a YAML config for per-project settings.
@@ -168,8 +168,8 @@ func TestGlobalConfigUnmarshal(t *testing.T) {
 	}
 
 	// Verify log settings
-	if cfg.Log.File != "~/.local/share/cloister/audit.log" {
-		t.Errorf("Log.File = %q, want %q", cfg.Log.File, "~/.local/share/cloister/audit.log")
+	if cfg.Log.File != "~/.local/state/cloister/audit.log" {
+		t.Errorf("Log.File = %q, want %q", cfg.Log.File, "~/.local/state/cloister/audit.log")
 	}
 	if !cfg.Log.Stdout {
 		t.Error("Log.Stdout = false, want true")
@@ -180,8 +180,8 @@ func TestGlobalConfigUnmarshal(t *testing.T) {
 	if !cfg.Log.PerCloister {
 		t.Error("Log.PerCloister = false, want true")
 	}
-	if cfg.Log.PerCloisterDir != "~/.local/share/cloister/logs/" {
-		t.Errorf("Log.PerCloisterDir = %q, want %q", cfg.Log.PerCloisterDir, "~/.local/share/cloister/logs/")
+	if cfg.Log.PerCloisterDir != "~/.local/state/cloister/logs/" {
+		t.Errorf("Log.PerCloisterDir = %q, want %q", cfg.Log.PerCloisterDir, "~/.local/state/cloister/logs/")
 	}
 }
 

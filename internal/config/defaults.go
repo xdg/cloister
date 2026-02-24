@@ -129,13 +129,13 @@ defaults:
 
 # Logging
 log:
-  file: "~/.local/share/cloister/audit.log"
+  file: "~/.local/state/cloister/audit.log"
   stdout: true
   level: "info"  # debug, info, warn, error
 
   # Per-cloister log files (in addition to main log)
   per_cloister: true
-  per_cloister_dir: "~/.local/share/cloister/logs/"
+  per_cloister_dir: "~/.local/state/cloister/logs/"
 `
 
 // boolPtr returns a pointer to a bool value.
@@ -160,8 +160,8 @@ func DefaultGlobalConfig() *GlobalConfig {
 		Agents:   defaultAgentConfigs(),
 		Defaults: DefaultsConfig{Shell: "/bin/bash", User: "cloister", Agent: "claude"},
 		Log: LogConfig{
-			File: "~/.local/share/cloister/audit.log", Stdout: true, Level: "info",
-			PerCloister: true, PerCloisterDir: "~/.local/share/cloister/logs/",
+			File: "~/.local/state/cloister/audit.log", Stdout: true, Level: "info",
+			PerCloister: true, PerCloisterDir: "~/.local/state/cloister/logs/",
 		},
 	}
 }
