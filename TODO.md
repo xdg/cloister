@@ -157,19 +157,19 @@ operations.
 
 ### 3.2 Git worktree operations
 
-- [ ] Implement `Create(repoRoot, worktreePath, branch string) error` —
+- [x] Implement `Create(repoRoot, worktreePath, branch string) error` —
       wraps `git worktree add <path> <branch>`. If branch doesn't exist,
       creates it first (from HEAD). Should detect whether branch exists and
       handle both cases.
-- [ ] Implement `Remove(worktreePath string, force bool) error` — wraps
+- [x] Implement `Remove(worktreePath string, force bool) error` — wraps
       `git worktree remove <path>`. If `!force`, check for uncommitted changes
       first and return a descriptive error.
-- [ ] Implement `IsDirty(worktreePath string) (bool, error)` — runs
+- [x] Implement `IsDirty(worktreePath string) (bool, error)` — runs
       `git -C <path> status --porcelain` and checks for non-empty output.
-- [ ] Implement `IsWorktree(path string) bool` — detects whether a path is
+- [x] Implement `IsWorktree(path string) bool` — detects whether a path is
       a git worktree (vs main checkout). Uses `git -C <path> rev-parse
       --git-common-dir` vs `--git-dir` comparison.
-- [ ] **Test** (using Phase 1 helpers): Create a test repo, create a worktree
+- [x] **Test** (using Phase 1 helpers): Create a test repo, create a worktree
       via `Create`, verify the directory exists and is on the correct branch.
       Dirty the worktree, verify `IsDirty` returns true. Verify `Remove`
       refuses without force. Verify `Remove` with force succeeds. Verify
