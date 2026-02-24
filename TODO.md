@@ -193,17 +193,17 @@ Wire worktree creation into the cloister start/stop lifecycle.
 
 ### 4.1 Update `cloister.StartOptions`
 
-- [ ] Add `IsWorktree bool` field to `StartOptions` — indicates this is a
+- [x] Add `IsWorktree bool` field to `StartOptions` — indicates this is a
       managed worktree (vs main checkout).
-- [ ] When `IsWorktree` is true, `Start()` should use
+- [x] When `IsWorktree` is true, `Start()` should use
       `container.GenerateWorktreeCloisterName(project, branch)` instead of
       `GenerateCloisterName(project)`.
-- [ ] Update `container.Config.ContainerName()` to use branch when present:
+- [x] Update `container.Config.ContainerName()` to use branch when present:
       if `Branch != ""`, use `GenerateWorktreeCloisterName`; otherwise
       `GenerateCloisterName`. Remove the "Phase 1" comments.
-- [ ] Update `registerCloisterToken` to pass the worktree path (not the main
+- [x] Update `registerCloisterToken` to pass the worktree path (not the main
       project path) when starting a worktree cloister.
-- [ ] **Test**: Mock-based: `Start` with `IsWorktree=true` creates a container
+- [x] **Test**: Mock-based: `Start` with `IsWorktree=true` creates a container
       named `cloister-<project>-<branch>`. Token registered with worktree path.
 
 ### 4.2 Update `cloister.DetectName()`

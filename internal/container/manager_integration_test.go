@@ -17,8 +17,6 @@ func TestManager_Start_Stop(t *testing.T) {
 	testutil.RequireDocker(t)
 
 	projectName := testutil.TestProjectName()
-	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -32,6 +30,9 @@ func TestManager_Start_Stop(t *testing.T) {
 		ProjectPath: tmpDir,
 		Image:       "alpine:latest",
 	}
+
+	containerName := cfg.ContainerName()
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	manager := NewManager()
 
@@ -82,8 +83,6 @@ func TestManager_Start_AlreadyExists(t *testing.T) {
 	testutil.RequireDocker(t)
 
 	projectName := testutil.TestProjectName()
-	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -97,6 +96,9 @@ func TestManager_Start_AlreadyExists(t *testing.T) {
 		ProjectPath: tmpDir,
 		Image:       "alpine:latest",
 	}
+
+	containerName := cfg.ContainerName()
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	manager := NewManager()
 
@@ -140,8 +142,6 @@ func TestManager_Start_VerifySecuritySettings(t *testing.T) {
 	testutil.RequireDocker(t)
 
 	projectName := testutil.TestProjectName()
-	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -156,6 +156,9 @@ func TestManager_Start_VerifySecuritySettings(t *testing.T) {
 		Image:       "alpine:latest",
 		Network:     "",
 	}
+
+	containerName := cfg.ContainerName()
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	manager := NewManager()
 
@@ -241,8 +244,6 @@ func TestManager_ContainerStatus_Running(t *testing.T) {
 	testutil.RequireDocker(t)
 
 	projectName := testutil.TestProjectName()
-	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -256,6 +257,9 @@ func TestManager_ContainerStatus_Running(t *testing.T) {
 		ProjectPath: tmpDir,
 		Image:       "alpine:latest",
 	}
+
+	containerName := cfg.ContainerName()
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	manager := NewManager()
 
@@ -279,8 +283,6 @@ func TestManager_ContainerStatus_Stopped(t *testing.T) {
 	testutil.RequireDocker(t)
 
 	projectName := testutil.TestProjectName()
-	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -294,6 +296,9 @@ func TestManager_ContainerStatus_Stopped(t *testing.T) {
 		ProjectPath: tmpDir,
 		Image:       "alpine:latest",
 	}
+
+	containerName := cfg.ContainerName()
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	manager := NewManager()
 
@@ -317,8 +322,6 @@ func TestManager_ContainerStatus_SingleDockerCall(t *testing.T) {
 	testutil.RequireDocker(t)
 
 	projectName := testutil.TestProjectName()
-	containerName := GenerateContainerName(projectName)
-	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	tmpDir, err := os.MkdirTemp("", "cloister-test-*")
 	if err != nil {
@@ -332,6 +335,9 @@ func TestManager_ContainerStatus_SingleDockerCall(t *testing.T) {
 		ProjectPath: tmpDir,
 		Image:       "alpine:latest",
 	}
+
+	containerName := cfg.ContainerName()
+	t.Cleanup(func() { testutil.CleanupContainer(containerName) })
 
 	manager := NewManager()
 

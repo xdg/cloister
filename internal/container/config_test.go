@@ -8,10 +8,11 @@ func TestConfig_ContainerName(t *testing.T) {
 	tests := []struct {
 		name     string
 		project  string
+		branch   string
 		expected string
 	}{
 		{
-			name:     "simple name",
+			name:     "simple name no branch",
 			project:  "myproject",
 			expected: "cloister-myproject",
 		},
@@ -30,12 +31,25 @@ func TestConfig_ContainerName(t *testing.T) {
 			project:  "",
 			expected: "cloister-default",
 		},
+		{
+			name:     "with branch",
+			project:  "myproject",
+			branch:   "feature-x",
+			expected: "cloister-myproject-feature-x",
+		},
+		{
+			name:     "with branch containing slashes",
+			project:  "myproject",
+			branch:   "feature/foo",
+			expected: "cloister-myproject-feature-foo",
+		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := &Config{
 				Project: tc.project,
+				Branch:  tc.branch,
 			}
 			result := cfg.ContainerName()
 			if result != tc.expected {
@@ -114,8 +128,9 @@ func TestConfig_BuildRunArgs(t *testing.T) {
 	args := cfg.BuildRunArgs()
 
 	// Check expected arguments are present
+	// Branch is set, so container name includes the branch suffix
 	expectedPairs := map[string]string{
-		"--name":    "cloister-myproject",
+		"--name":    "cloister-myproject-main",
 		"-v":        "/home/user/projects/myproject:/work",
 		"-w":        "/work",
 		"--network": "cloister-net",

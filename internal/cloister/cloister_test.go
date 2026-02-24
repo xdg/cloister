@@ -208,6 +208,11 @@ type mockGuardian struct {
 	registerTokenErr     error
 	registerTokenFullErr error
 	revokeTokenErr       error
+
+	// Captured args from RegisterTokenFull
+	registeredCloisterName string
+	registeredProjectName  string
+	registeredWorktreePath string
 }
 
 func (m *mockGuardian) EnsureRunning() error {
@@ -218,7 +223,10 @@ func (m *mockGuardian) RegisterToken(_, _, _ string) error {
 	return m.registerTokenErr
 }
 
-func (m *mockGuardian) RegisterTokenFull(_, _, _, _ string) error {
+func (m *mockGuardian) RegisterTokenFull(_, cloisterName, projectName, worktreePath string) error {
+	m.registeredCloisterName = cloisterName
+	m.registeredProjectName = projectName
+	m.registeredWorktreePath = worktreePath
 	if m.registerTokenFullErr != nil {
 		return m.registerTokenFullErr
 	}
@@ -1165,5 +1173,116 @@ func TestApplyOptions_DefaultRegistryStore(t *testing.T) {
 	_, ok := deps.registry.(defaultRegistryStore)
 	if !ok {
 		t.Errorf("applyOptions().registry is %T, want defaultRegistryStore", deps.registry)
+	}
+}
+
+// TestStart_WorktreeNaming verifies that Start with IsWorktree=true produces
+// worktree-style container names and sets IsWorktree in the registry entry.
+func TestStart_WorktreeNaming(t *testing.T) {
+	mockMgr := &mockManager{createResult: "container-wt-123"}
+	mockGuard := &mockGuardian{}
+	mockCfgLoader := &mockConfigLoader{
+		config: &config.GlobalConfig{
+			Agents: map[string]config.AgentConfig{
+				"claude": {AuthMethod: "token", Token: "test-token"},
+			},
+		},
+	}
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
+	}
+	mockReg := &mockRegistryStore{}
+
+	t.Setenv("HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
+
+	opts := StartOptions{
+		ProjectPath: "/path/to/worktree",
+		ProjectName: "myproject",
+		BranchName:  "feature-x",
+		IsWorktree:  true,
+	}
+
+	_, _, err := Start(opts,
+		WithManager(mockMgr),
+		WithGuardian(mockGuard),
+		WithConfigLoader(mockCfgLoader),
+		WithAgent(mockAgt),
+		WithRegistryStore(mockReg),
+	)
+	if err != nil {
+		t.Fatalf("Start() returned error: %v", err)
+	}
+
+	// Verify the container was created with worktree-style name
+	if mockMgr.startContainerName != "cloister-myproject-feature-x" {
+		t.Errorf("container name = %q, want %q", mockMgr.startContainerName, "cloister-myproject-feature-x")
+	}
+
+	// Verify registry entry has IsWorktree=true
+	if mockReg.saved == nil {
+		t.Fatal("registry was not saved")
+	}
+	if len(mockReg.saved.Cloisters) != 1 {
+		t.Fatalf("expected 1 registry entry, got %d", len(mockReg.saved.Cloisters))
+	}
+	entry := mockReg.saved.Cloisters[0]
+	if !entry.IsWorktree {
+		t.Error("registry entry IsWorktree should be true for worktree cloister")
+	}
+	if entry.CloisterName != "myproject-feature-x" {
+		t.Errorf("CloisterName = %q, want %q", entry.CloisterName, "myproject-feature-x")
+	}
+	if entry.Branch != "feature-x" {
+		t.Errorf("Branch = %q, want %q", entry.Branch, "feature-x")
+	}
+}
+
+// TestStart_WorktreeTokenPath verifies that when starting a worktree, the token
+// is registered with the worktree path (opts.ProjectPath).
+func TestStart_WorktreeTokenPath(t *testing.T) {
+	mockMgr := &mockManager{createResult: "container-wt-456"}
+	mockGuard := &mockGuardian{}
+	mockCfgLoader := &mockConfigLoader{
+		config: &config.GlobalConfig{
+			Agents: map[string]config.AgentConfig{
+				"claude": {AuthMethod: "token", Token: "test-token"},
+			},
+		},
+	}
+	mockAgt := &mockAgent{
+		name:        "claude",
+		setupResult: &agent.SetupResult{EnvVars: map[string]string{}},
+	}
+
+	t.Setenv("HOME", t.TempDir())
+	testutil.IsolateXDGDirs(t)
+
+	worktreePath := "/path/to/worktrees/feature-x"
+
+	opts := StartOptions{
+		ProjectPath: worktreePath,
+		ProjectName: "myproject",
+		BranchName:  "feature-x",
+		IsWorktree:  true,
+	}
+
+	_, _, err := Start(opts,
+		WithManager(mockMgr),
+		WithGuardian(mockGuard),
+		WithConfigLoader(mockCfgLoader),
+		WithAgent(mockAgt),
+	)
+	if err != nil {
+		t.Fatalf("Start() returned error: %v", err)
+	}
+
+	// Verify the token was registered with the worktree path
+	if mockGuard.registeredWorktreePath != worktreePath {
+		t.Errorf("registered worktree path = %q, want %q", mockGuard.registeredWorktreePath, worktreePath)
+	}
+	if mockGuard.registeredCloisterName != "myproject-feature-x" {
+		t.Errorf("registered cloister name = %q, want %q", mockGuard.registeredCloisterName, "myproject-feature-x")
 	}
 }

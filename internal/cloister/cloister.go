@@ -227,6 +227,11 @@ type StartOptions struct {
 	// Agent is the name of the agent to use (e.g., "claude", "codex").
 	// If empty, uses the config's defaults.agent or falls back to "claude".
 	Agent string
+
+	// IsWorktree indicates this cloister is for a git worktree rather than
+	// the main checkout. When true and BranchName is set, the container name
+	// includes the branch (e.g., "cloister-<project>-<branch>").
+	IsWorktree bool
 }
 
 // Start orchestrates starting a cloister container with all necessary setup:
@@ -249,7 +254,12 @@ func Start(opts StartOptions, options ...Option) (containerID, tok string, err e
 	deps := applyOptions(options...)
 
 	// Step 1: Check if container already exists before mutating any state.
-	cloisterName := container.GenerateCloisterName(opts.ProjectName)
+	var cloisterName string
+	if opts.IsWorktree && opts.BranchName != "" {
+		cloisterName = container.GenerateWorktreeCloisterName(opts.ProjectName, opts.BranchName)
+	} else {
+		cloisterName = container.GenerateCloisterName(opts.ProjectName)
+	}
 	containerName := container.CloisterNameToContainerName(cloisterName)
 	exists, err := deps.manager.ContainerExists(containerName)
 	if err != nil {
@@ -333,7 +343,7 @@ func registerInRegistryStore(deps *options, cloisterName string, opts StartOptio
 		ProjectName:  opts.ProjectName,
 		Branch:       opts.BranchName,
 		HostPath:     opts.ProjectPath,
-		IsWorktree:   false, // hardcoded for now; Phase 4 will add worktree support
+		IsWorktree:   opts.IsWorktree,
 	}); err != nil {
 		return err
 	}
@@ -354,11 +364,16 @@ type containerSetup struct {
 func createAndStartContainer(deps *options, opts StartOptions, cs containerSetup) (string, error) {
 	cfg := &container.Config{
 		Project:     opts.ProjectName,
-		Branch:      opts.BranchName,
 		ProjectPath: opts.ProjectPath,
 		Image:       opts.Image,
 		Network:     docker.CloisterNetworkName,
 		EnvVars:     cs.EnvVars,
+	}
+	// Only set Branch on the Config for worktrees, so ContainerName()
+	// includes the branch suffix (e.g., cloister-<project>-<branch>).
+	// For main checkouts, Branch is left empty to produce cloister-<project>.
+	if opts.IsWorktree {
+		cfg.Branch = opts.BranchName
 	}
 
 	containerID, err := deps.manager.Create(cfg)

@@ -36,14 +36,15 @@ type Config struct {
 	UID int
 }
 
-// ContainerName returns the Docker container name in the format:
-// cloister-<project>
-//
-// The project name is sanitized for Docker compatibility.
-// Note: In Phase 1 (no worktree support), we only use the project name.
-// Worktree support will be added in a future phase.
+// ContainerName returns the Docker container name.
+// When Branch is set, the name includes the branch: cloister-<project>-<branch>.
+// Otherwise, it uses just the project: cloister-<project>.
+// Both project and branch are sanitized for Docker compatibility.
 func (c *Config) ContainerName() string {
-	return "cloister-" + SanitizeName(c.Project)
+	if c.Branch != "" {
+		return CloisterNameToContainerName(GenerateWorktreeCloisterName(c.Project, c.Branch))
+	}
+	return CloisterNameToContainerName(GenerateCloisterName(c.Project))
 }
 
 // ImageName returns the Docker image to use, defaulting to DefaultImage().

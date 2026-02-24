@@ -113,7 +113,6 @@ func ParseCloisterName(name string) (project, branch string) {
 
 // GenerateContainerName is a convenience function that creates a container
 // name from a project string without needing a full Config.
-// Note: In Phase 1 (no worktree support), we only use the project name.
 func GenerateContainerName(project string) string {
 	cfg := &Config{Project: project}
 	return cfg.ContainerName()
