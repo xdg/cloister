@@ -37,7 +37,11 @@ func startMockUpstream(t *testing.T, handler func(net.Conn)) (addr string, clean
 	var wg sync.WaitGroup
 	done := make(chan struct{})
 
-	go func() {
+	// Track the accept loop itself so cleanup waits for it to exit
+	// before calling wg.Wait() on connection handlers. This avoids
+	// a race between wg.Add (in the loop) and wg.Wait (in cleanup).
+	var loopDone sync.WaitGroup
+	loopDone.Go(func() {
 		for {
 			conn, err := listener.Accept()
 			if err != nil {
@@ -59,13 +63,14 @@ func startMockUpstream(t *testing.T, handler func(net.Conn)) (addr string, clean
 				handler(c)
 			}(conn)
 		}
-	}()
+	})
 
 	cleanup = func() {
 		close(done)
 		if err := listener.Close(); err != nil {
 			t.Logf("failed to close mock upstream listener: %v", err)
 		}
+		loopDone.Wait() // accept loop has exited; no more wg.Add calls
 		wg.Wait()
 	}
 
