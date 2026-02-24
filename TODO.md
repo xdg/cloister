@@ -219,7 +219,7 @@ Wire worktree creation into the cloister start/stop lifecycle.
 
 ### 4.3 Worktree start orchestration
 
-- [ ] Create a new function (e.g. `StartWorktree(opts StartOptions) (...)`)
+- [x] Create a new function (e.g. `StartWorktree(opts StartOptions) (...)`)
       or extend `Start` to handle the worktree creation flow:
       1. Resolve the project from current directory (same as main checkout)
       2. Call `worktree.ResolveBranch` to ensure the branch exists
@@ -228,10 +228,10 @@ Wire worktree creation into the cloister start/stop lifecycle.
       5. Set `opts.ProjectPath` to the worktree path, `opts.IsWorktree = true`
       6. Call existing `Start` (reuse all token/guardian/agent setup)
       7. Register in cloister registry with `IsWorktree: true`
-- [ ] Handle the "already exists" case: if the worktree dir already exists and
+- [x] Handle the "already exists" case: if the worktree dir already exists and
       the cloister container exists, attach to it (same as main checkout
       re-enter behavior).
-- [ ] **Test**: Mock-based: full flow creates worktree, starts container with
+- [x] **Test**: Mock-based: full flow creates worktree, starts container with
       correct name and path, registers in cloister registry.
 
 ### 4.4 Worktree stop and cleanup

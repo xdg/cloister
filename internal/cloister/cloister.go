@@ -15,6 +15,7 @@ import (
 	"github.com/xdg/cloister/internal/guardian"
 	"github.com/xdg/cloister/internal/term"
 	"github.com/xdg/cloister/internal/token"
+	"github.com/xdg/cloister/internal/worktree"
 )
 
 // RegistryStore is the interface for cloister registry persistence.
@@ -105,6 +106,14 @@ func (defaultGuardianManager) RevokeToken(tok string) error {
 	return guardian.RevokeToken(tok)
 }
 
+// WorktreeOperations is the interface for worktree git and path operations.
+// This allows injecting mock implementations for testing.
+type WorktreeOperations interface {
+	ResolveBranch(repoRoot, branch string) (existed bool, err error)
+	Dir(projectName, branch string) (string, error)
+	Create(repoRoot, worktreePath, branch string) error
+}
+
 // Option configures cloister operations.
 type Option func(*options)
 
@@ -114,6 +123,7 @@ type options struct {
 	configLoader ConfigLoader
 	agent        agent.Agent
 	registry     RegistryStore
+	worktreeOps  WorktreeOperations
 	stderr       io.Writer
 	globalConfig *config.GlobalConfig // Pre-loaded config (avoids double-load)
 }
@@ -166,12 +176,38 @@ func WithStderr(w io.Writer) Option {
 	}
 }
 
+// WithWorktreeOps sets a custom worktree operations implementation for dependency injection.
+// If not set, a default implementation delegating to the worktree package is used.
+func WithWorktreeOps(w WorktreeOperations) Option {
+	return func(o *options) {
+		o.worktreeOps = w
+	}
+}
+
 // WithGlobalConfig sets a pre-loaded global config.
 // If set, Start() won't reload the config, avoiding duplicate log messages.
 func WithGlobalConfig(cfg *config.GlobalConfig) Option {
 	return func(o *options) {
 		o.globalConfig = cfg
 	}
+}
+
+// defaultWorktreeOps implements WorktreeOperations using the real worktree package.
+type defaultWorktreeOps struct{}
+
+// ResolveBranch delegates to the real worktree package.
+func (defaultWorktreeOps) ResolveBranch(repoRoot, branch string) (bool, error) {
+	return worktree.ResolveBranch(repoRoot, branch)
+}
+
+// Dir delegates to the real worktree package.
+func (defaultWorktreeOps) Dir(projectName, branch string) (string, error) {
+	return worktree.Dir(projectName, branch)
+}
+
+// Create delegates to the real worktree package.
+func (defaultWorktreeOps) Create(repoRoot, worktreePath, branch string) error {
+	return worktree.Create(repoRoot, worktreePath, branch)
 }
 
 // applyOptions applies options and returns resolved dependencies.
@@ -192,6 +228,9 @@ func applyOptions(opts ...Option) *options {
 	// Note: o.agent is resolved later in Start() based on config, unless explicitly set
 	if o.registry == nil {
 		o.registry = defaultRegistryStore{}
+	}
+	if o.worktreeOps == nil {
+		o.worktreeOps = defaultWorktreeOps{}
 	}
 	if o.stderr == nil {
 		o.stderr = os.Stderr
