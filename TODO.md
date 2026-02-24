@@ -143,16 +143,16 @@ operations.
 
 ### 3.1 Worktree directory helpers
 
-- [ ] Add `WorktreeBaseDir() (string, error)` — returns
+- [x] Add `WorktreeBaseDir() (string, error)` — returns
       `$XDG_DATA_HOME/cloister/worktrees/` (defaulting to
       `~/.local/share/cloister/worktrees/` per XDG spec). Create the dir
       if it doesn't exist.
-- [ ] Add `WorktreeDir(projectName, branch string) (string, error)` — returns
+- [x] Add `WorktreeDir(projectName, branch string) (string, error)` — returns
       `WorktreeBaseDir()/<project>/<branch>/`. Does NOT create it (git worktree
       add does that).
-- [ ] Decide on package location: likely `internal/worktree/` as a new package,
+- [x] Decide on package location: likely `internal/worktree/` as a new package,
       since this is a new domain with its own git operations and state.
-- [ ] **Test**: Verify paths are constructed correctly. Verify XDG_DATA_HOME
+- [x] **Test**: Verify paths are constructed correctly. Verify XDG_DATA_HOME
       override works (use `t.Setenv`).
 
 ### 3.2 Git worktree operations
