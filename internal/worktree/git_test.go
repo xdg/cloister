@@ -153,6 +153,40 @@ func TestRemove(t *testing.T) {
 	})
 }
 
+func TestResolveBranch(t *testing.T) {
+	t.Run("existing_branch", func(t *testing.T) {
+		repo := testutil.CreateTestRepo(t)
+		testutil.CreateTestBranch(t, repo, "already-here")
+
+		existed, err := worktree.ResolveBranch(repo, "already-here")
+		if err != nil {
+			t.Fatalf("ResolveBranch: %v", err)
+		}
+		if !existed {
+			t.Error("expected existed=true for pre-existing branch")
+		}
+	})
+
+	t.Run("new_branch_from_HEAD", func(t *testing.T) {
+		repo := testutil.CreateTestRepo(t)
+
+		existed, err := worktree.ResolveBranch(repo, "brand-new")
+		if err != nil {
+			t.Fatalf("ResolveBranch: %v", err)
+		}
+		if existed {
+			t.Error("expected existed=false for newly created branch")
+		}
+
+		// Verify the branch was actually created.
+		cmd := exec.CommandContext(context.Background(), "git", "-C", repo, "rev-parse", "--verify", "refs/heads/brand-new")
+		cmd.Env = append(os.Environ(), "GIT_CONFIG_GLOBAL=/dev/null")
+		if err := cmd.Run(); err != nil {
+			t.Fatalf("branch was not created: %v", err)
+		}
+	})
+}
+
 func TestIsWorktree(t *testing.T) {
 	t.Run("main checkout returns false", func(t *testing.T) {
 		repo := testutil.CreateTestRepo(t)

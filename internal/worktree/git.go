@@ -88,6 +88,37 @@ func IsDirty(worktreePath string) (bool, error) {
 	return strings.TrimSpace(string(out)) != "", nil
 }
 
+// ResolveBranch checks if a branch exists locally in the given repo. If it
+// exists, it returns (true, nil). If not, it checks for a remote tracking
+// branch at refs/remotes/origin/<branch> and creates a local branch tracking
+// it. If neither exists, it creates the branch from HEAD. The returned bool
+// indicates whether the branch already existed locally.
+func ResolveBranch(repoRoot, branch string) (existed bool, err error) {
+	// Check if the branch exists locally.
+	local := gitCommand("-C", repoRoot, "rev-parse", "--verify", "refs/heads/"+branch)
+	if local.Run() == nil {
+		return true, nil
+	}
+
+	// Check if a remote tracking branch exists.
+	remote := gitCommand("-C", repoRoot, "rev-parse", "--verify", "refs/remotes/origin/"+branch)
+	if remote.Run() == nil {
+		// Create local branch tracking the remote.
+		create := gitCommand("-C", repoRoot, "branch", branch, "refs/remotes/origin/"+branch)
+		if out, cerr := create.CombinedOutput(); cerr != nil {
+			return false, fmt.Errorf("create branch %q from remote: %s: %w", branch, bytes.TrimSpace(out), cerr)
+		}
+		return false, nil
+	}
+
+	// No local or remote branch; create from HEAD.
+	create := gitCommand("-C", repoRoot, "branch", branch)
+	if out, cerr := create.CombinedOutput(); cerr != nil {
+		return false, fmt.Errorf("create branch %q from HEAD: %s: %w", branch, bytes.TrimSpace(out), cerr)
+	}
+	return false, nil
+}
+
 // IsWorktree reports whether the given path is a git worktree (as opposed to
 // a main checkout). It compares the output of git rev-parse --git-common-dir
 // and --git-dir. If they differ, the path is a worktree. Returns false on any

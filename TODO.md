@@ -177,11 +177,11 @@ operations.
 
 ### 3.3 Branch resolution
 
-- [ ] Implement `ResolveBranch(repoRoot, branch string) (existed bool, err error)` —
+- [x] Implement `ResolveBranch(repoRoot, branch string) (existed bool, err error)` —
       checks if branch exists locally. If not, checks if a tracking remote
       exists. If neither, creates from HEAD. Returns whether the branch
       already existed (for user messaging).
-- [ ] **Test**: Branch exists locally -> returns (true, nil). Branch doesn't
+- [x] **Test**: Branch exists locally -> returns (true, nil). Branch doesn't
       exist, no remote -> creates from HEAD, returns (false, nil). Verify
       branch was actually created.
 
