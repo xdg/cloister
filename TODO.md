@@ -95,26 +95,26 @@ the authoritative source for resolving ambiguous cloister names (since
 
 ### 2.1 Registry types and persistence (`internal/cloister/registry.go`)
 
-- [ ] Define `RegistryEntry` struct: `CloisterName`, `ProjectName`, `Branch`
+- [x] Define `RegistryEntry` struct: `CloisterName`, `ProjectName`, `Branch`
       (empty for main checkout), `HostPath` (absolute path on host),
       `IsWorktree` (bool), `CreatedAt` (time.Time).
-- [ ] Define `Registry` struct wrapping `[]RegistryEntry` with a `Clock`
+- [x] Define `Registry` struct wrapping `[]RegistryEntry` with a `Clock`
       interface (same pattern as `project.Registry`).
-- [ ] Define `RegistryPath()` — returns path under `config.Dir()` (e.g.
+- [x] Define `RegistryPath()` — returns path under `config.Dir()` (e.g.
       `~/.config/cloister/cloisters.yaml`). Respects `XDG_CONFIG_HOME` via
       existing `config.Dir()`.
-- [ ] Implement `LoadRegistry() (*Registry, error)` — reads from disk, returns
+- [x] Implement `LoadRegistry() (*Registry, error)` — reads from disk, returns
       empty registry if file absent.
-- [ ] Implement `SaveRegistry(r *Registry) error` — writes YAML with 0600
+- [x] Implement `SaveRegistry(r *Registry) error` — writes YAML with 0600
       permissions.
-- [ ] Implement `Register(entry RegistryEntry) error` — upserts by cloister
+- [x] Implement `Register(entry RegistryEntry) error` — upserts by cloister
       name. Error if name collision with different project.
-- [ ] Implement `FindByName(name string) *RegistryEntry`.
-- [ ] Implement `FindByProject(projectName string) []RegistryEntry` — returns
+- [x] Implement `FindByName(name string) *RegistryEntry`.
+- [x] Implement `FindByProject(projectName string) []RegistryEntry` — returns
       all cloisters (main + worktrees) for a project.
-- [ ] Implement `Remove(cloisterName string) error`.
-- [ ] Implement `List() []RegistryEntry`.
-- [ ] **Test**: Round-trip: register entries, save, load, verify all fields
+- [x] Implement `Remove(cloisterName string) error`.
+- [x] Implement `List() []RegistryEntry`.
+- [x] **Test**: Round-trip: register entries, save, load, verify all fields
       preserved. Test upsert behavior. Test FindByProject returns correct
       subset. Test Remove.
 
