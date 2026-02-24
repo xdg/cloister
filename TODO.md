@@ -208,12 +208,12 @@ Wire worktree creation into the cloister start/stop lifecycle.
 
 ### 4.2 Update `cloister.DetectName()`
 
-- [ ] Currently only returns main-checkout cloister name. Update to check the
+- [x] Currently only returns main-checkout cloister name. Update to check the
       cloister registry first: look up by current working directory path to
       find the matching cloister entry (could be main or worktree).
-- [ ] Fallback: if not in registry, use the existing project-name-based
+- [x] Fallback: if not in registry, use the existing project-name-based
       detection (backward compatible).
-- [ ] **Test**: When cwd is inside a registered worktree path, returns the
+- [x] **Test**: When cwd is inside a registered worktree path, returns the
       worktree cloister name. When cwd is inside main checkout, returns
       main cloister name. When not registered, falls back to project detection.
 
