@@ -67,20 +67,20 @@ repos with branches, worktrees, and known state.
 
 ### 1.1 Git test helpers in `internal/testutil/`
 
-- [ ] Add `CreateTestRepo(t *testing.T) string` — creates a bare-minimum git
+- [x] Add `CreateTestRepo(t *testing.T) string` — creates a bare-minimum git
       repo in `t.TempDir()` with an initial commit. Returns the repo path.
       (Needs: `git init`, create a file, `git add`, `git commit`.)
-- [ ] Add `CreateTestBranch(t *testing.T, repoPath, branchName string)` —
+- [x] Add `CreateTestBranch(t *testing.T, repoPath, branchName string)` —
       creates a branch in the test repo (does NOT check it out). Useful for
       testing "branch already exists" vs "branch needs creation" paths.
-- [ ] Add `CreateTestWorktree(t *testing.T, repoPath, worktreePath, branch string)` —
+- [x] Add `CreateTestWorktree(t *testing.T, repoPath, worktreePath, branch string)` —
       runs `git worktree add` to create a real worktree. Returns the worktree
       path. Useful for verifying worktree detection and cleanup.
-- [ ] Add `DirtyWorktree(t *testing.T, worktreePath string)` — creates an
+- [x] Add `DirtyWorktree(t *testing.T, worktreePath string)` — creates an
       uncommitted file in the worktree (for testing dirty-check refusal).
-- [ ] Add `CommitFile(t *testing.T, repoPath, filename, content string)` —
+- [x] Add `CommitFile(t *testing.T, repoPath, filename, content string)` —
       commits a file to the repo. Useful for advancing history.
-- [ ] **Test**: Verify each helper works in isolation: create repo, create
+- [x] **Test**: Verify each helper works in isolation: create repo, create
       branch, create worktree from that branch, dirty it, confirm
       `git status --porcelain` shows changes.
 
