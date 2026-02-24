@@ -25,6 +25,3 @@ checksum:
 
 release:
   mode: replace
-
-changelog:
-  disable: true  # Using LLM-generated release notes instead
