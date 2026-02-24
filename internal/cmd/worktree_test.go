@@ -277,3 +277,82 @@ func TestWorktreeList_DetectProjectError(t *testing.T) {
 		t.Errorf("unexpected error: %v", err)
 	}
 }
+
+func TestWorktreeRemoveCmd_Registered(t *testing.T) {
+	found := false
+	for _, cmd := range worktreeCmd.Commands() {
+		if cmd.Name() == "remove" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected 'remove' subcommand to be registered on worktreeCmd")
+	}
+}
+
+func TestWorktreeRemove_Flags(t *testing.T) {
+	forceFlag := worktreeRemoveCmd.Flags().Lookup("force")
+	if forceFlag == nil {
+		t.Fatal("expected 'force' flag on worktreeRemoveCmd")
+	}
+	if forceFlag.Shorthand != "f" {
+		t.Errorf("expected shorthand 'f', got %q", forceFlag.Shorthand)
+	}
+
+	projectFlag := worktreeRemoveCmd.Flags().Lookup("project")
+	if projectFlag == nil {
+		t.Fatal("expected 'project' flag on worktreeRemoveCmd")
+	}
+	if projectFlag.Shorthand != "p" {
+		t.Errorf("expected shorthand 'p', got %q", projectFlag.Shorthand)
+	}
+}
+
+func TestWorktreeRemove_NotInRegistry(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
+
+	// Save an empty registry.
+	reg := &cloister.Registry{}
+	if err := cloister.SaveRegistry(reg); err != nil {
+		t.Fatalf("failed to save registry: %v", err)
+	}
+
+	// Set project flag to avoid git detection.
+	worktreeRemoveProjectFlag = "my-proj"
+	worktreeRemoveForceFlag = false
+	defer func() {
+		worktreeRemoveProjectFlag = ""
+		worktreeRemoveForceFlag = false
+	}()
+
+	err := runWorktreeRemove(worktreeRemoveCmd, []string{"no-such-branch"})
+	if err == nil {
+		t.Fatal("expected error for non-existent worktree")
+	}
+	if !strings.Contains(err.Error(), "not found") {
+		t.Errorf("expected 'not found' in error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "my-proj") {
+		t.Errorf("expected project name in error, got: %v", err)
+	}
+}
+
+func TestWorktreeRemove_DetectProjectError(t *testing.T) {
+	testutil.IsolateXDGDirs(t)
+
+	worktreeRemoveProjectFlag = ""
+	worktreeRemoveForceFlag = false
+
+	// Use a temp dir that is not a git repo.
+	tmpDir := t.TempDir()
+	t.Chdir(tmpDir)
+
+	err := runWorktreeRemove(worktreeRemoveCmd, []string{"some-branch"})
+	if err == nil {
+		t.Fatal("expected error when not in a git repo and no -p flag")
+	}
+	if !strings.Contains(err.Error(), "failed to detect project") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}

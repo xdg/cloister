@@ -290,17 +290,17 @@ Wire worktree creation into the cloister start/stop lifecycle.
 
 ### 6.2 Add `worktree remove` command
 
-- [ ] Add `cloister worktree remove <branch>` subcommand.
-- [ ] Detect project from cwd (or accept `-p <project>` flag).
-- [ ] Resolve the cloister name from project + branch.
-- [ ] Check `worktree.IsDirty`: if dirty and no `-f` flag, error with
+- [x] Add `cloister worktree remove <branch>` subcommand.
+- [x] Detect project from cwd (or accept `-p <project>` flag).
+- [x] Resolve the cloister name from project + branch.
+- [x] Check `worktree.IsDirty`: if dirty and no `-f` flag, error with
       "Worktree has uncommitted changes. Commit, stash, or use -f to force."
-- [ ] If cloister container is running, stop it first (with user confirmation
+- [x] If cloister container is running, stop it first (with user confirmation
       unless `-f`).
-- [ ] Call `worktree.Remove` to remove the git worktree.
-- [ ] Remove the cloister registry entry.
-- [ ] Clean up the worktree directory under `WorktreeBaseDir` if empty.
-- [ ] **Test**: Remove a clean worktree — succeeds. Remove a dirty worktree
+- [x] Call `worktree.Remove` to remove the git worktree.
+- [x] Remove the cloister registry entry.
+- [x] Clean up the worktree directory under `WorktreeBaseDir` if empty.
+- [x] **Test**: Remove a clean worktree — succeeds. Remove a dirty worktree
       without `-f` — fails with correct error. Remove with `-f` — succeeds.
       Verify container stopped, registry entry removed, git worktree removed.
 
