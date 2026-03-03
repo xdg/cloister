@@ -572,7 +572,7 @@ func TestWriteGlobalConfig_Overwrites(t *testing.T) {
 // in defaultConfigTemplate stays in sync with DefaultGlobalConfig(). If this
 // test fails, one of them was updated without the other.
 func TestDefaultConfigTemplateMatchesDefaults(t *testing.T) {
-	parsed, err := ParseGlobalConfig([]byte(defaultConfigTemplate))
+	parsed, err := ParseGlobalConfig([]byte(defaultConfigTemplate()))
 	if err != nil {
 		t.Fatalf("ParseGlobalConfig(defaultConfigTemplate) error = %v", err)
 	}

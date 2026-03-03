@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+
+	"github.com/xdg/cloister/internal/pathutil"
 )
 
 // ErrNoState is returned by LoadDaemonState when no state file exists.
@@ -32,15 +34,7 @@ type DaemonState struct {
 // DaemonStateDir returns the directory for daemon state files.
 // Respects XDG_STATE_HOME, defaulting to ~/.local/state/cloister.
 func DaemonStateDir() (string, error) {
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("failed to get home directory: %w", err)
-		}
-		stateDir = filepath.Join(home, ".local", "state")
-	}
-	return filepath.Join(stateDir, "cloister"), nil
+	return filepath.Join(pathutil.XDGStateHome(), "cloister"), nil
 }
 
 // DaemonStatePath returns the path to the daemon state file.

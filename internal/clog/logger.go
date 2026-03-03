@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/xdg/cloister/internal/pathutil"
 )
 
 // Logger handles leveled logging with support for multiple outputs.
@@ -123,29 +125,13 @@ func OpenLogFile(path string) (*os.File, error) {
 }
 
 // DefaultLogPath returns the default log file path following XDG conventions.
-// Returns ~/.local/state/cloister/cloister.log
+// Returns $XDG_STATE_HOME/cloister/cloister.log (default: ~/.local/state/cloister/cloister.log).
 func DefaultLogPath() string {
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			home = "."
-		}
-		stateDir = filepath.Join(home, ".local", "state")
-	}
-	return filepath.Join(stateDir, "cloister", "cloister.log")
+	return filepath.Join(pathutil.XDGStateHome(), "cloister", "cloister.log")
 }
 
 // CloisterLogPath returns the log path for a specific cloister.
-// Returns ~/.local/state/cloister/cloisters/<name>.log
+// Returns $XDG_STATE_HOME/cloister/cloisters/<name>.log.
 func CloisterLogPath(name string) string {
-	stateDir := os.Getenv("XDG_STATE_HOME")
-	if stateDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			home = "."
-		}
-		stateDir = filepath.Join(home, ".local", "state")
-	}
-	return filepath.Join(stateDir, "cloister", "cloisters", name+".log")
+	return filepath.Join(pathutil.XDGStateHome(), "cloister", "cloisters", name+".log")
 }

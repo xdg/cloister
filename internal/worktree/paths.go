@@ -16,11 +16,7 @@ import (
 // $XDG_DATA_HOME/cloister/worktrees/ instead.
 // The directory is created if it does not exist (with 0700 permissions).
 func BaseDir() (string, error) {
-	base := os.Getenv("XDG_DATA_HOME")
-	if base == "" {
-		base = "~/.local/share"
-	}
-	dir := filepath.Join(pathutil.ExpandHome(base), "cloister", "worktrees")
+	dir := filepath.Join(pathutil.XDGDataHome(), "cloister", "worktrees")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", fmt.Errorf("create worktree base dir: %w", err)
 	}

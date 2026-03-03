@@ -14,21 +14,6 @@ import (
 	"github.com/xdg/cloister/internal/clog"
 )
 
-// DefaultSocketPath returns the default path for the hostexec Unix socket.
-// Respects XDG_RUNTIME_DIR, falling back to ~/.local/share/cloister.
-//
-// Deprecated: Use TCP mode instead for cross-platform compatibility.
-func DefaultSocketPath() string {
-	if dir := os.Getenv("XDG_RUNTIME_DIR"); dir != "" {
-		return filepath.Join(dir, "cloister", "hostexec.sock")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = "."
-	}
-	return filepath.Join(home, ".local", "share", "cloister", "hostexec.sock")
-}
-
 // SocketRequest is the JSON request sent over the Unix socket.
 // It wraps ExecuteRequest with authentication fields.
 type SocketRequest struct {
@@ -81,10 +66,9 @@ func WithTCPAddr(addr string) SocketServerOption {
 // Token validation is handled by the guardian before forwarding to the executor.
 func NewSocketServer(secret string, executor Executor, opts ...SocketServerOption) *SocketServer {
 	s := &SocketServer{
-		socketPath: DefaultSocketPath(),
-		secret:     secret,
-		executor:   executor,
-		shutdown:   make(chan struct{}),
+		secret:   secret,
+		executor: executor,
+		shutdown: make(chan struct{}),
 	}
 	for _, opt := range opts {
 		opt(s)

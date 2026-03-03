@@ -30,7 +30,7 @@ func WriteDefaultConfig() error {
 	}
 
 	// Write the config file with user-only permissions
-	if err := os.WriteFile(path, []byte(defaultConfigTemplate), 0o600); err != nil {
+	if err := os.WriteFile(path, []byte(defaultConfigTemplate()), 0o600); err != nil {
 		return fmt.Errorf("write default config: %w", err)
 	}
 	return nil

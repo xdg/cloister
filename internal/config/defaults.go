@@ -1,11 +1,18 @@
 package config
 
-// defaultConfigTemplate is the commented YAML template for the default global config.
-// Using a template string provides control over comments and formatting.
+import (
+	"path/filepath"
+
+	"github.com/xdg/cloister/internal/pathutil"
+)
+
+// configTemplatePreamble is the static portion of the default config template
+// (everything before the log section). Split out so the dynamic log section
+// doesn't cause a funlen violation.
 //
-// IMPORTANT: This template must stay in sync with DefaultGlobalConfig() in defaults.go.
+// IMPORTANT: This template must stay in sync with DefaultGlobalConfig() below.
 // The TestDefaultConfigTemplateMatchesDefaults test enforces this.
-const defaultConfigTemplate = `# Cloister global configuration
+const configTemplatePreamble = `# Cloister global configuration
 # See https://github.com/xdg/cloister/specs/config-reference.md for full documentation
 
 # Proxy configuration
@@ -127,16 +134,23 @@ defaults:
   user: "cloister"
   agent: "claude"  # Default agent if not specified
 
-# Logging
+`
+
+// defaultConfigTemplate returns the full commented YAML template for the
+// default global config. The log section uses XDG-resolved paths.
+func defaultConfigTemplate() string {
+	stateDir := filepath.Join(pathutil.XDGStateHome(), "cloister")
+	return configTemplatePreamble + `# Logging
 log:
-  file: "~/.local/state/cloister/audit.log"
+  file: "` + filepath.Join(stateDir, "audit.log") + `"
   stdout: true
   level: "info"  # debug, info, warn, error
 
   # Per-cloister log files (in addition to main log)
   per_cloister: true
-  per_cloister_dir: "~/.local/state/cloister/logs/"
+  per_cloister_dir: "` + filepath.Join(stateDir, "logs") + `/"
 `
+}
 
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
@@ -153,6 +167,7 @@ func boolPtr(b bool) *bool {
 //     could be used for data exfiltration or credential abuse
 //   - Network access should go through the proxy allowlist, not hostexec
 func DefaultGlobalConfig() *GlobalConfig {
+	stateDir := filepath.Join(pathutil.XDGStateHome(), "cloister")
 	return &GlobalConfig{
 		Proxy:    defaultProxyConfig(),
 		Request:  RequestConfig{Listen: ":9998", Timeout: "5m"},
@@ -160,8 +175,8 @@ func DefaultGlobalConfig() *GlobalConfig {
 		Agents:   defaultAgentConfigs(),
 		Defaults: DefaultsConfig{Shell: "/bin/bash", User: "cloister", Agent: "claude"},
 		Log: LogConfig{
-			File: "~/.local/state/cloister/audit.log", Stdout: true, Level: "info",
-			PerCloister: true, PerCloisterDir: "~/.local/state/cloister/logs/",
+			File: filepath.Join(stateDir, "audit.log"), Stdout: true, Level: "info",
+			PerCloister: true, PerCloisterDir: filepath.Join(stateDir, "logs") + "/",
 		},
 	}
 }
