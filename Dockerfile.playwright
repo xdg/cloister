@@ -1,0 +1,24 @@
+# Playwright variant: extends base cloister image with Playwright browsers and MCP server
+ARG BASE_IMAGE=cloister
+ARG BASE_TAG=latest
+ARG PLAYWRIGHT_VERSION=1.59.1
+ARG PLAYWRIGHT_MCP_VERSION=0.0.70
+FROM ${BASE_IMAGE}:${BASE_TAG}
+
+USER root
+
+# Shared browser location readable by all users
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+
+# System dependencies + Chromium browser
+ARG PLAYWRIGHT_VERSION
+RUN npx -y playwright@${PLAYWRIGHT_VERSION} install-deps chromium \
+    && npx -y playwright@${PLAYWRIGHT_VERSION} install chromium \
+    && chmod -R a+rX /ms-playwright \
+    && rm -rf /var/lib/apt/lists/* /root/.npm
+
+# Playwright MCP server
+ARG PLAYWRIGHT_MCP_VERSION
+RUN npm install -g @playwright/mcp@${PLAYWRIGHT_MCP_VERSION}
+
+USER cloister

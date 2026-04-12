@@ -91,6 +91,7 @@ Tests are split into three tiers based on what they require:
 |--------|-------------|
 | `make build` | Build the `cloister` binary |
 | `make docker` | Build the `cloister:latest` Docker image |
+| `make docker-playwright` | Build the `cloister-playwright:latest` image (extends base with Playwright + MCP) |
 | `make install` | Install binary via `go install` |
 | `make test` | Run unit tests (sandbox-safe, no Docker required) |
 | `make test-race` | Run unit tests with race detector |
